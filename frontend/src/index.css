@@ -22,6 +22,18 @@
   --font: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
   --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.4);
   --shadow-header: 0 1px 0 var(--border);
+
+  /* Deep red landing palette */
+  --redLight: #eee7e6;
+  --redLightHover: #e5dbda;
+  --redLightActive: #cab5b3;
+  --redNormal: #531009;
+  --redNormalHover: #4b0e08;
+  --redNormalActive: #420d07;
+  --redDark: #3e0c07;
+  --redDarkHover: #320a05;
+  --redDarkActive: #250704;
+  --redDarker: #1d0603;
 }
 
 * {
@@ -36,7 +48,7 @@ body {
   font-weight: 400;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background: var(--bg-dark);
+  background: var(--redDarker);
   color: var(--text);
   min-height: 100vh;
 }
