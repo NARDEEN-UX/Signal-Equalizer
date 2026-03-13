@@ -2,6 +2,31 @@ import React, { useRef, useEffect } from 'react';
 
 const SpectrogramViewer = ({ title, times, freqs, magnitudes }) => {
   const canvasRef = useRef(null);
+  const containerRef = useRef(null);
+  const [canvasWidth, setCanvasWidth] = React.useState(800);
+
+  useEffect(() => {
+    // Measure container and set canvas width
+    if (containerRef.current) {
+      const width = containerRef.current.offsetWidth;
+      if (width > 0) {
+        setCanvasWidth(width);
+      }
+    }
+
+    // Handle window resize
+    const handleResize = () => {
+      if (containerRef.current) {
+        const width = containerRef.current.offsetWidth;
+        if (width > 0) {
+          setCanvasWidth(width);
+        }
+      }
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   useEffect(() => {
     if (!times || !freqs || !magnitudes) return;
@@ -34,12 +59,19 @@ const SpectrogramViewer = ({ title, times, freqs, magnitudes }) => {
       }
     }
     ctx.putImageData(imageData, 0, 0);
-  }, [times, freqs, magnitudes]);
+  }, [times, freqs, magnitudes, canvasWidth]);
 
   return (
     <div>
       {title && <h4>{title}</h4>}
-      <canvas ref={canvasRef} width={400} height={160} />
+      <div ref={containerRef} style={{ width: '100%' }}>
+        <canvas 
+          ref={canvasRef} 
+          width={canvasWidth} 
+          height={280}
+          style={{ width: '100%', height: '280px', display: 'block' }}
+        />
+      </div>
     </div>
   );
 };
