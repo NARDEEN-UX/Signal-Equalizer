@@ -298,33 +298,6 @@ function App() {
           <div className="signal-track track-1"></div>
         </div>
 
-        <nav className="top-menu">
-          <div className="logo-section">
-            <h2>SignalEQ</h2>
-          </div>
-
-          <div className="controls-section">
-            <select
-              className="mode-dropdown"
-              value={homeMode}
-              onChange={(e) => {
-                const val = e.target.value;
-                setHomeMode(val);
-                if (val !== 'Home') {
-                  goToMode(val);
-                }
-              }}
-            >
-              <option value="Home">-- Select Mode --</option>
-              {LANDING_MODES.map((mode) => (
-                <option key={mode.id} value={mode.id}>
-                  {mode.title}
-                </option>
-              ))}
-            </select>
-          </div>
-        </nav>
-
         <main className="main-content">
           <div className="home-dashboard">
             <h1 className="hero-title">Advanced Signal Equalizer</h1>

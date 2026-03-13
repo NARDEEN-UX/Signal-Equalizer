@@ -3,7 +3,7 @@
   min-height: 100vh;
   display: flex;
   flex-direction: column;
-  background-color: var(--redDarker);
+  background-color: #121212; /* Updated to near-black */
   position: relative;
   overflow: hidden;
 }
