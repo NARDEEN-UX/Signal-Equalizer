@@ -1,10 +1,3 @@
-/**
- * App.jsx – High-level shell:
- * - Landing screen with mode cards (Generic / Musical / Animal / Human Voices).
- * - Mode workspace screen (for now wired to Generic/Human voices layout).
- *
- * NOTE: Backend wiring for the extra modes يمكن نضبطه لاحقًا، التركيز هنا على الـ UI فقط.
- */
 import React, { useState, useEffect, useRef } from 'react';
 import AudioUploader from './components/AudioUploader';
 import WaveformViewer from './components/WaveformViewer';
@@ -17,6 +10,7 @@ import TransportControls from './components/TransportControls';
 import AudiogramToggle from './components/AudiogramToggle';
 import ModeModal from './components/ModeModal';
 import GenericBandBuilder from './components/GenericBandBuilder';
+import './App.css';
 import { useMockProcessing } from './mock/useMockProcessing';
 import { saveSchema, loadSchema } from './api';
 
@@ -78,8 +72,17 @@ const MODES = [
   }
 ];
 
+const LANDING_MODES = [
+  { id: 'generic', title: 'Generic Mode', desc: 'Custom frequency bands' },
+  { id: 'music', title: 'Musical Instruments', desc: 'Isolate drums, piano, etc.' },
+  { id: 'animal', title: 'Animal Sounds', desc: 'Separate mixed animal tracks' },
+  { id: 'human', title: 'Human Voices', desc: 'Distinguish overlapping speakers' },
+  { id: 'ecg', title: 'ECG Abnormalities', desc: 'Detect cardiac arrhythmias' }
+];
+
 function App() {
   const [view, setView] = useState('landing'); // 'landing' | 'workspace'
+  const [homeMode, setHomeMode] = useState('Home');
   const [activeModeId, setActiveModeId] = useState('generic');
   const [audioFile, setAudioFile] = useState(null);
   const [freqSliders, setFreqSliders] = useState([1, 1, 1, 1]);
@@ -288,60 +291,70 @@ function App() {
   // --- Landing screen ---
   if (view === 'landing') {
     return (
-      <div className="app landing-app">
-        <header className="app-header">
-          <div className="header-left">
-            <div className="app-title-row">
-              <span className="app-icon" aria-hidden>◇</span>
-              <div>
-                <h1 className="app-title">Signal Equalizer</h1>
-                <p className="app-subtitle">Professional audio & biomedical signal processing</p>
+      <div className="app-layout">
+        <div className="animated-background">
+          <div className="signal-track track-3"></div>
+          <div className="signal-track track-2"></div>
+          <div className="signal-track track-1"></div>
+        </div>
+
+        <nav className="top-menu">
+          <div className="logo-section">
+            <h2>SignalEQ</h2>
+          </div>
+
+          <div className="controls-section">
+            <select
+              className="mode-dropdown"
+              value={homeMode}
+              onChange={(e) => {
+                const val = e.target.value;
+                setHomeMode(val);
+                if (val !== 'Home') {
+                  goToMode(val);
+                }
+              }}
+            >
+              <option value="Home">-- Select Mode --</option>
+              {LANDING_MODES.map((mode) => (
+                <option key={mode.id} value={mode.id}>
+                  {mode.title}
+                </option>
+              ))}
+            </select>
+          </div>
+        </nav>
+
+        <main className="main-content">
+          <div className="home-dashboard">
+            <h1 className="hero-title">Advanced Signal Equalizer</h1>
+            <p className="hero-subtitle">Select an isolation mode to begin frequency analysis</p>
+
+            <div className="cards-wrapper">
+              <div className="connecting-line"></div>
+
+              <div className="cards-container">
+                {LANDING_MODES.map((mode) => (
+                  <div
+                    key={mode.id}
+                    className="mode-card-wrapper"
+                    onClick={() => goToMode(mode.id)}
+                  >
+                    <div className="mode-card">
+                      <div className="card-node-dot"></div>
+                      <h3>{mode.title}</h3>
+                      <p>{mode.desc}</p>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           </div>
-          <div className="header-actions">
-            <button type="button" className="btn btn-small" disabled>Docs</button>
-          </div>
-        </header>
-
-        <main className="main-content landing-main">
-          <section className="landing-hero">
-            <h2 className="landing-title">Choose Your Equalizer Mode</h2>
-            <p className="landing-description">
-              Process and manipulate audio signals with precision using our advanced equalizer modes.
-            </p>
-          </section>
-
-          <section className="landing-modes-grid">
-            {MODES.map((m) => (
-              <article key={m.id} className={`mode-card ${m.accentClass} ${m.disabled ? 'mode-card-disabled' : ''}`}>
-                <header className="mode-card-header">
-                  <div className="mode-card-title-wrap">
-                    <h3 className="mode-card-title">{m.name}</h3>
-                    {m.tag && <span className="mode-card-tag">{m.tag}</span>}
-                  </div>
-                  {m.disabled && <span className="mode-card-badge">Soon</span>}
-                </header>
-                <p className="mode-card-description">{m.description}</p>
-                <div className="mode-card-footer">
-                  <button
-                    type="button"
-                    className="btn btn-small"
-                    disabled={m.disabled}
-                    onClick={() => !m.disabled && goToMode(m.id)}
-                  >
-                    Launch Mode
-                  </button>
-                </div>
-              </article>
-            ))}
-          </section>
         </main>
       </div>
     );
   }
 
-  // --- Workspace: شكل من الصفر — هيدر + تابّات + يسار مربع واحد + يمين مربعات ---
   return (
     <div className="app workspace-app">
       <header className="workspace-header">
