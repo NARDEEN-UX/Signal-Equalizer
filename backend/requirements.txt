@@ -1,0 +1,6 @@
+Flask==2.3.3
+Flask-CORS==4.0.0
+numpy>=1.26.0
+scipy>=1.11.0
+PyWavelets>=1.6.0
+soundfile>=0.12.1
