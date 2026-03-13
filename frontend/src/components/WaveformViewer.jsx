@@ -22,7 +22,32 @@ const WaveformViewer = ({
   onResetView
 }) => {
   const canvasRef = useRef(null);
-  const strokeColor = variant === 'output' ? '#7a9fc9' : '#5b8def';
+  const containerRef = useRef(null);
+  const [canvasWidth, setCanvasWidth] = React.useState(800);
+  const strokeColor = variant === 'output' ? '#3e0c07' : '#531009';
+
+  useEffect(() => {
+    // Measure container and set canvas width
+    if (containerRef.current) {
+      const width = containerRef.current.offsetWidth;
+      if (width > 0) {
+        setCanvasWidth(width);
+      }
+    }
+
+    // Handle window resize
+    const handleResize = () => {
+      if (containerRef.current) {
+        const width = containerRef.current.offsetWidth;
+        if (width > 0) {
+          setCanvasWidth(width);
+        }
+      }
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   useEffect(() => {
     if (!data || !time || !Array.isArray(data) || data.length === 0) return;
@@ -75,7 +100,7 @@ const WaveformViewer = ({
       ctx.lineTo(cursorX, height);
       ctx.stroke();
     }
-  }, [data, time, playbackTime, viewWindow, strokeColor]);
+  }, [data, time, playbackTime, viewWindow, strokeColor, canvasWidth]);
 
   return (
     <div className="viewer-inner">
@@ -127,7 +152,14 @@ const WaveformViewer = ({
         </div>
       </div>
 
-      <canvas ref={canvasRef} width={600} height={180} />
+      <div ref={containerRef} style={{ width: '100%' }}>
+        <canvas 
+          ref={canvasRef} 
+          width={canvasWidth} 
+          height={300}
+          style={{ width: '100%', height: '300px', display: 'block' }}
+        />
+      </div>
     </div>
   );
 };

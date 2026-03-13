@@ -95,6 +95,32 @@ function App() {
   const [volume, setVolume] = useState(1);
   const [modeModalOpen, setModeModalOpen] = useState(false);
   const [genericBands, setGenericBands] = useState([]);
+  const [modeFreqConfig, setModeFreqConfig] = useState({
+    music: [
+      { id: 'music-0', name: 'Bass', low: 20, high: 250, gain: 1 },
+      { id: 'music-1', name: 'Piano', low: 250, high: 4000, gain: 1 },
+      { id: 'music-2', name: 'Vocals', low: 300, high: 3000, gain: 1 },
+      { id: 'music-3', name: 'Violin', low: 200, high: 7000, gain: 1 }
+    ],
+    animal: [
+      { id: 'animal-0', name: 'Birds', low: 2000, high: 8000, gain: 1 },
+      { id: 'animal-1', name: 'Dogs', low: 500, high: 2000, gain: 1 },
+      { id: 'animal-2', name: 'Cats', low: 1000, high: 4000, gain: 1 },
+      { id: 'animal-3', name: 'Others', low: 100, high: 16000, gain: 1 }
+    ],
+    human: [
+      { id: 'human-0', name: 'Voice 1', low: 80, high: 8000, gain: 1 },
+      { id: 'human-1', name: 'Voice 2', low: 80, high: 8000, gain: 1 },
+      { id: 'human-2', name: 'Voice 3', low: 80, high: 8000, gain: 1 },
+      { id: 'human-3', name: 'Voice 4', low: 80, high: 8000, gain: 1 }
+    ],
+    ecg: [
+      { id: 'ecg-0', name: 'Normal', low: 0.5, high: 45, gain: 1 },
+      { id: 'ecg-1', name: 'Arrhythmia 1', low: 0.5, high: 45, gain: 1 },
+      { id: 'ecg-2', name: 'Arrhythmia 2', low: 0.5, high: 45, gain: 1 },
+      { id: 'ecg-3', name: 'Arrhythmia 3', low: 0.5, high: 45, gain: 1 }
+    ]
+  });
   const [waveletType, setWaveletType] = useState('haar');
   const [equalizerTab, setEqualizerTab] = useState('equalizer'); // 'equalizer' | 'ai'
   // Linked cine viewers: same time window for both (0–1 = full range)
@@ -109,11 +135,39 @@ function App() {
 
   const activeMode = MODES.find((m) => m.id === activeModeId) || MODES[0];
 
+  // Convert preset mode sliders to band format for unified BandBuilder
+  const modeFreqBands = activeModeId === 'generic' 
+    ? genericBands 
+    : (modeFreqConfig[activeModeId] || []).map((b, i) => ({
+        ...b,
+        gain: freqSliders[i] ?? 1
+      }));
+
+  const setModeFreqBands = (bands) => {
+    if (activeModeId === 'generic') {
+      setGenericBands(bands);
+    } else {
+      const gains = bands.map(b => Number(b.gain));
+      setFreqSliders(gains);
+      // Also update frequency config for this mode
+      setModeFreqConfig(prev => ({
+        ...prev,
+        [activeModeId]: bands.map(b => ({
+          id: b.id,
+          name: b.name,
+          low: b.low,
+          high: b.high,
+          gain: b.gain
+        }))
+      }));
+    }
+  };
+
   const signalData = useMockProcessing({
     modeId: activeModeId,
     freqSliders,
     waveletSliders,
-    genericBands,
+    genericBands: activeModeId === 'generic' ? genericBands : modeFreqBands,
     waveletType
   });
 
@@ -389,18 +443,66 @@ function App() {
               <div className="box-head">
                 <h2 className="box-title">Equalizer Controls</h2>
                 <div className="box-actions">
-                  <button type="button" className="icon-btn" onClick={() => setFreqSliders([1, 1, 1, 1])} title="Reset">↺</button>
+                  <button 
+                    type="button" 
+                    className="icon-btn" 
+                    onClick={() => {
+                      if (activeModeId === 'generic') {
+                        setGenericBands(genericBands.map((b) => ({ ...b, gain: 1 })));
+                      } else {
+                        setFreqSliders([1, 1, 1, 1]);
+                      }
+                    }} 
+                    title="Reset"
+                  >↺</button>
                   <button type="button" className="icon-btn" onClick={handleSavePreset} title="Save">💾</button>
                 </div>
               </div>
-              {activeModeId === 'generic' ? (
-                <GenericBandBuilder bands={genericBands} setBands={setGenericBands} />
-              ) : (
-                <>
-                  <EqualizerCurve labels={activeMode.sliderLabels} values={freqSliders} onChange={setFreqSliders} />
-                  <SliderGroup count={4} labels={activeMode.sliderLabels} values={freqSliders} onChange={setFreqSliders} />
-                </>
-              )}
+              <div className="equalizer-scroll-container">
+                {/* Equalizer Curve - Works for all modes */}
+                <EqualizerCurve 
+                  labels={modeFreqBands && modeFreqBands.length > 0 ? modeFreqBands.map((b) => b.name) : []} 
+                  values={modeFreqBands && modeFreqBands.length > 0 ? modeFreqBands.map((b) => Number(b.gain)) : []} 
+                  onChange={(gains) => {
+                    setModeFreqBands(
+                      modeFreqBands.map((b, i) => ({ ...b, gain: gains[i] }))
+                    );
+                  }} 
+                />
+
+                {/* Band Builder - Works for all modes */}
+                <GenericBandBuilder 
+                  bands={modeFreqBands} 
+                  setBands={setModeFreqBands}
+                  isEditable={activeModeId === 'generic'}
+                />
+
+                {/* Band Information - Works for all modes */}
+                {modeFreqBands && modeFreqBands.length > 0 && (
+                  <div className="bands-info">
+                    {modeFreqBands.map((b) => (
+                      <div key={b.id} className="band-info-item">
+                        <span className="band-info-label">{b.name}</span>
+                        <span className="band-info-gain">{Number(b.gain).toFixed(2)}×</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Sliders - Works for all modes */}
+                {modeFreqBands.length > 0 && (
+                  <SliderGroup 
+                    count={modeFreqBands.length} 
+                    labels={modeFreqBands.map((b) => b.name)} 
+                    values={modeFreqBands.map((b) => Number(b.gain))} 
+                    onChange={(gains) => {
+                      setModeFreqBands(
+                        modeFreqBands.map((b, i) => ({ ...b, gain: gains[i] }))
+                      );
+                    }} 
+                  />
+                )}
+              </div>
             </div>
           )}
           {equalizerTab === 'equalizer' && (

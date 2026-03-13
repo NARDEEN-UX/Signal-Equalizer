@@ -11,10 +11,11 @@ const DEFAULT_BANDS = [
   { id: 'b4', name: 'Band 4', low: 3000, high: 8000, gain: 1 }
 ];
 
-const GenericBandBuilder = ({ bands, setBands, maxHz = 20000 }) => {
+const GenericBandBuilder = ({ bands, setBands, maxHz = 20000, isEditable = true }) => {
   const safeBands = bands?.length ? bands : DEFAULT_BANDS;
 
   const addBand = () => {
+    if (!isEditable) return;
     const nextIdx = safeBands.length + 1;
     const id = `b${Date.now()}`;
     const lastHigh = safeBands[safeBands.length - 1]?.high ?? 2000;
@@ -25,6 +26,7 @@ const GenericBandBuilder = ({ bands, setBands, maxHz = 20000 }) => {
   };
 
   const removeBand = (id) => {
+    if (!isEditable) return;
     setBands(safeBands.filter((b) => b.id !== id));
   };
 
@@ -46,14 +48,19 @@ const GenericBandBuilder = ({ bands, setBands, maxHz = 20000 }) => {
     );
   };
 
+  const title = isEditable ? 'Custom Bands' : 'Band Controls';
+  const subtitle = isEditable 
+    ? 'Add subdivisions and control location, width and gain (0 → 2)'
+    : 'Adjust individual band gains (0 → 2)';
+
   return (
     <div className="generic-builder">
       <div className="generic-builder-head">
         <div>
-          <div className="generic-builder-title">Generic Bands</div>
-          <div className="generic-builder-subtitle">Add subdivisions and control location, width and gain (0 → 2)</div>
+          <div className="generic-builder-title">{title}</div>
+          <div className="generic-builder-subtitle">{subtitle}</div>
         </div>
-        <button type="button" className="btn btn-small" onClick={addBand}>Add band</button>
+        {isEditable && <button type="button" className="btn btn-small" onClick={addBand}>Add band</button>}
       </div>
 
       <div className="generic-band-list">
@@ -61,7 +68,7 @@ const GenericBandBuilder = ({ bands, setBands, maxHz = 20000 }) => {
           <div key={b.id} className="generic-band">
             <div className="generic-band-top">
               <div className="generic-band-name">{b.name}</div>
-              <button type="button" className="icon-btn" onClick={() => removeBand(b.id)} title="Remove">🗑</button>
+              {isEditable && <button type="button" className="icon-btn" onClick={() => removeBand(b.id)} title="Remove">🗑</button>}
             </div>
 
             <div className="generic-band-grid">

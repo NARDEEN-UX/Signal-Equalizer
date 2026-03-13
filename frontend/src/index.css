@@ -9,13 +9,13 @@
   --text: #f2f2f2;
   --text-secondary: #b3b3b3;
   --text-muted: #737373;
-  --accent: #5b8def;
-  --accent-hover: #4a7ed9;
-  --accent-subtle: rgba(91, 141, 239, 0.15);
-  --accent-focus: rgba(91, 141, 239, 0.2);
-  --accent-in: #5b8def;
-  --accent-out: #7a9fc9;
-  --accent-mid: #4a7ed9;
+  --accent: #3e0c07;
+  --accent-hover: #320a05;
+  --accent-subtle: rgba(83, 16, 9, 0.2);
+  --accent-focus: rgba(83, 16, 9, 0.3);
+  --accent-in: #531009;
+  --accent-out: #3e0c07;
+  --accent-mid: #4b0e08;
   --radius: 8px;
   --radius-sm: 6px;
   --sidebar-width: 300px;
@@ -421,7 +421,7 @@ body {
 
 .signal-box .viewer-inner,
 .chart-box .chart-wrap {
-  min-height: 160px;
+  min-height: 320px;
 }
 
 .chart-box.card-with-zoom {
@@ -588,9 +588,67 @@ body {
   cursor: not-allowed;
 }
 
-/* ---- Equalizer curve ---- */
-.equalizer-controls .slider-group {
-  margin-top: 0.5rem;
+/* ---- Equalizer section ---- */
+.equalizer-box {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.equalizer-scroll-container {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  max-height: 600px;
+  overflow-y: auto;
+  padding-right: 0.5rem;
+}
+
+.equalizer-scroll-container::-webkit-scrollbar {
+  width: 6px;
+}
+
+.equalizer-scroll-container::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.equalizer-scroll-container::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
+}
+
+.equalizer-scroll-container::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+}
+
+.bands-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+}
+
+.band-info-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5rem 0;
+  font-size: 0.85rem;
+}
+
+.band-info-label {
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.band-info-gain {
+  font-weight: 700;
+  color: var(--accent-in);
+  font-variant-numeric: tabular-nums;
+  font-size: 0.8rem;
 }
 
 .equalizer-curve-wrap {
@@ -809,15 +867,15 @@ body {
 
 .viewer-card canvas {
   width: 100%;
-  max-width: 100%;
-  height: 180px;
+  height: 300px;
   border-radius: var(--radius-sm);
   background: #0a0a0a;
   border: 1px solid var(--border-subtle);
+  display: block;
 }
 
 .viewer-card .chart-wrap {
-  min-height: 200px;
+  min-height: 320px;
 }
 
 .viewer-card.card-with-zoom {
@@ -925,7 +983,7 @@ body {
 
 .field input[type="number"],
 .select {
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--bg-card);
   border: 1px solid var(--border);
   color: var(--text);
   border-radius: var(--radius-sm);
@@ -939,6 +997,17 @@ body {
 .select:focus {
   box-shadow: 0 0 0 2px var(--accent-focus);
   border-color: var(--accent);
+}
+
+/* Select dropdown styling */
+.select option {
+  background: var(--bg-card);
+  color: var(--text);
+}
+
+.select option:hover {
+  background: var(--accent);
+  color: var(--text);
 }
 
 .helper-text {
@@ -1329,7 +1398,7 @@ body {
 /* ---- FFT chart ---- */
 .chart-wrap {
   width: 100%;
-  min-height: 180px;
+  min-height: 320px;
   position: relative;
   display: flex;
   align-items: center;
@@ -1381,5 +1450,5 @@ body {
 
 /* ---- Spectrogram ---- */
 .spec-section .viewer-card canvas {
-  height: 160px;
+  height: 280px;
 }

@@ -23,10 +23,10 @@ const FFTChart = ({ data, audiogram, variant }) => {
   const freq = data.freq;
   const datasets = [];
   if (!variant || variant === 'input') {
-    datasets.push({ label: 'Input', data: data.in, borderColor: '#5b8def', borderWidth: 2, pointRadius: 0, tension: 0.2 });
+    datasets.push({ label: 'Input', data: data.in, borderColor: '#531009', borderWidth: 2, pointRadius: 0, tension: 0.2 });
   }
   if (!variant || variant === 'output') {
-    datasets.push({ label: 'Output', data: data.out, borderColor: '#7a9fc9', borderWidth: 2, pointRadius: 0, tension: 0.2 });
+    datasets.push({ label: 'Output', data: data.out, borderColor: '#3e0c07', borderWidth: 2, pointRadius: 0, tension: 0.2 });
   }
 
   const chartData = {
@@ -57,7 +57,7 @@ const FFTChart = ({ data, audiogram, variant }) => {
   };
 
   return (
-    <div className="chart-wrap" style={{ height: 220 }}>
+    <div className="chart-wrap" style={{ height: 300 }}>
       <Line data={chartData} options={options} />
     </div>
   );
