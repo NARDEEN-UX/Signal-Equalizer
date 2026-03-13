@@ -12,11 +12,13 @@ export const MODES = [
     description: 'Manage multiple human voices in a single recording.',
     accentClass: 'mode-human',
     icon: '👤',
-    sliderLabels: ['Voice 1', 'Voice 2', 'Voice 3', 'Voice 4'],
+    sliderLabels: ['Male Voice', 'Female Voice', 'Young Speaker', 'Old Speaker'],
     freqBands: [(80, 180), (180, 300), (300, 3000), (3000, 8000)],
     wavelet: 'haar',
     waveletLevels: 5,
-    sampleRate: 44100
+    sampleRate: 44100,
+    allowAddSubdivision: false,
+    requirements: ['Male voice', 'Female voice', 'Young speaker', 'Old speaker']
   },
   {
     id: 'animal',
@@ -28,7 +30,9 @@ export const MODES = [
     sliderLabels: ['Birds', 'Dogs', 'Cats', 'Others'],
     freqBands: [(20, 500), (500, 2000), (2000, 8000), (8000, 16000)],
     wavelet: 'db4',
-    waveletLevels: 6
+    waveletLevels: 6,
+    allowAddSubdivision: false,
+    requirements: ['Bird sounds', 'Dog barks', 'Cat meows', 'Other animal sounds']
   },
   {
     id: 'music',
@@ -40,7 +44,9 @@ export const MODES = [
     sliderLabels: ['Bass', 'Piano', 'Vocals', 'Violin'],
     freqBands: [(60, 250), (250, 2000), (2000, 4000), (4000, 12000)],
     wavelet: 'db4',
-    waveletLevels: 6
+    waveletLevels: 6,
+    allowAddSubdivision: false,
+    requirements: ['Bass instrument', 'Piano', 'Vocal tracks', 'Violin']
   },
   {
     id: 'ecg',
@@ -52,7 +58,9 @@ export const MODES = [
     sliderLabels: ['Normal', 'Arrhythmia 1', 'Arrhythmia 2', 'Arrhythmia 3'],
     freqBands: [(0.5, 5), (5, 15), (15, 30), (30, 45)],
     wavelet: 'db4',
-    waveletLevels: 5
+    waveletLevels: 5,
+    allowAddSubdivision: false,
+    requirements: ['Normal ECG', 'Atrial fibrillation', 'Ventricular tachycardia', 'Heart block']
   },
   {
     id: 'generic',
@@ -61,7 +69,8 @@ export const MODES = [
     description: 'Customize frequency subdivisions with precise equalizer controls.',
     accentClass: 'mode-generic',
     icon: '⟟',
-    sliderLabels: ['Band 1', 'Band 2', 'Band 3', 'Band 4']
+    sliderLabels: ['Band 1', 'Band 2', 'Band 3', 'Band 4'],
+    allowAddSubdivision: true
   }
 ];
 

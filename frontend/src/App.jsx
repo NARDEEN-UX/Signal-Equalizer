@@ -22,7 +22,8 @@ const MODES = [
     description: 'Customize frequency subdivisions with precise equalizer controls.',
     accentClass: 'mode-generic',
     icon: '⟟',
-    sliderLabels: ['Band 1', 'Band 2', 'Band 3', 'Band 4']
+    sliderLabels: ['Band 1', 'Band 2', 'Band 3', 'Band 4'],
+    allowAddSubdivision: true
   },
   {
     id: 'music',
@@ -31,7 +32,9 @@ const MODES = [
     description: 'Control individual instruments inside a musical mix.',
     accentClass: 'mode-music',
     icon: '♫',
-    sliderLabels: ['Bass', 'Piano', 'Vocals', 'Violin']
+    sliderLabels: ['Bass', 'Piano', 'Vocals', 'Violin'],
+    allowAddSubdivision: false,
+    requirements: ['Bass instrument', 'Piano', 'Vocal tracks', 'Violin']
   },
   {
     id: 'animal',
@@ -40,7 +43,9 @@ const MODES = [
     description: 'Adjust different animal sounds in a complex mixture.',
     accentClass: 'mode-animal',
     icon: '❖',
-    sliderLabels: ['Birds', 'Dogs', 'Cats', 'Others']
+    sliderLabels: ['Birds', 'Dogs', 'Cats', 'Others'],
+    allowAddSubdivision: false,
+    requirements: ['Bird sounds', 'Dog barks', 'Cat meows', 'Other animal sounds']
   },
   {
     id: 'human',
@@ -49,7 +54,9 @@ const MODES = [
     description: 'Manage multiple human voices in a single recording.',
     accentClass: 'mode-human',
     icon: '⌁',
-    sliderLabels: ['Voice 1', 'Voice 2', 'Voice 3', 'Voice 4']
+    sliderLabels: ['Male Voice', 'Female Voice', 'Young Speaker', 'Old Speaker'],
+    allowAddSubdivision: false,
+    requirements: ['Male voice', 'Female voice', 'Young speaker', 'Old speaker']
   },
   {
     id: 'ecg',
@@ -58,7 +65,9 @@ const MODES = [
     description: 'Control magnitude of arrhythmia components (normal + 3 types).',
     accentClass: 'mode-ecg',
     icon: '♡',
-    sliderLabels: ['Normal', 'Arrhythmia 1', 'Arrhythmia 2', 'Arrhythmia 3']
+    sliderLabels: ['Normal', 'Arrhythmia 1', 'Arrhythmia 2', 'Arrhythmia 3'],
+    allowAddSubdivision: false,
+    requirements: ['Normal ECG', 'Atrial fibrillation', 'Ventricular tachycardia', 'Heart block']
   },
   {
     id: 'ai-music',
@@ -476,6 +485,23 @@ function App() {
                   setBands={setModeFreqBands}
                   isEditable={activeModeId === 'generic'}
                 />
+
+                {/* Requirements for Customized Modes */}
+                {activeModeId !== 'generic' && activeMode.requirements && activeMode.requirements.length > 0 && (
+                  <div className="requirements-box">
+                    <div className="requirements-title">
+                      <span>Requirements</span>
+                    </div>
+                    <div className="requirements-list">
+                      {activeMode.requirements.map((req, idx) => (
+                        <div key={idx} className="requirement-item">
+                          <span className="requirement-badge">{idx + 1}</span>
+                          <span className="requirement-text">{req}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 {/* Band Information - Works for all modes */}
                 {modeFreqBands && modeFreqBands.length > 0 && (
