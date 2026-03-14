@@ -10,11 +10,12 @@ export const MUSIC_MODE_CONFIG = {
   id: 'music',
   name: 'Musical Instruments',
   sliderLabels: ['Bass', 'Piano', 'Vocals', 'Violin'],
+  instrumentTypes: ['Bass', 'Piano', 'Vocals', 'Violin', 'Drums', 'Guitar', 'Flute', 'Trumpet'],
   freqBands: [
-    { min: 60, max: 250, label: 'Bass' },
-    { min: 250, max: 2000, label: 'Piano' },
-    { min: 2000, max: 4000, label: 'Vocals' },
-    { min: 4000, max: 12000, label: 'Violin' }
+    { min: 20, max: 250, label: 'Bass' },
+    { min: 27, max: 4186, label: 'Piano' },
+    { min: 80, max: 8000, label: 'Vocals' },
+    { min: 196, max: 3520, label: 'Violin' }
   ],
   wavelet: 'db4',
   waveletLevels: 6,

@@ -5,3 +5,4 @@ scipy
 soundfile
 python-multipart
 starlette
+pywt

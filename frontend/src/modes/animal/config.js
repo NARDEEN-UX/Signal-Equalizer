@@ -9,12 +9,13 @@
 export const ANIMAL_MODE_CONFIG = {
   id: 'animal',
   name: 'Animal Sounds',
-  sliderLabels: ['Birds', 'Dogs', 'Cats', 'Others'],
+  sliderLabels: ['Cat', 'Dog', 'Bird', 'Elephant'],
+  animalTypes: ['Cat', 'Dog', 'Bird', 'Elephant', 'Lion', 'Sheep', 'Cow', 'Horse', 'Monkey', 'Frog'],
   freqBands: [
-    { min: 20, max: 500, label: 'Birds' },
-    { min: 500, max: 2000, label: 'Dogs' },
-    { min: 2000, max: 8000, label: 'Cats' },
-    { min: 8000, max: 16000, label: 'Others' }
+    { min: 50, max: 10000, label: 'Cat' },
+    { min: 40, max: 8000, label: 'Dog' },
+    { min: 200, max: 8000, label: 'Bird' },
+    { min: 10, max: 5000, label: 'Elephant' }
   ],
   wavelet: 'db4',
   waveletLevels: 6,

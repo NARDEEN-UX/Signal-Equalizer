@@ -1,0 +1,31 @@
+{
+  "mode": "ecg",
+  "components": [
+    {
+      "name": "Normal",
+      "gain": 1.0,
+      "freq_ranges": [[0.05, 100]]
+    },
+    {
+      "name": "Atrial Fibrillation",
+      "gain": 1.0,
+      "freq_ranges": [[5, 50]]
+    },
+    {
+      "name": "Ventricular Tachycardia",
+      "gain": 1.0,
+      "freq_ranges": [[3, 40]]
+    },
+    {
+      "name": "Heart Block",
+      "gain": 1.0,
+      "freq_ranges": [[0.5, 5]]
+    }
+  ],
+  "sliders_freq": [1.0, 1.0, 1.0, 1.0],
+  "sliders_wavelet": [1.0, 1.0, 1.0, 1.0],
+  "wavelet": "db4",
+  "wavelet_level": 6,
+  "sample_rate": 500,
+  "description": "Default ECG mode configuration with 4 cardiac components"
+}

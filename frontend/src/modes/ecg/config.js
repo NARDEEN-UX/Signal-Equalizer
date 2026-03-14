@@ -9,16 +9,17 @@
 export const ECG_MODE_CONFIG = {
   id: 'ecg',
   name: 'ECG Abnormalities',
-  sliderLabels: ['Normal', 'Arrhythmia 1', 'Arrhythmia 2', 'Arrhythmia 3'],
+  sliderLabels: ['Normal', 'Atrial Fibrillation', 'Ventricular Tachycardia', 'Heart Block'],
+  componentTypes: ['Normal', 'Atrial Fibrillation', 'Ventricular Tachycardia', 'Heart Block', 'Premature Beats', 'Bradycardia', 'Tachycardia'],
   freqBands: [
-    { min: 0.5, max: 5, label: 'Normal' },
-    { min: 5, max: 15, label: 'Arrhythmia 1' },
-    { min: 15, max: 30, label: 'Arrhythmia 2' },
-    { min: 30, max: 45, label: 'Arrhythmia 3' }
+    { min: 0.05, max: 100, label: 'Normal' },
+    { min: 5, max: 50, label: 'Atrial Fibrillation' },
+    { min: 3, max: 40, label: 'Ventricular Tachycardia' },
+    { min: 0.5, max: 5, label: 'Heart Block' }
   ],
   wavelet: 'db4',
-  waveletLevels: 5,
-  sampleRate: 250, // Typical ECG sample rate
+  waveletLevels: 6,
+  sampleRate: 500, // Typical ECG sample rate
   // Backend service will be imported here
 };
 

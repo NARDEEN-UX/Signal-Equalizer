@@ -1,0 +1,31 @@
+{
+  "mode": "animals",
+  "animals": [
+    {
+      "name": "Cat",
+      "gain": 1.0,
+      "freq_ranges": [[50, 10000]]
+    },
+    {
+      "name": "Dog",
+      "gain": 1.0,
+      "freq_ranges": [[40, 8000]]
+    },
+    {
+      "name": "Bird",
+      "gain": 1.0,
+      "freq_ranges": [[200, 8000]]
+    },
+    {
+      "name": "Elephant",
+      "gain": 1.0,
+      "freq_ranges": [[10, 5000]]
+    }
+  ],
+  "sliders_freq": [1.0, 1.0, 1.0, 1.0],
+  "sliders_wavelet": [1.0, 1.0, 1.0, 1.0],
+  "wavelet": "db4",
+  "wavelet_level": 6,
+  "sample_rate": 44100,
+  "description": "Default animals mode configuration with 4 animal sounds"
+}

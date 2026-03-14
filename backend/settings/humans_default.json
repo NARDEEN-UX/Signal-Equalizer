@@ -1,0 +1,31 @@
+{
+  "mode": "humans",
+  "voices": [
+    {
+      "name": "Young",
+      "gain": 1.0,
+      "freq_ranges": [[200, 15000]]
+    },
+    {
+      "name": "Old",
+      "gain": 1.0,
+      "freq_ranges": [[80, 4000]]
+    },
+    {
+      "name": "Male",
+      "gain": 1.0,
+      "freq_ranges": [[85, 255]]
+    },
+    {
+      "name": "Female",
+      "gain": 1.0,
+      "freq_ranges": [[165, 255]]
+    }
+  ],
+  "sliders_freq": [1.0, 1.0, 1.0, 1.0],
+  "sliders_wavelet": [1.0, 1.0, 1.0, 1.0],
+  "wavelet": "db4",
+  "wavelet_level": 6,
+  "sample_rate": 44100,
+  "description": "Default humans mode configuration with 4 voice types"
+}

@@ -1,32 +1,33 @@
 """
-Main FastAPI application for Signal Equalizer
+Signal Equalizer Backend
+Main application entry point for FastAPI server
 """
-from fastapi import FastAPI, File, UploadFile, HTTPException
+
+from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 import numpy as np
 import soundfile as sf
+import io
 import os
-from typing import List
+import json
+from datetime import datetime
 
-# Import mode routers
-from modes.generic.endpoints import router as generic_router
-from modes.animal.endpoints import router as animal_router
-from modes.ecg.endpoints import router as ecg_router
-from modes.human.endpoints import router as human_router
-from modes.music.endpoints import router as music_router
-
-# Import utilities
-from core.dsp import compute_fft, compute_spectrogram, load_audio, normalize_signal
-from core.config import MODE_CONFIGS
+# Import routers from modes
+from modes.generic.endpoints.endpoint import router as generic_router
+from modes.music.endpoints.endpoint import router as music_router
+from modes.animals.endpoints.endpoint import router as animals_router
+from modes.humans.endpoints.endpoint import router as humans_router
+from modes.ECG.endpoints.endpoint import router as ecg_router
 
 # Initialize FastAPI app
 app = FastAPI(
     title="Signal Equalizer API",
-    description="Web application for audio signal equalization",
+    description="Audio signal equalization with frequency analysis",
     version="1.0.0"
 )
 
-# Add CORS middleware
+# Configure CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -35,162 +36,134 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Create temp folder for uploads
-UPLOAD_FOLDER = 'temp'
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+# Include routers
+app.include_router(generic_router, prefix="/api/modes/generic", tags=["Generic Mode"])
+app.include_router(music_router, prefix="/api/modes/music", tags=["Music Mode"])
+app.include_router(animals_router, prefix="/api/modes/animals", tags=["Animals Mode"])
+app.include_router(humans_router, prefix="/api/modes/humans", tags=["Humans Mode"])
+app.include_router(ecg_router, prefix="/api/modes/ecg", tags=["ECG Mode"])
 
-# Global state for current signal
-current_signal = None
-sample_rate = None
-
-# Include mode routers
-app.include_router(generic_router)
-app.include_router(animal_router)
-app.include_router(ecg_router)
-app.include_router(human_router)
-app.include_router(music_router)
 
 # ==================== Core Endpoints ====================
 
 @app.get("/")
 async def root():
     """Root endpoint"""
-    return {"message": "Signal Equalizer API", "version": "1.0.0"}
+    return {
+        "message": "Signal Equalizer API",
+        "version": "1.0.0",
+        "endpoints": {
+            "generic": "/api/modes/generic",
+            "music": "/api/modes/music",
+            "animals": "/api/modes/animals",
+            "humans": "/api/modes/humans",
+            "ecg": "/api/modes/ecg"
+        }
+    }
+
 
 @app.post("/upload")
-async def upload_audio(audio: UploadFile = File(...)):
+async def upload_audio(audio: UploadFile = File(...), settings: UploadFile = None):
     """
-    Upload and process audio file.
-    Returns signal duration and sample rate.
+    Upload audio file and optional settings file
+    
+    Args:
+        audio: Audio file (wav, mp3, etc.)
+        settings: Optional settings JSON file
+        
+    Returns:
+        Audio metadata and loaded signal data
     """
-    global current_signal, sample_rate
-    
-    if not audio.filename:
-        raise HTTPException(status_code=400, detail="Empty filename")
-    
     try:
-        path = os.path.join(UPLOAD_FOLDER, 'input.wav')
-        with open(path, 'wb') as f:
-            contents = await audio.read()
-            f.write(contents)
+        # Read audio file
+        audio_data = await audio.read()
+        audio_bytes = io.BytesIO(audio_data)
+        signal, sample_rate = sf.read(audio_bytes)
         
-        current_signal, sample_rate = load_audio(path)
+        # Handle mono/stereo
+        if len(signal.shape) > 1:
+            signal = signal[:, 0]  # Convert to mono
         
-        if current_signal is None:
-            raise HTTPException(status_code=400, detail="Failed to load audio")
+        # Load settings if provided
+        settings_data = None
+        if settings:
+            settings_content = await settings.read()
+            settings_data = json.loads(settings_content)
         
-        # Normalize signal
-        current_signal = normalize_signal(current_signal)
-        
-        return {
-            "message": "uploaded",
-            "length": len(current_signal),
-            "sample_rate": sample_rate,
-            "duration": len(current_signal) / sample_rate
-        }
+        return JSONResponse({
+            "status": "success",
+            "audio": {
+                "filename": audio.filename,
+                "size": len(audio_data),
+                "sample_rate": int(sample_rate),
+                "duration": float(len(signal) / sample_rate),
+                "samples": len(signal)
+            },
+            "signal": signal.tolist() if len(signal) < 100000 else None,  # Truncate large signals
+            "settings": settings_data
+        })
     except Exception as e:
-        current_signal = None
-        sample_rate = None
-        raise HTTPException(status_code=400, detail=f"Failed to upload audio: {str(e)}")
+        raise HTTPException(status_code=400, detail=f"Error uploading audio: {str(e)}")
 
-@app.get("/signal/info")
-async def get_signal_info():
-    """Get current signal information"""
-    global current_signal, sample_rate
-    
-    if current_signal is None:
-        raise HTTPException(status_code=400, detail="No signal loaded")
-    
-    # Compute FFT and spectrogram for input signal
-    freqs, magnitude = compute_fft(current_signal, sample_rate)
-    f, t, Sxx = compute_spectrogram(current_signal, sample_rate)
-    
-    return {
-        "length": len(current_signal),
-        "sample_rate": sample_rate,
-        "duration": len(current_signal) / sample_rate,
-        "input_fft_freqs": freqs.tolist()[:1000],  # Limit to avoid huge response
-        "input_fft_magnitude": magnitude.tolist()[:1000],
-        "input_spectrogram_freqs": f.tolist(),
-        "input_spectrogram_times": t.tolist(),
-        "input_spectrogram_power": Sxx.tolist()
-    }
 
-@app.get("/modes")
-async def get_all_modes():
-    """Get all available modes with their information"""
-    modes_info = {}
-    for mode_id, config in MODE_CONFIGS.items():
-        modes_info[mode_id] = {
-            "name": config.get('name'),
-            "slider_labels": config.get('slider_labels'),
-            "num_sliders": config.get('num_sliders'),
-            "requirements": config.get('requirements', [])
-        }
-    return modes_info
+@app.post("/save-settings")
+async def save_settings(mode: str, settings: dict):
+    """
+    Save equalizer settings to a JSON file
+    
+    Args:
+        mode: Mode name (generic, music, animals, humans, ecg)
+        settings: Settings dictionary containing band info, gains, etc.
+        
+    Returns:
+        Path to saved settings file
+    """
+    try:
+        # Create settings directory if it doesn't exist
+        settings_dir = "settings"
+        os.makedirs(settings_dir, exist_ok=True)
+        
+        # Generate filename with timestamp
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"{settings_dir}/{mode}_settings_{timestamp}.json"
+        
+        # Save settings
+        with open(filename, 'w') as f:
+            json.dump(settings, f, indent=2)
+        
+        return JSONResponse({
+            "status": "success",
+            "filename": filename,
+            "message": f"Settings saved to {filename}"
+        })
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Error saving settings: {str(e)}")
 
-@app.get("/modes/{mode_id}")
-async def get_mode_info(mode_id: str):
-    """Get specific mode information"""
-    if mode_id not in MODE_CONFIGS:
-        raise HTTPException(status_code=404, detail=f"Mode {mode_id} not found")
-    
-    config = MODE_CONFIGS[mode_id]
-    return {
-        "id": mode_id,
-        "name": config.get('name'),
-        "slider_labels": config.get('slider_labels'),
-        "num_sliders": config.get('num_sliders'),
-        "freq_bands": config.get('freq_bands'),
-        "wavelet": config.get('wavelet'),
-        "wavelet_levels": config.get('wavelet_levels'),
-        "requirements": config.get('requirements', [])
-    }
 
-@app.post("/save_preset")
-async def save_preset(name: str, mode_id: str, settings: dict):
-    """Save a preset configuration"""
-    # Implementation for saving presets to JSON files
-    import json
-    preset_folder = os.path.join(UPLOAD_FOLDER, 'presets')
-    os.makedirs(preset_folder, exist_ok=True)
+@app.post("/load-settings")
+async def load_settings(filename: str):
+    """
+    Load equalizer settings from a JSON file
     
-    preset_path = os.path.join(preset_folder, f"{name}.json")
-    preset_data = {
-        "name": name,
-        "mode_id": mode_id,
-        "settings": settings
-    }
-    
-    with open(preset_path, 'w') as f:
-        json.dump(preset_data, f, indent=2)
-    
-    return {"message": "Preset saved", "name": name}
+    Args:
+        filename: Path to settings JSON file
+        
+    Returns:
+        Settings dictionary
+    """
+    try:
+        with open(filename, 'r') as f:
+            settings = json.load(f)
+        return JSONResponse({
+            "status": "success",
+            "settings": settings
+        })
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Error loading settings: {str(e)}")
 
-@app.get("/load_preset/{preset_name}")
-async def load_preset(preset_name: str):
-    """Load a preset configuration"""
-    import json
-    preset_folder = os.path.join(UPLOAD_FOLDER, 'presets')
-    preset_path = os.path.join(preset_folder, f"{preset_name}.json")
-    
-    if not os.path.exists(preset_path):
-        raise HTTPException(status_code=404, detail=f"Preset {preset_name} not found")
-    
-    with open(preset_path, 'r') as f:
-        preset_data = json.load(f)
-    
-    return preset_data
 
-@app.get("/list_presets")
-async def list_presets():
-    """List all available presets"""
-    import json
-    preset_folder = os.path.join(UPLOAD_FOLDER, 'presets')
-    
-    if not os.path.exists(preset_folder):
-        return {"presets": []}
-    
-    presets = [f[:-5] for f in os.listdir(preset_folder) if f.endswith('.json')]
-    return {"presets": presets}
+@app.get("/health")
+async def health_check():
+    """Health check endpoint"""
+    return {"status": "healthy"}
 

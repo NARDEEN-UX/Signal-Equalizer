@@ -1,0 +1,31 @@
+{
+  "mode": "music",
+  "instruments": [
+    {
+      "name": "Bass",
+      "gain": 1.0,
+      "freq_ranges": [[20, 250]]
+    },
+    {
+      "name": "Piano",
+      "gain": 1.0,
+      "freq_ranges": [[27, 4186]]
+    },
+    {
+      "name": "Vocals",
+      "gain": 1.0,
+      "freq_ranges": [[80, 8000]]
+    },
+    {
+      "name": "Violin",
+      "gain": 1.0,
+      "freq_ranges": [[196, 3520]]
+    }
+  ],
+  "sliders_freq": [1.0, 1.0, 1.0, 1.0],
+  "sliders_wavelet": [1.0, 1.0, 1.0, 1.0],
+  "wavelet": "db4",
+  "wavelet_level": 6,
+  "sample_rate": 44100,
+  "description": "Default music mode configuration with 4 instruments"
+}

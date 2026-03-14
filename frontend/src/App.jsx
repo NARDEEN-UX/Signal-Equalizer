@@ -341,6 +341,45 @@ function App() {
     });
   };
 
+  const handleSettingsSelect = (settings) => {
+    if (!settings) return;
+    
+    // Apply settings to current mode
+    if (settings.mode) {
+      setActiveModeId(settings.mode);
+    }
+    
+    // Apply slider gains if available
+    if (Array.isArray(settings.sliders_freq) && settings.sliders_freq.length > 0) {
+      setFreqSliders(settings.sliders_freq);
+    }
+    
+    if (Array.isArray(settings.sliders_wavelet) && settings.sliders_wavelet.length > 0) {
+      setWaveletSliders(settings.sliders_wavelet);
+    }
+    
+    // Apply band configurations for the mode
+    if (settings.mode === 'generic' && Array.isArray(settings.bands)) {
+      setGenericBands(settings.bands);
+    } else if (settings.mode && settings.bands && Array.isArray(settings.bands)) {
+      // For other modes, update the configuration
+      setModeFreqConfig(prev => ({
+        ...prev,
+        [settings.mode]: settings.bands.map((b, i) => ({
+          id: b.id || `${settings.mode}-${i}`,
+          name: b.name || `Channel ${i + 1}`,
+          low: b.low,
+          high: b.high,
+          gain: b.gain || 1
+        }))
+      }));
+      // Update frequency sliders
+      setFreqSliders(settings.bands.map(b => b.gain || 1));
+    }
+    
+    window.alert('Settings loaded successfully. Controls updated.');
+  };
+
   const handleExport = () => {
     // Frontend-only UI for now
     window.alert('Export سيتم ربطها لاحقًا بالباك إند (تحميل WAV).');
@@ -410,7 +449,7 @@ function App() {
           <button type="button" className="btn btn-header" onClick={() => setModeModalOpen(true)}>
             <span className="btn-icon">⚙</span> Change Mode
           </button>
-          <AudioUploader onFileSelect={setAudioFile} currentFileName={audioFile?.name} />
+          <AudioUploader onFileSelect={setAudioFile} onSettingsSelect={handleSettingsSelect} currentFileName={audioFile?.name} />
           <button type="button" className="btn btn-export" onClick={handleExport}>
             <span className="btn-icon">↓</span> Export
           </button>
