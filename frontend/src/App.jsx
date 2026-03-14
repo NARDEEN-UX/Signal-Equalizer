@@ -12,7 +12,7 @@ import ModeModal from './components/ModeModal';
 import GenericBandBuilder from './components/GenericBandBuilder';
 import './App.css';
 import { useMockProcessing } from './mock/useMockProcessing';
-import { saveSchema, loadSchema } from './api';
+import { saveSchema, loadSchema, getGenericDefault, getMusicDefault, getAnimalsDefault, getHumansDefault, getECGDefault } from './api';
 
 const MODES = [
   {
@@ -185,6 +185,88 @@ function App() {
       durationRef.current = signalData.time[signalData.time.length - 1];
     }
   }, [signalData]);
+
+  // Load default settings when mode changes
+  useEffect(() => {
+    const loadDefaults = async () => {
+      try {
+        let response;
+        switch (activeModeId) {
+          case 'generic':
+            response = await getGenericDefault();
+            if (response.data?.bands) {
+              setGenericBands(response.data.bands);
+            }
+            if (response.data?.sliders_freq) {
+              setFreqSliders(response.data.sliders_freq);
+            }
+            if (response.data?.sliders_wavelet) {
+              setWaveletSliders(response.data.sliders_wavelet);
+            }
+            break;
+          case 'music':
+            response = await getMusicDefault();
+            if (response.data?.bands) {
+              setModeFreqConfig(prev => ({
+                ...prev,
+                music: response.data.bands
+              }));
+              setFreqSliders(response.data.bands.map(b => b.gain || 1));
+            }
+            if (response.data?.sliders_freq) {
+              setFreqSliders(response.data.sliders_freq);
+            }
+            break;
+          case 'animal':
+            response = await getAnimalsDefault();
+            if (response.data?.bands) {
+              setModeFreqConfig(prev => ({
+                ...prev,
+                animal: response.data.bands
+              }));
+              setFreqSliders(response.data.bands.map(b => b.gain || 1));
+            }
+            if (response.data?.sliders_freq) {
+              setFreqSliders(response.data.sliders_freq);
+            }
+            break;
+          case 'human':
+            response = await getHumansDefault();
+            if (response.data?.bands) {
+              setModeFreqConfig(prev => ({
+                ...prev,
+                human: response.data.bands
+              }));
+              setFreqSliders(response.data.bands.map(b => b.gain || 1));
+            }
+            if (response.data?.sliders_freq) {
+              setFreqSliders(response.data.sliders_freq);
+            }
+            break;
+          case 'ecg':
+            response = await getECGDefault();
+            if (response.data?.bands) {
+              setModeFreqConfig(prev => ({
+                ...prev,
+                ecg: response.data.bands
+              }));
+              setFreqSliders(response.data.bands.map(b => b.gain || 1));
+            }
+            if (response.data?.sliders_freq) {
+              setFreqSliders(response.data.sliders_freq);
+            }
+            break;
+          default:
+            break;
+        }
+      } catch (error) {
+        console.log('Could not load default settings from backend:', error);
+        // Silently fail - use whatever defaults are set
+      }
+    };
+
+    loadDefaults();
+  }, [activeModeId]);
 
   const stopAudio = () => {
     if (sourceRef.current) {

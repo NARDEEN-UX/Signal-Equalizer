@@ -7,8 +7,8 @@ from typing import List
 import numpy as np
 import json
 import os
-from .schema import GenericModeRequest, GenericModeResponse, GenericSettingsSchema
-from .generic_service import generic_service
+from ..schemas.schema import GenericModeRequest, GenericModeResponse, GenericSettingsSchema
+from ..services.generic_service import generic_service
 
 router = APIRouter()
 

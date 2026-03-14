@@ -90,3 +90,24 @@ export const processECGMode = (signal, gains, componentNames) => {
   });
 };
 
+// Get default settings for each mode
+export const getGenericDefault = () => {
+  return API.get('/api/modes/generic/settings/default');
+};
+
+export const getMusicDefault = () => {
+  return API.get('/api/modes/music/settings/default');
+};
+
+export const getAnimalsDefault = () => {
+  return API.get('/api/modes/animals/settings/default');
+};
+
+export const getHumansDefault = () => {
+  return API.get('/api/modes/humans/settings/default');
+};
+
+export const getECGDefault = () => {
+  return API.get('/api/modes/ecg/settings/default');
+};
+

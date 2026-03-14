@@ -1,25 +1,33 @@
 {
   "mode": "animals",
-  "animals": [
+  "bands": [
     {
+      "id": "animal-0",
       "name": "Cat",
-      "gain": 1.0,
-      "freq_ranges": [[50, 10000]]
+      "low": 50,
+      "high": 10000,
+      "gain": 1.0
     },
     {
+      "id": "animal-1",
       "name": "Dog",
-      "gain": 1.0,
-      "freq_ranges": [[40, 8000]]
+      "low": 40,
+      "high": 8000,
+      "gain": 1.0
     },
     {
+      "id": "animal-2",
       "name": "Bird",
-      "gain": 1.0,
-      "freq_ranges": [[200, 8000]]
+      "low": 200,
+      "high": 8000,
+      "gain": 1.0
     },
     {
+      "id": "animal-3",
       "name": "Elephant",
-      "gain": 1.0,
-      "freq_ranges": [[10, 5000]]
+      "low": 10,
+      "high": 5000,
+      "gain": 1.0
     }
   ],
   "sliders_freq": [1.0, 1.0, 1.0, 1.0],

@@ -1,25 +1,33 @@
 {
   "mode": "music",
-  "instruments": [
+  "bands": [
     {
+      "id": "music-0",
       "name": "Bass",
-      "gain": 1.0,
-      "freq_ranges": [[20, 250]]
+      "low": 20,
+      "high": 250,
+      "gain": 1.0
     },
     {
+      "id": "music-1",
       "name": "Piano",
-      "gain": 1.0,
-      "freq_ranges": [[27, 4186]]
+      "low": 27,
+      "high": 4186,
+      "gain": 1.0
     },
     {
+      "id": "music-2",
       "name": "Vocals",
-      "gain": 1.0,
-      "freq_ranges": [[80, 8000]]
+      "low": 80,
+      "high": 8000,
+      "gain": 1.0
     },
     {
+      "id": "music-3",
       "name": "Violin",
-      "gain": 1.0,
-      "freq_ranges": [[196, 3520]]
+      "low": 196,
+      "high": 3520,
+      "gain": 1.0
     }
   ],
   "sliders_freq": [1.0, 1.0, 1.0, 1.0],

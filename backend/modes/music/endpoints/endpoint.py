@@ -6,8 +6,8 @@ from fastapi import APIRouter, HTTPException
 import numpy as np
 import json
 import os
-from .schema import MusicModeRequest, MusicModeResponse
-from .music_service import music_service
+from ..schemas.schema import MusicModeRequest, MusicModeResponse
+from ..services.music_service import music_service
 
 router = APIRouter()
 

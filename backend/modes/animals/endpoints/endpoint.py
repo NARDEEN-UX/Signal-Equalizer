@@ -6,8 +6,8 @@ from fastapi import APIRouter, HTTPException
 import numpy as np
 import json
 import os
-from .schema import AnimalsModeRequest, AnimalsModeResponse
-from .animals_service import animals_service
+from ..schemas.schema import AnimalsModeRequest, AnimalsModeResponse
+from ..services.animals_service import animals_service
 
 router = APIRouter()
 

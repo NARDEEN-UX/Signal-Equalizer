@@ -6,8 +6,8 @@ from fastapi import APIRouter, HTTPException
 import numpy as np
 import json
 import os
-from .schema import ECGModeRequest, ECGModeResponse
-from .ecg_service import ecg_service
+from ..schemas.schema import ECGModeRequest, ECGModeResponse
+from ..services.ecg_service import ecg_service
 
 router = APIRouter()
 

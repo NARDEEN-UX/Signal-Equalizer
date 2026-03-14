@@ -1,25 +1,33 @@
 {
   "mode": "ecg",
-  "components": [
+  "bands": [
     {
+      "id": "ecg-0",
       "name": "Normal",
-      "gain": 1.0,
-      "freq_ranges": [[0.05, 100]]
+      "low": 0.05,
+      "high": 100,
+      "gain": 1.0
     },
     {
+      "id": "ecg-1",
       "name": "Atrial Fibrillation",
-      "gain": 1.0,
-      "freq_ranges": [[5, 50]]
+      "low": 5,
+      "high": 50,
+      "gain": 1.0
     },
     {
+      "id": "ecg-2",
       "name": "Ventricular Tachycardia",
-      "gain": 1.0,
-      "freq_ranges": [[3, 40]]
+      "low": 3,
+      "high": 40,
+      "gain": 1.0
     },
     {
+      "id": "ecg-3",
       "name": "Heart Block",
-      "gain": 1.0,
-      "freq_ranges": [[0.5, 5]]
+      "low": 0.5,
+      "high": 5,
+      "gain": 1.0
     }
   ],
   "sliders_freq": [1.0, 1.0, 1.0, 1.0],

@@ -6,8 +6,8 @@ from fastapi import APIRouter, HTTPException
 import numpy as np
 import json
 import os
-from .schema import HumansModeRequest, HumansModeResponse
-from .humans_service import humans_service
+from ..schemas.schema import HumansModeRequest, HumansModeResponse
+from ..services.humans_service import humans_service
 
 router = APIRouter()
 
