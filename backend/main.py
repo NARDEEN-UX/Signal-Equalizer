@@ -18,7 +18,7 @@ from modes.generic.endpoints.endpoint import router as generic_router
 from modes.music.endpoints.endpoint import router as music_router
 from modes.animals.endpoints.endpoint import router as animals_router
 from modes.humans.endpoints.endpoint import router as humans_router
-from modes.ECG.endpoints.endpoint import router as ecg_router
+from modes.ecg.endpoints.endpoint import router as ecg_router
 
 # Initialize FastAPI app
 app = FastAPI(
