@@ -1,0 +1,39 @@
+{
+  "mode": "humans",
+  "bands": [
+    {
+      "id": "human-0",
+      "name": "Young",
+      "low": 200,
+      "high": 15000,
+      "gain": 1.0
+    },
+    {
+      "id": "human-1",
+      "name": "Old",
+      "low": 80,
+      "high": 4000,
+      "gain": 1.0
+    },
+    {
+      "id": "human-2",
+      "name": "Male",
+      "low": 85,
+      "high": 255,
+      "gain": 1.0
+    },
+    {
+      "id": "human-3",
+      "name": "Female",
+      "low": 165,
+      "high": 255,
+      "gain": 1.0
+    }
+  ],
+  "sliders_freq": [1.0, 1.0, 1.0, 1.0],
+  "sliders_wavelet": [1.0, 1.0, 1.0, 1.0],
+  "wavelet": "db4",
+  "wavelet_level": 6,
+  "sample_rate": 44100,
+  "description": "Default humans mode configuration with 4 voice types"
+}

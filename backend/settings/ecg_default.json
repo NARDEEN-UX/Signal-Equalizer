@@ -1,0 +1,39 @@
+{
+  "mode": "ecg",
+  "bands": [
+    {
+      "id": "ecg-0",
+      "name": "Normal",
+      "low": 0.05,
+      "high": 100,
+      "gain": 1.0
+    },
+    {
+      "id": "ecg-1",
+      "name": "Atrial Fibrillation",
+      "low": 5,
+      "high": 50,
+      "gain": 1.0
+    },
+    {
+      "id": "ecg-2",
+      "name": "Ventricular Tachycardia",
+      "low": 3,
+      "high": 40,
+      "gain": 1.0
+    },
+    {
+      "id": "ecg-3",
+      "name": "Heart Block",
+      "low": 0.5,
+      "high": 5,
+      "gain": 1.0
+    }
+  ],
+  "sliders_freq": [1.0, 1.0, 1.0, 1.0],
+  "sliders_wavelet": [1.0, 1.0, 1.0, 1.0],
+  "wavelet": "db4",
+  "wavelet_level": 6,
+  "sample_rate": 500,
+  "description": "Default ECG mode configuration with 4 cardiac components"
+}
