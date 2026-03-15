@@ -36,21 +36,31 @@ const SpectrogramViewer = ({ title, times, freqs, magnitudes }) => {
     const width = canvas.width;
     const height = canvas.height;
 
-    const flat = Array.isArray(magnitudes) ? magnitudes.flat?.() ?? magnitudes : [];
+    const flat = Array.isArray(magnitudes) ? (magnitudes.flat ? magnitudes.flat() : magnitudes) : [];
     let maxVal = 1e-8;
-    for (let i = 0; i < flat.length; i++) {
+    for (let i = 0; i < flat.length; i += 1) {
       const v = Number(flat[i]);
       if (!Number.isNaN(v) && v > maxVal) maxVal = v;
     }
+    const invMax = 1 / maxVal;
     const imageData = ctx.createImageData(width, height);
 
-    for (let x = 0; x < width; x++) {
-      const tIdx = Math.floor((x / width) * times.length);
-      for (let y = 0; y < height; y++) {
-        const fIdx = Math.floor((y / height) * freqs.length);
+    for (let x = 0; x < width; x += 1) {
+      const tIdx = Math.min(times.length - 1, Math.floor((x / width) * times.length));
+      for (let y = 0; y < height; y += 1) {
+        // Flip vertically so low frequencies are at the bottom
+        const yNorm = y / height;
+        const fIdx = Math.min(
+          freqs.length - 1,
+          Math.floor((1 - yNorm) * freqs.length)
+        );
         const row = Array.isArray(magnitudes[fIdx]) ? magnitudes[fIdx] : magnitudes;
-        const val = (typeof row === 'object' && row[tIdx] != null) ? row[tIdx] : 0;
-        const gray = Math.floor(255 * (val / maxVal));
+        const raw = (typeof row === 'object' && row[tIdx] != null) ? Number(row[tIdx]) : 0;
+        const v = raw > 0 ? raw * invMax : 0;
+        // Log-like contrast curve for dark theme
+        const gamma = 0.4;
+        const boosted = Math.pow(Math.min(1, Math.max(0, v)), gamma);
+        const gray = Math.floor(35 + 215 * boosted); // keep a dim background instead of full black
         const idx = (y * width + x) * 4;
         imageData.data[idx] = gray;
         imageData.data[idx + 1] = gray;

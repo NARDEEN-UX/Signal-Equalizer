@@ -52,6 +52,36 @@ function pseudoFft(freqs, bands, gains) {
   return out;
 }
 
+// Very small real-valued DFT for connecting uploaded signals
+// to the FFT chart without requiring a heavy DSP stack.
+function computeRealFft(signal, fs, nFft = 1024) {
+  if (!signal || signal.length === 0) return { freq: [], mag: [] };
+  const n = Math.min(signal.length, nFft);
+  const x = signal.slice(0, n);
+  const half = Math.floor(n / 2);
+  const freqs = [];
+  const mags = [];
+
+  for (let k = 0; k <= half; k += 1) {
+    let re = 0;
+    let im = 0;
+    const angleCoef = -2 * Math.PI * k / n;
+    for (let i = 0; i < n; i += 1) {
+      const angle = angleCoef * i;
+      const cosA = Math.cos(angle);
+      const sinA = Math.sin(angle);
+      const v = x[i] || 0;
+      re += v * cosA;
+      im += v * sinA;
+    }
+    const mag = Math.sqrt(re * re + im * im) / n;
+    freqs.push((k * fs) / n);
+    mags.push(mag);
+  }
+
+  return { freq: freqs, mag: mags };
+}
+
 function pseudoSpectrogram(rows, cols, tone = 0.6) {
   const a = [];
   for (let r = 0; r < rows; r += 1) {
@@ -63,6 +93,58 @@ function pseudoSpectrogram(rows, cols, tone = 0.6) {
     a.push(row);
   }
   return a;
+}
+
+// Tiny STFT-style spectrogram so uploaded signals have meaningful time–frequency content.
+function computeSpectrogram(signal, fs, winSize = 256, hop = 128) {
+  if (!signal || signal.length === 0) {
+    return { t: [], f: [], mag: [] };
+  }
+
+  const n = signal.length;
+  const frames = [];
+  for (let start = 0; start + winSize <= n; start += hop) {
+    const frame = signal.slice(start, start + winSize);
+    // Hann window
+    for (let i = 0; i < frame.length; i += 1) {
+      frame[i] *= 0.5 * (1 - Math.cos((2 * Math.PI * i) / (winSize - 1)));
+    }
+    frames.push(frame);
+  }
+
+  const half = Math.floor(winSize / 2);
+  const freqs = [];
+  for (let k = 0; k <= half; k += 1) {
+    freqs.push((k * fs) / winSize);
+  }
+
+  const mags = Array.from({ length: freqs.length }, () =>
+    new Array(frames.length).fill(0)
+  );
+
+  for (let frameIdx = 0; frameIdx < frames.length; frameIdx += 1) {
+    const frame = frames[frameIdx];
+    for (let k = 0; k <= half; k += 1) {
+      let re = 0;
+      let im = 0;
+      const angleCoef = -2 * Math.PI * k / winSize;
+      for (let i = 0; i < winSize; i += 1) {
+        const angle = angleCoef * i;
+        const v = frame[i] || 0;
+        re += v * Math.cos(angle);
+        im += v * Math.sin(angle);
+      }
+      const mag = Math.sqrt(re * re + im * im) / winSize;
+      mags[k][frameIdx] = mag;
+    }
+  }
+
+  const times = [];
+  for (let idx = 0; idx < frames.length; idx += 1) {
+    times.push(((idx * hop) / fs));
+  }
+
+  return { t: times, f: freqs, mag: mags };
 }
 
 function pseudoWaveletEnergy(levels, gains) {
@@ -102,53 +184,162 @@ export function useMockProcessing({
       return makeSyntheticMix(fs, seconds);
     }
   }, [inputSignal, fs, seconds]);
+
+  // Heavy transforms (FFT + spectrogram) depend only on the signal itself,
+  // not on slider changes. Precompute them once per uploaded/synthetic signal.
+  const baseFft = useMemo(
+    () => computeRealFft(input.mix, fs),
+    [input.mix, fs]
+  );
+
+  const baseSpec = useMemo(
+    () => computeSpectrogram(input.mix, fs),
+    [input.mix, fs]
+  );
   const [data, setData] = useState(null);
 
   useEffect(() => {
-    const bands =
-      modeId === 'generic'
-        ? (genericBands?.length
-          ? genericBands.map((b) => [Number(b.low) || 0, Number(b.high) || 0])
-          : [[80, 180], [180, 300], [300, 3000], [3000, 8000]])
-        : [[80, 180], [180, 300], [300, 3000], [3000, 8000]];
+    // Use the per-mode band configuration passed from App for *all* modes.
+    // For generic mode this is the custom bands; for the others it is the
+    // preset bands. Fall back to a sensible default if missing.
+    const bands = (genericBands?.length
+      ? genericBands.map((b) => [Number(b.low) || 0, Number(b.high) || 0])
+      : [[80, 180], [180, 300], [300, 3000], [3000, 8000]]);
 
-    const gains = modeId === 'generic'
-      ? (genericBands?.length ? genericBands.map((b) => Number(b.gain) || 1) : freqSliders)
-      : freqSliders;
+    const gains = (genericBands?.length
+      ? genericBands.map((b, i) => Number(b.gain ?? freqSliders[i]) || 1)
+      : freqSliders);
 
     // "Human": slider controls speakers (voices) more directly (better UX for the statement)
     const outputSignal =
       modeId === 'human'
         ? applyVoiceGains(input.voices, gains)
-        : input.mix.map((x) => x * (0.7 + 0.15 * (Number(gains[0]) || 1)));
+        : (() => {
+            // For non-human modes approximate the equaliser by scaling the
+            // waveform with an average band gain so that level clearly
+            // responds to slider changes.
+            const avgGain =
+              gains.length > 0
+                ? gains.reduce((s, g) => s + (Number(g) || 0), 0) / gains.length
+                : 1;
+            const factor = 0.7 + 0.15 * clamp(avgGain, 0, 2);
+            return input.mix.map((x) => x * factor);
+          })();
 
-    // FFT/spectrogram/wavelet are mocked but responsive.
-    const fftFreq = linspace(512, 0, 8000);
-    const fftIn = pseudoFft(fftFreq, bands, [1, 1, 1, 1]);
-    const fftOut = pseudoFft(fftFreq, bands, gains);
+    // FFT: if we have an uploaded / processed signal, compute a tiny real FFT
+    // so that the spectrum actually reflects the current signal.
+    let fftFreq;
+    let fftIn;
+    let fftOut;
+    if (input.mix && input.mix.length > 0 && baseFft.freq.length) {
+      fftFreq = baseFft.freq;
+      const baseMag = baseFft.mag;
+      // Normalise a bit for stable plotting
+      const maxMag = baseMag.reduce((m, v) => (v > m ? v : m), 1e-6);
+      const normMag = baseMag.map((v) => v / maxMag);
+      fftIn = normMag;
+      // Apply per-band gains to build an approximate "output" spectrum
+      const banded = [];
+      for (let i = 0; i < fftFreq.length; i += 1) {
+        const f = fftFreq[i];
+        let g = 1;
+        for (let b = 0; b < bands.length; b += 1) {
+          const [lo, hi] = bands[b];
+          if (f >= lo && f <= hi) {
+            g = Number(gains[b]) || 1;
+            break;
+          }
+        }
+        banded.push(normMag[i] * clamp(g, 0, 2));
+      }
+      const outMax = banded.reduce((m, v) => (v > m ? v : m), 1e-6);
+      fftOut = banded.map((v) => v / outMax);
+    } else {
+      // Fallback to the previous pseudo-FFT if no signal is present
+      fftFreq = linspace(512, 0, 8000);
+      fftIn = pseudoFft(fftFreq, bands, [1, 1, 1, 1]);
+      fftOut = pseudoFft(fftFreq, bands, gains);
+    }
 
-    const specT = linspace(120, 0, seconds);
-    const specF = linspace(96, 0, 8000);
-    const specIn = pseudoSpectrogram(specF.length, specT.length, 0.55);
-    const tone = 0.35 + 0.25 * clamp((Number(gains[0]) || 1) / 2, 0, 1);
-    const specOut = pseudoSpectrogram(specF.length, specT.length, tone);
-
-    const w = pseudoWaveletEnergy(6, waveletSliders);
-
-    // Simulate realistic compute delay (so loading states can exist)
-    const id = window.setTimeout(() => {
-      setData({
-        time: input.time,
-        input_signal: input.mix,
-        output_signal: outputSignal,
-        fft: { freq: fftFreq, in: fftIn, out: fftOut },
-        spectrogram: { t: specT, f: specF, in: specIn, out: specOut },
-        wavelet: { levels: Array.from({ length: 6 }, (_, i) => i), in: w.in, out: w.out }
+    // Spectrogram: if we have a real signal, compute a lightweight STFT so
+    // the texture actually follows the uploaded waveform. Otherwise fall back
+    // to the previous mock implementation.
+    let specT;
+    let specF;
+    let specIn;
+    let specOut;
+    if (input.mix && input.mix.length > 0 && baseSpec.f.length && baseSpec.t.length) {
+      specT = baseSpec.t;
+      specF = baseSpec.f;
+      const flat = baseSpec.mag.flat();
+      const maxMag = flat.reduce((m, v) => (v > m ? v : m), 1e-6);
+      const norm = baseSpec.mag.map((row) => row.map((v) => v / maxMag));
+      specIn = norm;
+      // Apply band gains row-wise so that different frequency bands respond
+      // to different sliders.
+      specOut = norm.map((row, fIdx) => {
+        const f = specF[fIdx] || 0;
+        let g = 1;
+        for (let b = 0; b < bands.length; b += 1) {
+          const [lo, hi] = bands[b];
+          if (f >= lo && f <= hi) {
+            g = Number(gains[b]) || 1;
+            break;
+          }
+        }
+        const gg = clamp(g, 0, 2);
+        return row.map((v) => clamp(v * gg, 0, 2));
       });
-    }, 120);
+    } else {
+      const energyScale = 0.55;
+      specT = linspace(120, 0, seconds);
+      specF = linspace(96, 0, 8000);
+      specIn = pseudoSpectrogram(specF.length, specT.length, energyScale);
+      const tone =
+        0.35 + 0.25 * clamp((Number(gains[0]) || 1) / 2, 0, 1);
+      specOut = pseudoSpectrogram(specF.length, specT.length, tone);
+    }
 
-    return () => window.clearTimeout(id);
-  }, [freqSliders, waveletSliders, modeId, genericBands, waveletType, input, inputSignal]);
+    // Wavelet domain energy: derive a simple multi-band energy profile from the
+    // current signal so that uploads affect the bars.
+    let w;
+    if (input.mix && input.mix.length > 0) {
+      const levels = 6;
+      const n = input.mix.length;
+      const sliceSize = Math.floor(n / levels) || 1;
+      const base = [];
+      for (let i = 0; i < levels; i += 1) {
+        const start = i * sliceSize;
+        const end = Math.min(n, start + sliceSize);
+        let sumSq = 0;
+        let count = 0;
+        for (let j = start; j < end; j += 1) {
+          const v = input.mix[j] || 0;
+          sumSq += v * v;
+          count += 1;
+        }
+        const rms = Math.sqrt(sumSq / (count || 1));
+        base.push(rms);
+      }
+      const maxBase = base.reduce((m, v) => (v > m ? v : m), 1e-6);
+      const normBase = base.map((v) => v / maxBase);
+      const out = normBase.map(
+        (v, i) => v * (Number(waveletSliders[i]) || 1)
+      );
+      w = { in: normBase, out };
+    } else {
+      w = pseudoWaveletEnergy(6, waveletSliders);
+    }
+
+    setData({
+      time: input.time,
+      input_signal: input.mix,
+      output_signal: outputSignal,
+      fft: { freq: fftFreq, in: fftIn, out: fftOut },
+      spectrogram: { t: specT, f: specF, in: specIn, out: specOut },
+      wavelet: { levels: Array.from({ length: 6 }, (_, i) => i), in: w.in, out: w.out }
+    });
+  }, [freqSliders, waveletSliders, modeId, genericBands, waveletType, input, baseFft, baseSpec]);
 
   return data;
 }
