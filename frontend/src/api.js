@@ -74,10 +74,7 @@ export const processAnimalsMode = (signal, gains, animalNames) => {
 
 export const processHumansMode = (signal, gains, voiceNames) => {
   return API.post('/api/modes/humans/process', {
-    signal,
-    gains,
-    voice_names: voiceNames,
-    sample_rate: 44100
+    signal, gains, voice_names: voiceNames, sample_rate: 44100
   });
 };
 
