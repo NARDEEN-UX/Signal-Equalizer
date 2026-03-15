@@ -63,7 +63,8 @@ const ModeSignalUploader = ({ mode, onSignalLoad, onClose }) => {
       // Clear input
       if (fileInputRef.current) fileInputRef.current.value = '';
     } catch (err) {
-      setError('Upload failed: ' + (err.response?.data?.detail || err.message));
+      const errorMsg = err.response?.data?.detail || err.message || 'Unknown error';
+      setError('Upload failed: ' + (typeof errorMsg === 'object' ? JSON.stringify(errorMsg) : errorMsg));
       setSuccess('');
     } finally {
       setLoading(false);

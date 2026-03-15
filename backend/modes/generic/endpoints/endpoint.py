@@ -87,14 +87,17 @@ async def validate_bands(bands: List[dict]):
 
 
 @router.post("/upload-signal")
-async def upload_signal(file: UploadFile = File(...)):
+async def upload_signal(signal_file: UploadFile = File(...)):
     """Upload a signal file for generic mode"""
     try:
-        content = await file.read()
+        # Ensure upload directory exists
+        os.makedirs(UPLOADS_DIR, exist_ok=True)
+        
+        content = await signal_file.read()
         
         # Generate filename with timestamp
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        file_ext = file.filename.split('.')[-1] if '.' in file.filename else 'wav'
+        file_ext = signal_file.filename.split('.')[-1] if '.' in signal_file.filename else 'wav'
         filename = f"generic_{timestamp}.{file_ext}"
         filepath = os.path.join(UPLOADS_DIR, filename)
         
@@ -126,33 +129,34 @@ async def upload_signal(file: UploadFile = File(...)):
 async def list_signals():
     """List all uploaded signals for generic mode"""
     try:
-        if not os.path.exists(UPLOADS_DIR):
-            return {"data": {"signals": []}}
-        
+        os.makedirs(UPLOADS_DIR, exist_ok=True)
         signals = []
+        
         for filename in os.listdir(UPLOADS_DIR):
-            if filename.startswith('generic_') and (filename.endswith('.wav') or filename.endswith('.mp3') or filename.endswith('.flac') or filename.endswith('.ogg')):
+            if filename.startswith('generic_') and filename.endswith(('.wav', '.mp3', '.flac', '.ogg')):
                 filepath = os.path.join(UPLOADS_DIR, filename)
-                try:
-                    audio_data, sample_rate = sf.read(filepath)
-                    if len(audio_data.shape) > 1:
-                        duration = len(audio_data) / sample_rate
-                    else:
-                        duration = len(audio_data) / sample_rate
-                    size = os.path.getsize(filepath)
-                    
-                    signals.append({
-                        "filename": filename,
-                        "duration": duration,
-                        "sample_rate": sample_rate,
-                        "size": size
-                    })
-                except Exception:
-                    continue
+                file_size = os.path.getsize(filepath)
+                signal, sample_rate = sf.read(filepath)
+                
+                if len(signal.shape) > 1:
+                    signal = signal[:, 0]
+                
+                signals.append({
+                    "filename": filename,
+                    "size": file_size,
+                    "sample_rate": int(sample_rate),
+                    "duration": float(len(signal) / sample_rate),
+                    "samples": len(signal)
+                })
         
         # Sort by filename (newest first)
         signals.sort(key=lambda x: x['filename'], reverse=True)
-        return {"data": {"signals": signals}}
+        
+        return {
+            "status": "success",
+            "signals": signals,
+            "count": len(signals)
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -170,26 +174,33 @@ async def load_signal(filename: str):
             raise ValueError("Invalid signal file")
         
         filepath = os.path.join(UPLOADS_DIR, filename)
+        
+        # Additional path traversal check
+        if not os.path.abspath(filepath).startswith(os.path.abspath(UPLOADS_DIR)):
+            raise HTTPException(status_code=403, detail="Access denied")
+        
         if not os.path.exists(filepath):
-            raise FileNotFoundError(f"Signal not found: {filename}")
+            raise HTTPException(status_code=404, detail="Signal file not found")
         
         # Read audio file
         audio_data, sample_rate = sf.read(filepath)
         
         # Convert to mono if needed
         if len(audio_data.shape) > 1:
-            audio_data = np.mean(audio_data, axis=1)
+            audio_data = audio_data[:, 0]
         
         return {
-            "data": {
-                "signal": audio_data.tolist(),
-                "sample_rate": int(sample_rate)
-            }
+            "status": "success",
+            "filename": filename,
+            "signal": audio_data.tolist(),
+            "sample_rate": int(sample_rate),
+            "duration": float(len(audio_data) / sample_rate),
+            "samples": len(audio_data)
         }
-    except FileNotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=f"Error loading signal: {str(e)}")
 
 
 @router.delete("/signal/{filename}")
@@ -200,20 +211,22 @@ async def delete_signal(filename: str):
         if '..' in filename or '/' in filename or '\\' in filename:
             raise ValueError("Invalid filename")
         
-        # Ensure filename starts with generic_
-        if not filename.startswith('generic_'):
-            raise ValueError("Invalid signal file")
-        
         filepath = os.path.join(UPLOADS_DIR, filename)
+        
+        # Additional path traversal check
+        if not os.path.abspath(filepath).startswith(os.path.abspath(UPLOADS_DIR)):
+            raise HTTPException(status_code=403, detail="Access denied")
+        
         if not os.path.exists(filepath):
-            raise FileNotFoundError(f"Signal not found: {filename}")
+            raise HTTPException(status_code=404, detail="Signal file not found")
         
         os.remove(filepath)
+        
         return {
             "status": "success",
-            "message": f"Signal deleted: {filename}"
+            "message": f"Signal {filename} deleted successfully"
         }
-    except FileNotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=f"Error deleting signal: {str(e)}")
