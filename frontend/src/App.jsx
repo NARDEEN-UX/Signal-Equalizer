@@ -9,6 +9,7 @@ import SpectrogramViewer from './components/SpectrogramViewer';
 import TransportControls from './components/TransportControls';
 import AudiogramToggle from './components/AudiogramToggle';
 import ModeModal from './components/ModeModal';
+import ECGAIPanel from './components/ECGAIPanel';
 import GenericBandBuilder from './components/GenericBandBuilder';
 import './App.css';
 import { useMockProcessing } from './mock/useMockProcessing';
@@ -65,7 +66,7 @@ const MODES = [
     description: 'Control magnitude of arrhythmia components (normal + 3 types).',
     accentClass: 'mode-ecg',
     icon: '♡',
-    sliderLabels: ['Normal', 'Arrhythmia 1', 'Arrhythmia 2', 'Arrhythmia 3'],
+    sliderLabels: ['Normal', 'Atrial Fib', 'V-Tach', 'Heart Block'],
     allowAddSubdivision: false,
     requirements: ['Normal ECG', 'Atrial fibrillation', 'Ventricular tachycardia', 'Heart block']
   },
@@ -97,8 +98,10 @@ function App() {
   const [freqSliders, setFreqSliders] = useState([1, 1, 1, 1]);
   const [waveletSliders, setWaveletSliders] = useState([1, 1, 1, 1]);
   const [audiogram, setAudiogram] = useState(false);
-  const [showSpec, setShowSpec] = useState(false);
-  const [isPlaying, setIsPlaying] = useState(false);
+  const [showSpec, setShowSpec] = useState(true);
+  const [isInputPlaying, setIsInputPlaying] = useState(false);
+  const [isOutputPlaying, setIsOutputPlaying] = useState(false);
+  const isPlayingRef = useRef(false);
   const [playbackTime, setPlaybackTime] = useState(0);
   const [playbackRate, setPlaybackRate] = useState(1);
   const [volume, setVolume] = useState(1);
@@ -124,10 +127,10 @@ function App() {
       { id: 'human-3', name: 'Voice 4', low: 80, high: 8000, gain: 1 }
     ],
     ecg: [
-      { id: 'ecg-0', name: 'Normal', low: 0.5, high: 45, gain: 1 },
-      { id: 'ecg-1', name: 'Arrhythmia 1', low: 0.5, high: 45, gain: 1 },
-      { id: 'ecg-2', name: 'Arrhythmia 2', low: 0.5, high: 45, gain: 1 },
-      { id: 'ecg-3', name: 'Arrhythmia 3', low: 0.5, high: 45, gain: 1 }
+      { id: 'ecg-0', name: 'Normal', low: 0.05, high: 100, gain: 1 },
+      { id: 'ecg-1', name: 'Atrial Fib', low: 5, high: 50, gain: 1 },
+      { id: 'ecg-2', name: 'V-Tach', low: 3, high: 40, gain: 1 },
+      { id: 'ecg-3', name: 'Heart Block', low: 0.5, high: 5, gain: 1 }
     ]
   });
   const [waveletType, setWaveletType] = useState('haar');
@@ -284,8 +287,8 @@ function App() {
     }
   };
 
-  const handlePlay = () => {
-    if (!signalData?.output_signal || !signalData?.time) return;
+  const playSignalAudio = (rawSignal, setPlaying) => {
+    if (!rawSignal || !signalData?.time) return;
 
     let ctx = audioCtxRef.current;
     if (!ctx) {
@@ -295,19 +298,38 @@ function App() {
 
     stopAudio();
 
-    const dt = signalData.time[1] - signalData.time[0] || 1 / 44100;
-    const buffer = ctx.createBuffer(1, signalData.output_signal.length, 1 / dt);
-    const data = buffer.getChannelData(0);
-    for (let i = 0; i < data.length; i += 1) {
-      data[i] = signalData.output_signal[i];
+    const rawDt = (signalData.time[1] - signalData.time[0]) || (1 / 44100);
+    const rawFs = Math.round(1 / rawDt);
+    const targetFs = rawFs < 8000 ? 8000 : rawFs;
+    const ratio = targetFs / rawFs;
+
+    let playSignal;
+    let playFs;
+    if (ratio > 1) {
+      const outLen = Math.floor(rawSignal.length * ratio);
+      playSignal = new Float32Array(outLen);
+      for (let i = 0; i < outLen; i++) {
+        const src = i / ratio;
+        const lo = Math.floor(src);
+        const hi = Math.min(lo + 1, rawSignal.length - 1);
+        const frac = src - lo;
+        playSignal[i] = rawSignal[lo] * (1 - frac) + rawSignal[hi] * frac;
+      }
+      playFs = targetFs;
+    } else {
+      playSignal = rawSignal;
+      playFs = rawFs;
     }
+
+    const buffer = ctx.createBuffer(1, playSignal.length, playFs);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < data.length; i += 1) data[i] = playSignal[i];
 
     const source = ctx.createBufferSource();
     const gainNode = ctx.createGain();
     source.buffer = buffer;
     source.playbackRate.value = playbackRate;
     gainNode.gain.value = volume;
-
     source.connect(gainNode).connect(ctx.destination);
     source.start(0);
 
@@ -316,32 +338,45 @@ function App() {
     startTimeRef.current = ctx.currentTime;
     durationRef.current = signalData.time[signalData.time.length - 1];
 
+    isPlayingRef.current = true;
+    setPlaying(true);
+    setIsInputPlaying(false);
+    setIsOutputPlaying(false);
+    setPlaying(true);
+
     const tick = () => {
-      if (!audioCtxRef.current || !isPlaying) return;
+      if (!audioCtxRef.current || !isPlayingRef.current) return;
       const elapsed = (audioCtxRef.current.currentTime - startTimeRef.current) * playbackRate;
       const clamped = Math.min(elapsed, durationRef.current);
       setPlaybackTime(clamped);
       if (elapsed < durationRef.current) {
         rafRef.current = requestAnimationFrame(tick);
       } else {
-        setIsPlaying(false);
+        isPlayingRef.current = false;
+        setPlaying(false);
       }
     };
 
-    setIsPlaying(true);
     rafRef.current = requestAnimationFrame(tick);
   };
 
+  const handlePlay = () => playSignalAudio(signalData?.output_signal, setIsOutputPlaying);
+  const handlePlayInput = () => playSignalAudio(signalData?.input_signal, setIsInputPlaying);
+
   const handlePause = () => {
-    setIsPlaying(false);
+    isPlayingRef.current = false;
+    setIsInputPlaying(false);
+    setIsOutputPlaying(false);
     if (audioCtxRef.current) {
       audioCtxRef.current.suspend();
     }
   };
 
   const handleStop = () => {
+    isPlayingRef.current = false;
     stopAudio();
-    setIsPlaying(false);
+    setIsInputPlaying(false);
+    setIsOutputPlaying(false);
     setPlaybackTime(0);
     if (audioCtxRef.current) {
       audioCtxRef.current.close();
@@ -672,7 +707,18 @@ function App() {
           {equalizerTab === 'ai' && (
             <div className="box ai-box">
               <h2 className="box-title">AI Model Comparison</h2>
-              <p className="helper-text">Connect a pretrained AI model per mode to compare with the equalizer.</p>
+              {activeModeId === 'ecg' ? (
+                <ECGAIPanel
+                  signalData={signalData}
+                  onApplyGains={(gains) => {
+                    setModeFreqBands(
+                      modeFreqBands.map((b, i) => ({ ...b, gain: gains[i] ?? b.gain }))
+                    );
+                  }}
+                />
+              ) : (
+                <p className="helper-text">AI analysis is available in ECG mode only.</p>
+              )}
             </div>
           )}
         </aside>
@@ -687,8 +733,8 @@ function App() {
                 playbackTime={playbackTime}
                 viewWindow={viewWindow}
                 variant="input"
-                isPlaying={isPlaying}
-                onPlay={handlePlay}
+                isPlaying={isInputPlaying}
+                onPlay={handlePlayInput}
                 onPause={handlePause}
                 onStop={handleStop}
                 playbackRate={playbackRate}
@@ -710,7 +756,7 @@ function App() {
                 playbackTime={playbackTime}
                 viewWindow={viewWindow}
                 variant="output"
-                isPlaying={isPlaying}
+                isPlaying={isOutputPlaying}
                 onPlay={handlePlay}
                 onPause={handlePause}
                 onStop={handleStop}

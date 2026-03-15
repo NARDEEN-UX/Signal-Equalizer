@@ -8,6 +8,7 @@ import json
 import os
 from ..schemas.schema import ECGModeRequest, ECGModeResponse
 from ..services.ecg_service import ecg_service
+from ..services.ecg_ai_service import run_ecg_ai
 
 router = APIRouter()
 
@@ -40,7 +41,14 @@ async def process_ecg(request: ECGModeRequest):
             raise ValueError("Number of gains must match number of components")
         
         # Process signal
-        result = ecg_service.process_signal(signal, request.gains, request.component_names)
+        result = ecg_service.process_signal(
+            signal,
+            request.gains,
+            request.component_names,
+            wavelet=request.wavelet,
+            wavelet_level=request.wavelet_level,
+            sliders_wavelet=request.sliders_wavelet,
+        )
         
         return {
             "status": "success",
@@ -68,3 +76,26 @@ async def get_ecg_components():
     return {
         "components": list(ecg_service.COMPONENT_RANGES.keys())
     }
+
+
+@router.post("/ai-classify")
+async def ai_classify_ecg(body: dict):
+    """
+    Run AI-based ECG arrhythmia classification.
+
+    Accepts:
+        { "signal": [...], "sample_rate": 500 }
+
+    Returns:
+        features, per-class scores, suggested gains, AI-separated output signal
+    """
+    try:
+        signal = body.get("signal", [])
+        fs = float(body.get("sample_rate", 500.0))
+        if not signal:
+            raise ValueError("signal must be a non-empty list")
+        result = run_ecg_ai(signal, fs)
+        return {"status": "success", **result}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+

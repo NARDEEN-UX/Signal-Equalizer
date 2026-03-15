@@ -2,21 +2,21 @@
 Schemas for ECG Abnormalities Mode
 """
 
-from typing import List, Optional
+from typing import List, Optional, Tuple
 from pydantic import BaseModel, Field
 
 
 class ECGComponentConfig(BaseModel):
     """Configuration for an ECG signal component"""
     name: str
-    freq_ranges: List[tuple] = Field(description="List of (low, high) frequency ranges")
+    freq_ranges: List[List[float]] = Field(description="List of [low, high] frequency ranges")
     gain: float = Field(ge=0, le=2, default=1.0)
 
 
 class ECGModeRequest(BaseModel):
     """Request for ECG mode processing"""
     signal: List[float]
-    sample_rate: int = 44100
+    sample_rate: int = 500
     gains: List[float] = Field(description="Gains for each ECG component (0-2)")
     component_names: List[str] = Field(description="Names of ECG components")
     sliders_wavelet: Optional[List[float]] = None
@@ -39,4 +39,5 @@ class ECGSettingsSchema(BaseModel):
     components: List[ECGComponentConfig]
     wavelet: str = "db4"
     wavelet_level: int = 6
+    sample_rate: int = 500
     description: Optional[str] = None

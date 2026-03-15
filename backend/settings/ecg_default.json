@@ -4,29 +4,25 @@
     {
       "id": "ecg-0",
       "name": "Normal",
-      "low": 0.05,
-      "high": 100,
+      "freq_ranges": [[0.05, 0.5], [0.5, 5], [5, 40], [40, 100]],
       "gain": 1.0
     },
     {
       "id": "ecg-1",
       "name": "Atrial Fibrillation",
-      "low": 5,
-      "high": 50,
+      "freq_ranges": [[4, 10], [10, 30], [30, 50]],
       "gain": 1.0
     },
     {
       "id": "ecg-2",
       "name": "Ventricular Tachycardia",
-      "low": 3,
-      "high": 40,
+      "freq_ranges": [[1, 8], [8, 25], [25, 40]],
       "gain": 1.0
     },
     {
       "id": "ecg-3",
       "name": "Heart Block",
-      "low": 0.5,
-      "high": 5,
+      "freq_ranges": [[0.1, 0.5], [0.5, 3], [3, 5]],
       "gain": 1.0
     }
   ],
@@ -35,5 +31,5 @@
   "wavelet": "db4",
   "wavelet_level": 6,
   "sample_rate": 500,
-  "description": "Default ECG mode configuration with 4 cardiac components"
+  "description": "ECG mode: 4 cardiac components with multiple frequency windows per arrhythmia"
 }

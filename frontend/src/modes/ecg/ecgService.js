@@ -1,40 +1,47 @@
 /**
  * ECG Mode Backend Service
- * Team member: @ecg-mode-dev
- * 
- * Add your ECG mode specific API endpoints here
- * Example: abnormality detection, rhythm analysis, etc.
+ * Connects to /api/modes/ecg endpoints
  */
 
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 export const ecgModeService = {
   /**
-   * Process ECG signal for abnormality detection
-   * @param {ArrayBuffer} ecgData - The ECG signal data
-   * @param {Array<number>} sliderValues - Slider values [0-1]
-   * @returns {Promise<Object>} - Processed ECG data
+   * Process ECG signal with arrhythmia component equalization
+   * @param {number[]} signal - ECG signal samples
+   * @param {number[]} gains - Gain per component [Normal, AFib, VTach, HeartBlock]
+   * @param {string[]} componentNames - Component names matching backend COMPONENT_RANGES
+   * @param {number} sampleRate - ECG sample rate (default 500)
+   * @returns {Promise<Object>} - { status, output_signal, output_fft, output_spectrogram, processing_time }
    */
-  processAudio: async (ecgData, sliderValues) => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/modes/ecg/process`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ data: ecgData, sliders: sliderValues })
-      });
-      return await response.json();
-    } catch (error) {
-      console.error('ECG mode processing error:', error);
-      throw error;
-    }
+  processSignal: async (signal, gains, componentNames, sampleRate = 500) => {
+    const response = await fetch(`${API_BASE_URL}/api/modes/ecg/process`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        signal,
+        sample_rate: sampleRate,
+        gains,
+        component_names: componentNames,
+        wavelet: 'db4',
+        wavelet_level: 6
+      })
+    });
+    if (!response.ok) throw new Error(`ECG processing failed: ${response.statusText}`);
+    return response.json();
   },
 
-  // Add more ECG mode specific methods here
-  detectAbnormalities: async (ecgData) => {
-    // TODO: Implement abnormality detection endpoint
+  /** Get default ECG settings from backend */
+  getDefaultSettings: async () => {
+    const response = await fetch(`${API_BASE_URL}/api/modes/ecg/settings/default`);
+    if (!response.ok) throw new Error('Failed to load ECG defaults');
+    return response.json();
   },
 
-  analyzeRhythm: async (ecgData) => {
-    // TODO: Implement rhythm analysis endpoint
+  /** Get available ECG component names from backend */
+  getComponents: async () => {
+    const response = await fetch(`${API_BASE_URL}/api/modes/ecg/components`);
+    if (!response.ok) throw new Error('Failed to load ECG components');
+    return response.json();
   }
 };
