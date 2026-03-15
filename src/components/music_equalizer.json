@@ -1,0 +1,44 @@
+{
+  "bands": [
+    {
+      "name": "Bass",
+      "ranges": [
+        {
+          "low": 0,
+          "high": 400
+        }
+      ],
+      "factor": 0
+    },
+    {
+      "name": "Drum",
+      "ranges": [
+        {
+          "low": 400,
+          "high": 1000
+        }
+      ],
+      "factor": 1.4
+    },
+    {
+      "name": "Piano",
+      "ranges": [
+        {
+          "low": 1000,
+          "high": 1600
+        }
+      ],
+      "factor": 1.3
+    },
+    {
+      "name": "Violin",
+      "ranges": [
+        {
+          "low": 1800,
+          "high": 2000
+        }
+      ],
+      "factor": 1.6
+    }
+  ]
+}
