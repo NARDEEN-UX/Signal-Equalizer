@@ -160,16 +160,17 @@ function applyBandGainsToSpectrogram(normSpec, freqs, bands, gains) {
   return normSpec.map((row, fIdx) => {
     const f = freqs[fIdx] || 0;
     let bandGain = 1;
+    let matched = false;
 
     for (let b = 0; b < bands.length; b += 1) {
       const [lo, hi] = bands[b];
       if (f >= lo && f <= hi) {
-        bandGain = toNumberOr(gains[b], 1);
-        break;
+        bandGain *= toNumberOr(gains[b], 1);
+        matched = true;
       }
     }
 
-    const g = clamp(bandGain, 0, 2);
+    const g = clamp(matched ? bandGain : 1, 0, 4);
     return row.map((v) => clamp(v * g, 0, 2));
   });
 }
@@ -349,12 +350,15 @@ export function useMockProcessing({
       : freqSliders);
 
     const clampedGains = gains.map((g) => clamp(toNumberOr(g, 1), 0, 2));
+    const isUnityGains = clampedGains.every((g) => Math.abs(g - 1) < 1e-9);
 
     // "Human": slider controls speakers directly.
     // Other modes: apply a lightweight 4-band decomposition so waveform shape changes,
     // not only overall amplitude (which can look unchanged after auto-scaling).
     const outputSignal =
-      modeId === 'human'
+      isUnityGains
+        ? [...input.mix]
+        : modeId === 'human'
         ? applyVoiceGains(input.voices, clampedGains)
         : buildEqualizedSignal(input.mix, bands, clampedGains, fs);
 
@@ -375,14 +379,15 @@ export function useMockProcessing({
       for (let i = 0; i < fftFreq.length; i += 1) {
         const f = fftFreq[i];
         let g = 1;
+        let matched = false;
         for (let b = 0; b < bands.length; b += 1) {
           const [lo, hi] = bands[b];
           if (f >= lo && f <= hi) {
-            g = toNumberOr(clampedGains[b], 1);
-            break;
+            g *= toNumberOr(clampedGains[b], 1);
+            matched = true;
           }
         }
-        banded.push(normMag[i] * clamp(g, 0, 2));
+        banded.push(normMag[i] * clamp(matched ? g : 1, 0, 4));
       }
       // Keep output on the same baseline as input to preserve absolute gain effect.
       fftOut = banded;

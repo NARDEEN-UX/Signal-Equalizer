@@ -151,9 +151,8 @@ function App() {
   });
   const [waveletType, setWaveletType] = useState('haar');
   const [equalizerTab, setEqualizerTab] = useState('equalizer'); // 'equalizer' | 'ai'
-  // Independent viewer windows (0–1 normalized signal range)
-  const [inputViewWindow, setInputViewWindow] = useState({ start: 0, end: 1 });
-  const [outputViewWindow, setOutputViewWindow] = useState({ start: 0, end: 1 });
+  // Linked viewer window (0-1 normalized signal range) shared by input and output.
+  const [linkedViewWindow, setLinkedViewWindow] = useState({ start: 0, end: 1 });
 
   const audioCtxRef = useRef(null);
   const sourceRef = useRef(null);
@@ -514,21 +513,19 @@ function App() {
     }
   };
 
-  const updateViewWindow = (which, updater) => {
-    const setWindow = which === 'input' ? setInputViewWindow : setOutputViewWindow;
-    setWindow((w) => updater(w));
+  const updateViewWindow = (updater) => {
+    setLinkedViewWindow((w) => updater(w));
   };
 
-  const inputZoom = 1 / Math.max(1e-6, inputViewWindow.end - inputViewWindow.start);
-  const outputZoom = 1 / Math.max(1e-6, outputViewWindow.end - outputViewWindow.start);
+  const linkedZoom = 1 / Math.max(1e-6, linkedViewWindow.end - linkedViewWindow.start);
 
-  // Per-viewer zoom/pan/reset controls
+  // Linked zoom/pan/reset controls for both viewers.
   const zoomFactor = 0.6;
   const panStep = 0.05;
   const minWindowSpan = 0.01;
   const maxWindowSpan = 1;
-  const handleZoomIn = (which) => {
-    updateViewWindow(which, (w) => {
+  const handleZoomIn = () => {
+    updateViewWindow((w) => {
       const currentSpan = w.end - w.start;
       if (currentSpan <= minWindowSpan) return w;
 
@@ -538,8 +535,8 @@ function App() {
       return { start: Math.max(0, mid - half), end: Math.min(1, mid + half) };
     });
   };
-  const handleZoomOut = (which) => {
-    updateViewWindow(which, (w) => {
+  const handleZoomOut = () => {
+    updateViewWindow((w) => {
       const currentSpan = w.end - w.start;
       if (currentSpan >= maxWindowSpan) return { start: 0, end: 1 };
 
@@ -549,26 +546,22 @@ function App() {
       return { start: Math.max(0, mid - half), end: Math.min(1, mid + half) };
     });
   };
-  const handlePanLeft = (which) => {
-    updateViewWindow(which, (w) => {
+  const handlePanLeft = () => {
+    updateViewWindow((w) => {
       const d = w.end - w.start;
       const s = Math.max(0, w.start - panStep);
       return { start: s, end: Math.min(1, s + d) };
     });
   };
-  const handlePanRight = (which) => {
-    updateViewWindow(which, (w) => {
+  const handlePanRight = () => {
+    updateViewWindow((w) => {
       const d = w.end - w.start;
       const e = Math.min(1, w.end + panStep);
       return { start: Math.max(0, e - d), end: e };
     });
   };
-  const handleResetView = (which) => {
-    if (which === 'input') {
-      setInputViewWindow({ start: 0, end: 1 });
-    } else {
-      setOutputViewWindow({ start: 0, end: 1 });
-    }
+  const handleResetView = () => {
+    setLinkedViewWindow({ start: 0, end: 1 });
   };
 
   const handleSavePreset = () => {
@@ -1003,7 +996,7 @@ function App() {
                 data={signalData?.input_signal}
                 time={signalData?.time}
                 playbackTime={playbackTime}
-                viewWindow={inputViewWindow}
+                viewWindow={linkedViewWindow}
                 amplitudeScale={sharedWaveformMax}
                 variant="input"
                 isPlaying={isPlaying}
@@ -1014,11 +1007,11 @@ function App() {
                 onSpeedChange={handleSpeedChange}
                 volume={volume}
                 onVolumeChange={handleVolumeChange}
-                onZoomIn={() => handleZoomIn('input')}
-                onZoomOut={() => handleZoomOut('input')}
-                onPanLeft={() => handlePanLeft('input')}
-                onPanRight={() => handlePanRight('input')}
-                onResetView={() => handleResetView('input')}
+                onZoomIn={handleZoomIn}
+                onZoomOut={handleZoomOut}
+                onPanLeft={handlePanLeft}
+                onPanRight={handlePanRight}
+                onResetView={handleResetView}
               />
             </div>
             <div className="box signal-box">
@@ -1027,7 +1020,7 @@ function App() {
                 data={signalData?.output_signal}
                 time={signalData?.time}
                 playbackTime={playbackTime}
-                viewWindow={outputViewWindow}
+                viewWindow={linkedViewWindow}
                 amplitudeScale={sharedWaveformMax}
                 variant="output"
                 isPlaying={isPlaying}
@@ -1038,11 +1031,11 @@ function App() {
                 onSpeedChange={handleSpeedChange}
                 volume={volume}
                 onVolumeChange={handleVolumeChange}
-                onZoomIn={() => handleZoomIn('output')}
-                onZoomOut={() => handleZoomOut('output')}
-                onPanLeft={() => handlePanLeft('output')}
-                onPanRight={() => handlePanRight('output')}
-                onResetView={() => handleResetView('output')}
+                onZoomIn={handleZoomIn}
+                onZoomOut={handleZoomOut}
+                onPanLeft={handlePanLeft}
+                onPanRight={handlePanRight}
+                onResetView={handleResetView}
               />
             </div>
           </div>
@@ -1056,12 +1049,12 @@ function App() {
               <div className="box chart-box card-with-zoom">
                 <h3 className="box-label">Input FFT</h3>
                 <FFTChart data={signalData?.fft} audiogram={audiogram} variant="input" />
-                <span className="card-zoom">{inputZoom.toFixed(1)}×</span>
+                <span className="card-zoom">{linkedZoom.toFixed(1)}×</span>
               </div>
               <div className="box chart-box card-with-zoom">
                 <h3 className="box-label">Output FFT</h3>
                 <FFTChart data={signalData?.fft} audiogram={audiogram} variant="output" />
-                <span className="card-zoom">{outputZoom.toFixed(1)}×</span>
+                <span className="card-zoom">{linkedZoom.toFixed(1)}×</span>
               </div>
             </div>
           </div>
