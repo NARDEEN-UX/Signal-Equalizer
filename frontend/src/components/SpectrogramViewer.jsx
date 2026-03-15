@@ -13,10 +13,41 @@ function infernoColor(t) {
   return [r, g, b];
 }
 
-const SpectrogramViewer = ({ title, times, freqs, magnitudes, normalizationMax = null }) => {
+function viridisColor(t) {
+  const x = clamp01(t);
+  const r = Math.floor(255 * (0.267 + 0.45 * Math.pow(x, 1.35)));
+  const g = Math.floor(255 * (0.004 + 0.93 * Math.pow(x, 0.9)));
+  const b = Math.floor(255 * (0.329 + 0.58 * (1 - Math.pow(x, 0.75))));
+  return [Math.min(255, r), Math.min(255, g), Math.min(255, b)];
+}
+
+function turboColor(t) {
+  const x = clamp01(t);
+  const r = Math.floor(255 * clamp01(1.5 * x));
+  const g = Math.floor(255 * clamp01(1.8 * x * (1 - 0.45 * Math.abs(2 * x - 1))));
+  const b = Math.floor(255 * clamp01(1.35 * (1 - x) * (1 - 0.2 * x)));
+  return [r, g, b];
+}
+
+function grayscaleColor(t) {
+  const x = clamp01(t);
+  const gray = Math.floor(20 + 225 * x);
+  return [gray, gray, gray];
+}
+
+function mapColor(scale, t) {
+  if (scale === 'viridis') return viridisColor(t);
+  if (scale === 'turbo') return turboColor(t);
+  if (scale === 'grayscale') return grayscaleColor(t);
+  return infernoColor(t);
+}
+
+const SpectrogramViewer = ({ title, times, freqs, magnitudes, normalizationMax = null, colorScale = 'inferno' }) => {
   const canvasRef = useRef(null);
   const containerRef = useRef(null);
   const [canvasWidth, setCanvasWidth] = React.useState(800);
+  const [viewWindow, setViewWindow] = React.useState({ t0: 0, t1: 1, f0: 0, f1: 1 });
+  const [dragRect, setDragRect] = React.useState(null);
 
   useEffect(() => {
     // Measure container and set canvas width
@@ -40,6 +71,83 @@ const SpectrogramViewer = ({ title, times, freqs, magnitudes, normalizationMax =
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
+
+  useEffect(() => {
+    setViewWindow({ t0: 0, t1: 1, f0: 0, f1: 1 });
+  }, [times, freqs, magnitudes]);
+
+  const handleMouseDown = (e) => {
+    if (!containerRef.current) return;
+    const rect = containerRef.current.getBoundingClientRect();
+    const x = Math.max(0, Math.min(rect.width, e.clientX - rect.left));
+    const y = Math.max(0, Math.min(rect.height, e.clientY - rect.top));
+    setDragRect({ x0: x, y0: y, x1: x, y1: y, active: true });
+  };
+
+  const handleMouseMove = (e) => {
+    if (!dragRect?.active || !containerRef.current) return;
+    const rect = containerRef.current.getBoundingClientRect();
+    const x = Math.max(0, Math.min(rect.width, e.clientX - rect.left));
+    const y = Math.max(0, Math.min(rect.height, e.clientY - rect.top));
+    setDragRect((d) => (d ? { ...d, x1: x, y1: y } : d));
+  };
+
+  const finishSelectionZoom = () => {
+    if (!dragRect?.active || !containerRef.current) {
+      setDragRect(null);
+      return;
+    }
+
+    const rect = containerRef.current.getBoundingClientRect();
+    const x0 = Math.min(dragRect.x0, dragRect.x1);
+    const x1 = Math.max(dragRect.x0, dragRect.x1);
+    const y0 = Math.min(dragRect.y0, dragRect.y1);
+    const y1 = Math.max(dragRect.y0, dragRect.y1);
+    setDragRect(null);
+
+    if (x1 - x0 < 6 || y1 - y0 < 6) return;
+
+    const xr0 = x0 / Math.max(1, rect.width);
+    const xr1 = x1 / Math.max(1, rect.width);
+    const yr0 = y0 / Math.max(1, rect.height);
+    const yr1 = y1 / Math.max(1, rect.height);
+
+    setViewWindow((w) => {
+      const tSpan = w.t1 - w.t0;
+      const fSpan = w.f1 - w.f0;
+
+      const t0n = w.t0 + xr0 * tSpan;
+      const t1n = w.t0 + xr1 * tSpan;
+
+      // y is top->bottom while frequency is high->low in view, so invert y mapping.
+      const fTop = w.f0 + (1 - yr0) * fSpan;
+      const fBottom = w.f0 + (1 - yr1) * fSpan;
+      let nf0 = Math.min(fTop, fBottom);
+      let nf1 = Math.max(fTop, fBottom);
+
+      let nt0 = Math.max(0, Math.min(1, t0n));
+      let nt1 = Math.max(0, Math.min(1, t1n));
+      if (nt1 - nt0 < 0.02) {
+        const c = (nt0 + nt1) / 2;
+        nt0 = Math.max(0, c - 0.01);
+        nt1 = Math.min(1, c + 0.01);
+      }
+
+      nf0 = Math.max(0, Math.min(1, nf0));
+      nf1 = Math.max(0, Math.min(1, nf1));
+      if (nf1 - nf0 < 0.02) {
+        const c = (nf0 + nf1) / 2;
+        nf0 = Math.max(0, c - 0.01);
+        nf1 = Math.min(1, c + 0.01);
+      }
+
+      return { t0: nt0, t1: nt1, f0: nf0, f1: nf1 };
+    });
+  };
+
+  const handleResetZoom = () => {
+    setViewWindow({ t0: 0, t1: 1, f0: 0, f1: 1 });
+  };
 
   useEffect(() => {
     if (!times || !freqs || !magnitudes) return;
@@ -98,8 +206,13 @@ const SpectrogramViewer = ({ title, times, freqs, magnitudes, normalizationMax =
     const dbSpan = maxDb - minDb;
     const linearRef = Number(normalizationMax) > 0 ? Number(normalizationMax) : Math.max(maxVal, 1e-8);
 
-    const maxFreq = Math.max(Number(freqs[freqs.length - 1]) || 0, 1);
-    const useLogFreq = maxFreq > 1000;
+    const fStartIdx = Math.floor(viewWindow.f0 * Math.max(0, freqs.length - 1));
+    const fEndIdx = Math.floor(viewWindow.f1 * Math.max(0, freqs.length - 1));
+    const lowSel = Number(freqs[Math.max(0, Math.min(freqs.length - 1, fStartIdx))]) || 0;
+    const highSel = Number(freqs[Math.max(0, Math.min(freqs.length - 1, fEndIdx))]) || 1;
+    const minFreqSel = Math.max(1, Math.min(lowSel, highSel));
+    const maxFreqSel = Math.max(minFreqSel + 1, Math.max(lowSel, highSel));
+    const useLogFreq = maxFreqSel > 1000;
 
     const yToFIdx = new Array(height);
     for (let y = 0; y < height; y += 1) {
@@ -107,13 +220,13 @@ const SpectrogramViewer = ({ title, times, freqs, magnitudes, normalizationMax =
       let targetFreq;
 
       if (useLogFreq) {
-        const minFreq = 20;
-        const maxF = Math.max(maxFreq, minFreq + 1);
+        const minFreq = Math.max(1, minFreqSel);
+        const maxF = Math.max(maxFreqSel, minFreq + 1);
         const logMin = Math.log10(minFreq);
         const logMax = Math.log10(maxF);
         targetFreq = Math.pow(10, logMin + (1 - yNorm) * (logMax - logMin));
       } else {
-        targetFreq = (1 - yNorm) * maxFreq;
+        targetFreq = minFreqSel + (1 - yNorm) * (maxFreqSel - minFreqSel);
       }
 
       let idx = 0;
@@ -126,7 +239,8 @@ const SpectrogramViewer = ({ title, times, freqs, magnitudes, normalizationMax =
     const imageData = ctx.createImageData(width, height);
 
     for (let x = 0; x < width; x += 1) {
-      const tIdx = Math.min(times.length - 1, Math.floor((x / Math.max(1, width - 1)) * (times.length - 1)));
+      const tNorm = viewWindow.t0 + (x / Math.max(1, width - 1)) * (viewWindow.t1 - viewWindow.t0);
+      const tIdx = Math.min(times.length - 1, Math.floor(tNorm * (times.length - 1)));
       for (let y = 0; y < height; y += 1) {
         const fIdx = yToFIdx[y];
         const raw = getMag(fIdx, tIdx);
@@ -135,7 +249,7 @@ const SpectrogramViewer = ({ title, times, freqs, magnitudes, normalizationMax =
           : 20 * Math.log10(Math.max(raw, 1e-12) / linearRef);
         const norm = Math.min(1, Math.max(0, (db - minDb) / dbSpan));
 
-        const [r, g, b] = infernoColor(Math.pow(norm, 0.9));
+        const [r, g, b] = mapColor(colorScale, Math.pow(norm, 0.9));
         const idx = (y * width + x) * 4;
         imageData.data[idx] = r;
         imageData.data[idx + 1] = g;
@@ -144,18 +258,41 @@ const SpectrogramViewer = ({ title, times, freqs, magnitudes, normalizationMax =
       }
     }
     ctx.putImageData(imageData, 0, 0);
-  }, [times, freqs, magnitudes, normalizationMax, canvasWidth]);
+  }, [times, freqs, magnitudes, normalizationMax, colorScale, canvasWidth, viewWindow]);
 
   return (
     <div>
       {title && <h4>{title}</h4>}
-      <div ref={containerRef} style={{ width: '100%' }}>
+      <div
+        ref={containerRef}
+        style={{ width: '100%', position: 'relative' }}
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={finishSelectionZoom}
+        onMouseLeave={finishSelectionZoom}
+        onDoubleClick={handleResetZoom}
+        title="Drag to select spectrogram zoom region. Double-click: reset."
+      >
         <canvas 
           ref={canvasRef} 
           width={canvasWidth} 
           height={280}
           style={{ width: '100%', height: '280px', display: 'block' }}
         />
+        {dragRect?.active && (
+          <div
+            style={{
+              position: 'absolute',
+              left: `${Math.min(dragRect.x0, dragRect.x1)}px`,
+              top: `${Math.min(dragRect.y0, dragRect.y1)}px`,
+              width: `${Math.max(1, Math.abs(dragRect.x1 - dragRect.x0))}px`,
+              height: `${Math.max(1, Math.abs(dragRect.y1 - dragRect.y0))}px`,
+              border: '1px solid rgba(255,255,255,0.75)',
+              background: 'rgba(255,255,255,0.15)',
+              pointerEvents: 'none'
+            }}
+          />
+        )}
       </div>
     </div>
   );

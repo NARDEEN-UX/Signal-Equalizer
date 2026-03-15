@@ -47,7 +47,7 @@ async def process_animals(request: AnimalsModeRequest):
             raise ValueError("Number of gains must match number of animal sounds")
         
         # Process signal
-        result = animals_service.process_signal(signal, request.gains, request.animal_names)
+        result = animals_service.process_signal(signal, request.gains, request.animal_names, sample_rate=request.sample_rate)
         
         return {
             "status": "success",

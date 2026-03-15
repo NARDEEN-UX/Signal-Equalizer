@@ -102,6 +102,8 @@ function App() {
   const [waveletSliders, setWaveletSliders] = useState([1, 1, 1, 1]);
   const [audiogram, setAudiogram] = useState(false);
   const [showSpec, setShowSpec] = useState(false);
+  const [inputSpecColorScale, setInputSpecColorScale] = useState('inferno');
+  const [outputSpecColorScale, setOutputSpecColorScale] = useState('viridis');
   const [isPlaying, setIsPlaying] = useState(false);
   const [playbackTime, setPlaybackTime] = useState(0);
   const [playbackRate, setPlaybackRate] = useState(1);
@@ -207,6 +209,7 @@ function App() {
     freqSliders,
     waveletSliders,
     genericBands: activeModeId === 'generic' ? genericBands : modeFreqBands,
+    sampleRate: uploadedSampleRate,
     signalData: uploadedSignal || null,
     useFallback: true
   });
@@ -1069,30 +1072,48 @@ function App() {
             {showSpec && signalData && (
               <div className="row two-boxes">
                 <div className="box chart-box">
-                  <h3 className="box-label">Input spectrogram</h3>
-                  <SpectrogramViewer title="" times={signalData.spectrogram.t} freqs={signalData.spectrogram.f} magnitudes={signalData.spectrogram.in} normalizationMax={sharedSpectrogramMax} />
+                  <div className="section-head" style={{ marginBottom: '0.4rem' }}>
+                    <h3 className="box-label">Input spectrogram</h3>
+                    <select className="select" value={inputSpecColorScale} onChange={(e) => setInputSpecColorScale(e.target.value)} style={{ width: 'auto', minWidth: '130px' }}>
+                      <option value="inferno">Inferno</option>
+                      <option value="viridis">Viridis</option>
+                      <option value="turbo">Turbo</option>
+                      <option value="grayscale">Grayscale</option>
+                    </select>
+                  </div>
+                  <SpectrogramViewer title="" times={signalData.spectrogram.t} freqs={signalData.spectrogram.f} magnitudes={signalData.spectrogram.in} normalizationMax={sharedSpectrogramMax} colorScale={inputSpecColorScale} />
                 </div>
                 <div className="box chart-box">
-                  <h3 className="box-label">Output spectrogram</h3>
-                  <SpectrogramViewer title="" times={signalData.spectrogram.t} freqs={signalData.spectrogram.f} magnitudes={signalData.spectrogram.out} normalizationMax={sharedSpectrogramMax} />
+                  <div className="section-head" style={{ marginBottom: '0.4rem' }}>
+                    <h3 className="box-label">Output spectrogram</h3>
+                    <select className="select" value={outputSpecColorScale} onChange={(e) => setOutputSpecColorScale(e.target.value)} style={{ width: 'auto', minWidth: '130px' }}>
+                      <option value="inferno">Inferno</option>
+                      <option value="viridis">Viridis</option>
+                      <option value="turbo">Turbo</option>
+                      <option value="grayscale">Grayscale</option>
+                    </select>
+                  </div>
+                  <SpectrogramViewer title="" times={signalData.spectrogram.t} freqs={signalData.spectrogram.f} magnitudes={signalData.spectrogram.out} normalizationMax={sharedSpectrogramMax} colorScale={outputSpecColorScale} />
                 </div>
               </div>
             )}
           </div>
 
-          <div className="row section-row">
-            <h2 className="section-title">Wavelet Domain Energy</h2>
-            <div className="row two-boxes">
-              <div className="box chart-box">
-                <h3 className="box-label">Input</h3>
-                <WaveletChart data={signalData?.wavelet} variant="input" />
-              </div>
-              <div className="box chart-box">
-                <h3 className="box-label">Output</h3>
-                <WaveletChart data={signalData?.wavelet} variant="output" />
+          {activeModeId !== 'generic' && (
+            <div className="row section-row">
+              <h2 className="section-title">Wavelet Domain Energy</h2>
+              <div className="row two-boxes">
+                <div className="box chart-box">
+                  <h3 className="box-label">Input</h3>
+                  <WaveletChart data={signalData?.wavelet} variant="input" />
+                </div>
+                <div className="box chart-box">
+                  <h3 className="box-label">Output</h3>
+                  <WaveletChart data={signalData?.wavelet} variant="output" />
+                </div>
               </div>
             </div>
-          </div>
+          )}
         </main>
       </div>
     </div>

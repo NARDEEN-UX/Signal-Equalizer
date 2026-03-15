@@ -47,7 +47,7 @@ async def process_music(request: MusicModeRequest):
             raise ValueError("Number of gains must match number of instruments")
         
         # Process signal
-        result = music_service.process_signal(signal, request.gains, request.instrument_names)
+        result = music_service.process_signal(signal, request.gains, request.instrument_names, sample_rate=request.sample_rate)
         
         return {
             "status": "success",

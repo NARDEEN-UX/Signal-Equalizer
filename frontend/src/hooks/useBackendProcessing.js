@@ -89,6 +89,7 @@ export function useBackendProcessing({
   freqSliders,
   waveletSliders,
   genericBands,
+  sampleRate = 44100,
   signalData,
   useFallback = true
 }) {
@@ -115,35 +116,39 @@ export function useBackendProcessing({
           result = await processGenericMode(
             Array.isArray(signal) ? signal : Object.values(signal),
             bands,
-            bands.map(b => (b.gain ?? 1))
+            sampleRate
           );
         } else if (modeId === 'music') {
           const names = ['Bass', 'Piano', 'Vocals', 'Violin'];
           result = await processMusicMode(
             Array.isArray(signal) ? signal : Object.values(signal),
             freqSliders,
-            names
+            names,
+            sampleRate
           );
         } else if (modeId === 'animal') {
           const names = ['Cat', 'Dog', 'Bird', 'Elephant'];
           result = await processAnimalsMode(
             Array.isArray(signal) ? signal : Object.values(signal),
             freqSliders,
-            names
+            names,
+            sampleRate
           );
         } else if (modeId === 'human') {
           const names = ['Young', 'Old', 'Male', 'Female'];
           result = await processHumansMode(
             Array.isArray(signal) ? signal : Object.values(signal),
             freqSliders,
-            names
+            names,
+            sampleRate
           );
         } else if (modeId === 'ecg') {
           const names = ['Normal', 'Atrial Fibrillation', 'Ventricular Tachycardia', 'Heart Block'];
           result = await processECGMode(
             Array.isArray(signal) ? signal : Object.values(signal),
             freqSliders,
-            names
+            names,
+            sampleRate
           );
         }
 
@@ -153,7 +158,7 @@ export function useBackendProcessing({
           const outSpec = respData.output_spectrogram;
           const inputSignal = signalData.mix || signal;
           const outputSignal = respData.output_signal;
-          const sampleRate = Number(signalData.sample_rate) || 44100;
+          const effectiveSampleRate = Number(sampleRate) || 44100;
 
           const waveletInRaw = computeLevelRms(inputSignal, 6);
           const waveletOutRaw = computeLevelRms(outputSignal, 6);
@@ -172,7 +177,7 @@ export function useBackendProcessing({
             const outFreq = respData.output_fft.frequencies;
             const outMag = respData.output_fft.magnitudes.map((v) => Number(v) || 0);
 
-            const inFft = computeRealFft(inputSignal, sampleRate, 2048);
+            const inFft = computeRealFft(inputSignal, effectiveSampleRate, 2048);
             const inMagAligned = outFreq.map((f) => interpolateLinear(inFft.freq, inFft.mag, Number(f) || 0));
 
             const maxIn = Math.max(...inMagAligned, 1e-8);
@@ -216,7 +221,7 @@ export function useBackendProcessing({
     // Add a small delay to avoid too many requests
     const timeout = setTimeout(processSignal, 100);
     return () => clearTimeout(timeout);
-  }, [modeId, freqSliders, waveletSliders, genericBands, signalData]);
+  }, [modeId, freqSliders, waveletSliders, genericBands, sampleRate, signalData]);
 
   return { data, loading, error };
 }

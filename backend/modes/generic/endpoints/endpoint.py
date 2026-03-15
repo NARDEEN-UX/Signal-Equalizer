@@ -54,7 +54,7 @@ async def process_generic(request: GenericModeRequest):
         gains = [b.gain for b in request.bands]
         
         # Process signal
-        result = generic_service.process_signal(signal, bands, gains)
+        result = generic_service.process_signal(signal, bands, gains, sample_rate=request.sample_rate)
         
         return {
             "status": "success",

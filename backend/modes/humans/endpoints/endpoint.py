@@ -47,7 +47,7 @@ async def process_humans(request: HumansModeRequest):
             raise ValueError("Number of gains must match number of voices")
         
         # Process signal
-        result = humans_service.process_signal(signal, request.gains, request.voice_names)
+        result = humans_service.process_signal(signal, request.gains, request.voice_names, sample_rate=request.sample_rate)
         
         return {
             "status": "success",

@@ -13,13 +13,14 @@ class GenericModeService:
     """Service for generic mode signal processing"""
     
     def __init__(self):
-        self.sample_rate = 44100
+        self.default_sample_rate = 44100
     
     def process_signal(
         self, 
         signal: np.ndarray, 
         bands: List[dict],
         gains: List[float],
+        sample_rate: Optional[float] = None,
         wavelet_gains: Optional[List[float]] = None
     ) -> dict:
         """
@@ -35,16 +36,17 @@ class GenericModeService:
             Dictionary with processed signal and analysis
         """
         start_time = time.time()
+        sr = float(sample_rate) if sample_rate and sample_rate > 0 else float(self.default_sample_rate)
 
         # Compute input analysis for accurate A/B visualization.
-        input_spectrogram = self._compute_spectrogram_data(signal)
+        input_spectrogram = self._compute_spectrogram_data(signal, sr)
         
         # Apply FFT-based equalization
-        equalized_signal = self._apply_fft_equalization(signal, bands, gains)
+        equalized_signal = self._apply_fft_equalization(signal, bands, gains, sr)
         
         # Compute output analysis
-        output_fft = self._compute_fft_data(equalized_signal)
-        output_spectrogram = self._compute_spectrogram_data(equalized_signal)
+        output_fft = self._compute_fft_data(equalized_signal, sr)
+        output_spectrogram = self._compute_spectrogram_data(equalized_signal, sr)
         
         processing_time = time.time() - start_time
         
@@ -60,12 +62,13 @@ class GenericModeService:
         self, 
         signal: np.ndarray, 
         bands: List[dict],
-        gains: List[float]
+        gains: List[float],
+        sample_rate: float
     ) -> np.ndarray:
         """Apply FFT-based equalization to signal"""
         # Compute FFT
         fft_data = fft(signal)
-        freqs = fftfreq(len(signal), 1.0 / self.sample_rate)
+        freqs = fftfreq(len(signal), 1.0 / sample_rate)
         
         # Apply gain to each frequency band
         for band, gain in zip(bands, gains):
@@ -77,10 +80,10 @@ class GenericModeService:
         equalized = np.real(np.fft.ifft(fft_data))
         return equalized
     
-    def _compute_fft_data(self, signal: np.ndarray) -> dict:
+    def _compute_fft_data(self, signal: np.ndarray, sample_rate: float) -> dict:
         """Compute FFT for output signal"""
         fft_vals = fft(signal)
-        freqs = fftfreq(len(signal), 1.0 / self.sample_rate)
+        freqs = fftfreq(len(signal), 1.0 / sample_rate)
         magnitudes = np.abs(fft_vals)
         
         # Return only positive frequencies (sample every Nth point for performance)
@@ -96,12 +99,12 @@ class GenericModeService:
             "magnitudes": pos_mags[::step].tolist()
         }
     
-    def _compute_spectrogram_data(self, signal: np.ndarray) -> dict:
+    def _compute_spectrogram_data(self, signal: np.ndarray, sample_rate: float) -> dict:
         """Compute spectrogram for output signal"""
         from scipy.signal import spectrogram
         f, t, Sxx = spectrogram(
             signal,
-            self.sample_rate,
+            sample_rate,
             window='hann',
             nperseg=1024,
             noverlap=768,

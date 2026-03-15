@@ -40,7 +40,7 @@ export const loadSettings = (filename) => {
 };
 
 // Mode-specific API calls
-export const processGenericMode = (signal, bands, gains) => {
+export const processGenericMode = (signal, bands, sampleRate = 44100) => {
   return API.post('/api/modes/generic/process', {
     signal,
     bands: bands.map(b => ({
@@ -50,43 +50,43 @@ export const processGenericMode = (signal, bands, gains) => {
       high: b.high,
       gain: b.gain
     })),
-    sample_rate: 44100
+    sample_rate: sampleRate
   });
 };
 
-export const processMusicMode = (signal, gains, instrumentNames) => {
+export const processMusicMode = (signal, gains, instrumentNames, sampleRate = 44100) => {
   return API.post('/api/modes/music/process', {
     signal,
     gains,
     instrument_names: instrumentNames,
-    sample_rate: 44100
+    sample_rate: sampleRate
   });
 };
 
-export const processAnimalsMode = (signal, gains, animalNames) => {
+export const processAnimalsMode = (signal, gains, animalNames, sampleRate = 44100) => {
   return API.post('/api/modes/animals/process', {
     signal,
     gains,
     animal_names: animalNames,
-    sample_rate: 44100
+    sample_rate: sampleRate
   });
 };
 
-export const processHumansMode = (signal, gains, voiceNames) => {
+export const processHumansMode = (signal, gains, voiceNames, sampleRate = 44100) => {
   return API.post('/api/modes/humans/process', {
     signal,
     gains,
     voice_names: voiceNames,
-    sample_rate: 44100
+    sample_rate: sampleRate
   });
 };
 
-export const processECGMode = (signal, gains, componentNames) => {
+export const processECGMode = (signal, gains, componentNames, sampleRate = 500) => {
   return API.post('/api/modes/ecg/process', {
     signal,
     gains,
     component_names: componentNames,
-    sample_rate: 500
+    sample_rate: sampleRate
   });
 };
 

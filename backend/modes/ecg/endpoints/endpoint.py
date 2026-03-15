@@ -47,7 +47,7 @@ async def process_ecg(request: ECGModeRequest):
             raise ValueError("Number of gains must match number of components")
         
         # Process signal
-        result = ecg_service.process_signal(signal, request.gains, request.component_names)
+        result = ecg_service.process_signal(signal, request.gains, request.component_names, sample_rate=request.sample_rate)
         
         return {
             "status": "success",

@@ -25,13 +25,14 @@ class MusicModeService:
     }
     
     def __init__(self):
-        self.sample_rate = 44100
+        self.default_sample_rate = 44100
     
     def process_signal(
         self,
         signal: np.ndarray,
         gains: List[float],
-        instrument_names: List[str]
+        instrument_names: List[str],
+        sample_rate: float = None
     ) -> dict:
         """
         Process signal with instrument-based equalization
@@ -45,19 +46,20 @@ class MusicModeService:
             Dictionary with processed signal and analysis
         """
         start_time = time.time()
+        sr = float(sample_rate) if sample_rate and sample_rate > 0 else float(self.default_sample_rate)
         
         # Build frequency ranges from instrument names
         freq_ranges = self._get_frequency_ranges(instrument_names)
 
         # Compute input analysis for accurate A/B visualization.
-        input_spectrogram = self._compute_spectrogram_data(signal)
+        input_spectrogram = self._compute_spectrogram_data(signal, sr)
         
         # Apply equalization
-        equalized_signal = self._apply_instrument_equalization(signal, freq_ranges, gains)
+        equalized_signal = self._apply_instrument_equalization(signal, freq_ranges, gains, sr)
         
         # Compute analysis
-        output_fft = self._compute_fft_data(equalized_signal)
-        output_spectrogram = self._compute_spectrogram_data(equalized_signal)
+        output_fft = self._compute_fft_data(equalized_signal, sr)
+        output_spectrogram = self._compute_spectrogram_data(equalized_signal, sr)
         
         processing_time = time.time() - start_time
         
@@ -88,11 +90,12 @@ class MusicModeService:
         self,
         signal: np.ndarray,
         freq_ranges: List[Tuple[float, float]],
-        gains: List[float]
+        gains: List[float],
+        sample_rate: float
     ) -> np.ndarray:
         """Apply equalization based on instrument frequency ranges"""
         fft_data = fft(signal)
-        freqs = fftfreq(len(signal), 1.0 / self.sample_rate)
+        freqs = fftfreq(len(signal), 1.0 / sample_rate)
         
         for freq_range, gain in zip(freq_ranges, gains):
             low, high = freq_range
@@ -102,10 +105,10 @@ class MusicModeService:
         equalized = np.real(np.fft.ifft(fft_data))
         return equalized
     
-    def _compute_fft_data(self, signal: np.ndarray) -> dict:
+    def _compute_fft_data(self, signal: np.ndarray, sample_rate: float) -> dict:
         """Compute FFT for output signal"""
         fft_vals = fft(signal)
-        freqs = fftfreq(len(signal), 1.0 / self.sample_rate)
+        freqs = fftfreq(len(signal), 1.0 / sample_rate)
         magnitudes = np.abs(fft_vals)
         
         positive_idx = freqs > 0
@@ -119,12 +122,12 @@ class MusicModeService:
             "magnitudes": pos_mags[::step].tolist()
         }
     
-    def _compute_spectrogram_data(self, signal: np.ndarray) -> dict:
+    def _compute_spectrogram_data(self, signal: np.ndarray, sample_rate: float) -> dict:
         """Compute spectrogram for output signal"""
         from scipy.signal import spectrogram
         f, t, Sxx = spectrogram(
             signal,
-            self.sample_rate,
+            sample_rate,
             window='hann',
             nperseg=1024,
             noverlap=768,

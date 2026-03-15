@@ -26,13 +26,14 @@ class ECGModeService:
     }
     
     def __init__(self):
-        self.sample_rate = 500  # Typical ECG sampling rate is 500 Hz
+        self.default_sample_rate = 500  # Typical ECG sampling rate is 500 Hz
     
     def process_signal(
         self,
         signal: np.ndarray,
         gains: List[float],
-        component_names: List[str]
+        component_names: List[str],
+        sample_rate: float = None
     ) -> dict:
         """
         Process ECG signal with arrhythmia component equalization
@@ -46,19 +47,20 @@ class ECGModeService:
             Dictionary with processed signal and analysis
         """
         start_time = time.time()
+        sr = float(sample_rate) if sample_rate and sample_rate > 0 else float(self.default_sample_rate)
         
         # Build frequency ranges from component names
         freq_ranges = self._get_frequency_ranges(component_names)
 
         # Compute input analysis for accurate A/B visualization.
-        input_spectrogram = self._compute_spectrogram_data(signal)
+        input_spectrogram = self._compute_spectrogram_data(signal, sr)
         
         # Apply equalization
-        equalized_signal = self._apply_ecg_equalization(signal, freq_ranges, gains)
+        equalized_signal = self._apply_ecg_equalization(signal, freq_ranges, gains, sr)
         
         # Compute analysis
-        output_fft = self._compute_fft_data(equalized_signal)
-        output_spectrogram = self._compute_spectrogram_data(equalized_signal)
+        output_fft = self._compute_fft_data(equalized_signal, sr)
+        output_spectrogram = self._compute_spectrogram_data(equalized_signal, sr)
         
         processing_time = time.time() - start_time
         
@@ -87,11 +89,12 @@ class ECGModeService:
         self,
         signal: np.ndarray,
         freq_ranges: List[Tuple[float, float]],
-        gains: List[float]
+        gains: List[float],
+        sample_rate: float
     ) -> np.ndarray:
         """Apply equalization based on ECG component frequency ranges"""
         fft_data = fft(signal)
-        freqs = fftfreq(len(signal), 1.0 / self.sample_rate)
+        freqs = fftfreq(len(signal), 1.0 / sample_rate)
         
         for freq_range, gain in zip(freq_ranges, gains):
             low, high = freq_range
@@ -101,10 +104,10 @@ class ECGModeService:
         equalized = np.real(np.fft.ifft(fft_data))
         return equalized
     
-    def _compute_fft_data(self, signal: np.ndarray) -> dict:
+    def _compute_fft_data(self, signal: np.ndarray, sample_rate: float) -> dict:
         """Compute FFT for output signal"""
         fft_vals = fft(signal)
-        freqs = fftfreq(len(signal), 1.0 / self.sample_rate)
+        freqs = fftfreq(len(signal), 1.0 / sample_rate)
         magnitudes = np.abs(fft_vals)
         
         positive_idx = freqs > 0
@@ -118,13 +121,13 @@ class ECGModeService:
             "magnitudes": pos_mags[::step].tolist()
         }
     
-    def _compute_spectrogram_data(self, signal: np.ndarray) -> dict:
+    def _compute_spectrogram_data(self, signal: np.ndarray, sample_rate: float) -> dict:
         """Compute spectrogram for output signal"""
         from scipy.signal import spectrogram
         # ECG favors shorter windows while still using standard relative dB conversion.
         f, t, Sxx = spectrogram(
             signal,
-            self.sample_rate,
+            sample_rate,
             window='hann',
             nperseg=256,
             noverlap=192,
