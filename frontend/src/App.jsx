@@ -94,7 +94,6 @@ function App() {
   const [view, setView] = useState('landing'); // 'landing' | 'workspace'
   const [homeMode, setHomeMode] = useState('Home');
   const [activeModeId, setActiveModeId] = useState('generic');
-  const [audioFile, setAudioFile] = useState(null);
   const [freqSliders, setFreqSliders] = useState([1, 1, 1, 1]);
   const [waveletSliders, setWaveletSliders] = useState([1, 1, 1, 1]);
   const [audiogram, setAudiogram] = useState(false);
@@ -105,8 +104,15 @@ function App() {
   const [volume, setVolume] = useState(1);
   const [modeModalOpen, setModeModalOpen] = useState(false);
   const [signalUploaderOpen, setSignalUploaderOpen] = useState(false);
-  const [uploadedSignal, setUploadedSignal] = useState(null); // Store uploaded signal data
-  const [uploadedSampleRate, setUploadedSampleRate] = useState(44100);
+  // Store uploaded signals per mode to isolate uploads
+  const [modeUploadedSignals, setModeUploadedSignals] = useState({});
+  const [modeUploadedSampleRates, setModeUploadedSampleRates] = useState({});
+  const [modeAudioFiles, setModeAudioFiles] = useState({});
+  
+  // Get uploaded signal for current mode
+  const uploadedSignal = modeUploadedSignals[activeModeId] || null;
+  const uploadedSampleRate = modeUploadedSampleRates[activeModeId] || 44100;
+  const audioFile = modeAudioFiles[activeModeId] || null;
   const [genericBands, setGenericBands] = useState([
     { id: 'b1', name: 'Band 1', low: 80, high: 180, gain: 1 },
     { id: 'b2', name: 'Band 2', low: 180, high: 300, gain: 1 },
@@ -474,20 +480,37 @@ function App() {
   };
 
   const handleModeSignalLoad = (signal, sampleRate, filename) => {
-    // Store the actual uploaded signal data for processing
-    setUploadedSignal(signal);
-    setUploadedSampleRate(sampleRate);
-    // Also update the audioFile name for display
-    setAudioFile({
-      name: filename,
-      size: signal.length * 4,
-      type: 'audio/wav'
-    });
+    // Store the actual uploaded signal data for current mode
+    setModeUploadedSignals(prev => ({
+      ...prev,
+      [activeModeId]: signal
+    }));
+    setModeUploadedSampleRates(prev => ({
+      ...prev,
+      [activeModeId]: sampleRate
+    }));
+    // Also update the audioFile name for display (per mode)
+    setModeAudioFiles(prev => ({
+      ...prev,
+      [activeModeId]: {
+        name: filename,
+        size: signal.length * 4,
+        type: 'audio/wav'
+      }
+    }));
   };
 
   const handleExport = () => {
     // Frontend-only UI for now
     window.alert('Export سيتم ربطها لاحقًا بالباك إند (تحميل WAV).');
+  };
+
+  const handleAudioFileSelect = (file) => {
+    // Update audio file for current mode only
+    setModeAudioFiles(prev => ({
+      ...prev,
+      [activeModeId]: file
+    }));
   };
 
   const goToMode = (id) => {
@@ -562,7 +585,7 @@ function App() {
           >
             <span className="btn-icon">📁</span> Mode Signals
           </button>
-          <AudioUploader onFileSelect={setAudioFile} onSettingsSelect={handleSettingsSelect} currentFileName={audioFile?.name} />
+          <AudioUploader onFileSelect={handleAudioFileSelect} onSettingsSelect={handleSettingsSelect} currentFileName={audioFile?.name} />
           <button type="button" className="btn btn-export" onClick={handleExport}>
             <span className="btn-icon">↓</span> Export
           </button>
