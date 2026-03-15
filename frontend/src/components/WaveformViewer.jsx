@@ -76,20 +76,36 @@ const WaveformViewer = ({
       const v = Math.abs(drawData[i]);
       if (v > maxVal) maxVal = v;
     }
-    const step = Math.floor(drawData.length / width) || 1;
     const scale = (maxVal || 1) * 1.1;
     const half = height / 2;
 
-    ctx.beginPath();
     ctx.strokeStyle = strokeColor;
-    ctx.lineWidth = 1.5;
-    for (let i = 0; i < width; i++) {
-      const idx = Math.min(i * step, drawData.length - 1);
-      const y = half - (drawData[idx] / scale) * (half - 4);
-      if (i === 0) ctx.moveTo(i, y);
-      else ctx.lineTo(i, y);
+    ctx.lineWidth = 1;
+
+    // Draw a min/max envelope per horizontal pixel. This avoids aliasing and
+    // makes zoom changes clearly visible on dense signals.
+    for (let x = 0; x < width; x += 1) {
+      const start = Math.floor((x / width) * drawData.length);
+      const end = Math.min(drawData.length, Math.max(start + 1, Math.floor(((x + 1) / width) * drawData.length)));
+
+      let minV = Infinity;
+      let maxV = -Infinity;
+      for (let i = start; i < end; i += 1) {
+        const v = drawData[i];
+        if (v < minV) minV = v;
+        if (v > maxV) maxV = v;
+      }
+
+      if (!Number.isFinite(minV) || !Number.isFinite(maxV)) continue;
+
+      const yTop = half - (maxV / scale) * (half - 4);
+      const yBottom = half - (minV / scale) * (half - 4);
+
+      ctx.beginPath();
+      ctx.moveTo(x, yTop);
+      ctx.lineTo(x, yBottom);
+      ctx.stroke();
     }
-    ctx.stroke();
 
     if (playbackTime >= t0 && playbackTime <= t1 && timeSpan > 0) {
       const cursorX = ((playbackTime - t0) / timeSpan) * width;

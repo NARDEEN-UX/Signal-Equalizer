@@ -1,6 +1,6 @@
 import React, { useRef, useEffect } from 'react';
 
-const SpectrogramViewer = ({ title, times, freqs, magnitudes }) => {
+const SpectrogramViewer = ({ title, times, freqs, magnitudes, normalizationMax = null }) => {
   const canvasRef = useRef(null);
   const containerRef = useRef(null);
   const [canvasWidth, setCanvasWidth] = React.useState(800);
@@ -37,10 +37,13 @@ const SpectrogramViewer = ({ title, times, freqs, magnitudes }) => {
     const height = canvas.height;
 
     const flat = Array.isArray(magnitudes) ? (magnitudes.flat ? magnitudes.flat() : magnitudes) : [];
-    let maxVal = 1e-8;
-    for (let i = 0; i < flat.length; i += 1) {
-      const v = Number(flat[i]);
-      if (!Number.isNaN(v) && v > maxVal) maxVal = v;
+    let maxVal = Number(normalizationMax) || 1e-8;
+    if (!(maxVal > 0)) {
+      maxVal = 1e-8;
+      for (let i = 0; i < flat.length; i += 1) {
+        const v = Number(flat[i]);
+        if (!Number.isNaN(v) && v > maxVal) maxVal = v;
+      }
     }
     const invMax = 1 / maxVal;
     const imageData = ctx.createImageData(width, height);
@@ -69,7 +72,7 @@ const SpectrogramViewer = ({ title, times, freqs, magnitudes }) => {
       }
     }
     ctx.putImageData(imageData, 0, 0);
-  }, [times, freqs, magnitudes, canvasWidth]);
+  }, [times, freqs, magnitudes, normalizationMax, canvasWidth]);
 
   return (
     <div>

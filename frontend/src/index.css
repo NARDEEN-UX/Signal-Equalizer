@@ -1207,6 +1207,10 @@ body {
   gap: 0.75rem;
 }
 
+.gain-field {
+  grid-column: 1 / -1;
+}
+
 .gain-row {
   display: flex;
   align-items: center;

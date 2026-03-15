@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import AudioUploader from './components/AudioUploader';
 import WaveformViewer from './components/WaveformViewer';
 import SliderGroup from './components/SliderGroup';
@@ -13,7 +13,7 @@ import ModeSignalUploader from './components/ModeSignalUploader';
 import GenericBandBuilder from './components/GenericBandBuilder';
 import './App.css';
 import { useMockProcessing } from './mock/useMockProcessing';
-import { saveSchema, loadSchema, getGenericDefault, getMusicDefault, getAnimalsDefault, getHumansDefault, getECGDefault } from './api';
+import { saveSchema, loadSchema, getGenericDefault, getMusicDefault, getAnimalsDefault, getHumansDefault, getECGDefault, uploadAudio } from './api';
 
 const MODES = [
   {
@@ -91,6 +91,10 @@ const LANDING_MODES = [
 ];
 
 function App() {
+  const MAX_UI_SIGNAL_SAMPLES = 120000;
+  const MIN_PLAYBACK_SAMPLE_RATE = 3000;
+  const MAX_PLAYBACK_SAMPLE_RATE = 192000;
+
   const [view, setView] = useState('landing'); // 'landing' | 'workspace'
   const [homeMode, setHomeMode] = useState('Home');
   const [activeModeId, setActiveModeId] = useState('generic');
@@ -147,8 +151,9 @@ function App() {
   });
   const [waveletType, setWaveletType] = useState('haar');
   const [equalizerTab, setEqualizerTab] = useState('equalizer'); // 'equalizer' | 'ai'
-  // Linked cine viewers: same time window for both (0–1 = full range)
-  const [viewWindow, setViewWindow] = useState({ start: 0, end: 1 });
+  // Independent viewer windows (0–1 normalized signal range)
+  const [inputViewWindow, setInputViewWindow] = useState({ start: 0, end: 1 });
+  const [outputViewWindow, setOutputViewWindow] = useState({ start: 0, end: 1 });
 
   const audioCtxRef = useRef(null);
   const sourceRef = useRef(null);
@@ -197,6 +202,37 @@ function App() {
     inputSignal: uploadedSignal,
     sampleRate: uploadedSampleRate
   });
+
+  const sharedSpectrogramMax = useMemo(() => {
+    const spec = signalData?.spectrogram;
+    if (!spec?.in || !spec?.out) return null;
+    let maxVal = 1e-8;
+
+    const scan = (matrix) => {
+      if (!Array.isArray(matrix)) return;
+      for (let r = 0; r < matrix.length; r += 1) {
+        const row = matrix[r];
+        if (Array.isArray(row)) {
+          for (let c = 0; c < row.length; c += 1) {
+            const v = Number(row[c]);
+            if (!Number.isNaN(v) && v > maxVal) maxVal = v;
+          }
+        } else {
+          const v = Number(row);
+          if (!Number.isNaN(v) && v > maxVal) maxVal = v;
+        }
+      }
+    };
+
+    scan(spec.in);
+    scan(spec.out);
+
+    if (!(maxVal > 0)) {
+      return null;
+    }
+
+    return maxVal;
+  }, [signalData?.spectrogram]);
 
   useEffect(() => {
     if (signalData?.time?.length) {
@@ -319,7 +355,20 @@ function App() {
     stopAudio();
 
     const dt = signalData.time[1] - signalData.time[0] || 1 / 44100;
-    const buffer = ctx.createBuffer(1, signalData.output_signal.length, 1 / dt);
+    const desiredSampleRate = 1 / dt;
+    const playbackSampleRate = Math.max(
+      MIN_PLAYBACK_SAMPLE_RATE,
+      Math.min(MAX_PLAYBACK_SAMPLE_RATE, Math.round(desiredSampleRate) || 44100)
+    );
+
+    let buffer;
+    try {
+      buffer = ctx.createBuffer(1, signalData.output_signal.length, playbackSampleRate);
+    } catch (error) {
+      console.error('Failed to create playback buffer:', error);
+      window.alert('Playback failed for this file. Try reloading or using a shorter file.');
+      return;
+    }
     const data = buffer.getChannelData(0);
     for (let i = 0; i < data.length; i += 1) {
       data[i] = signalData.output_signal[i];
@@ -355,12 +404,19 @@ function App() {
       offsetTime = signalData.time[offsetIndex] || playbackTime;
     }
 
-    source.start(0, offsetTime);
+    const safeOffset = Math.max(0, Math.min(offsetTime, Math.max(0, buffer.duration - 1e-4)));
+
+    try {
+      source.start(0, safeOffset);
+    } catch (error) {
+      console.error('Playback start failed:', error);
+      source.start(0, 0);
+    }
 
     sourceRef.current = source;
     gainRef.current = gainNode;
     startTimeRef.current = ctx.currentTime;
-    offsetTimeRef.current = offsetTime;
+    offsetTimeRef.current = safeOffset;
     durationRef.current = signalData.time[signalData.time.length - 1];
 
     const tick = () => {
@@ -430,38 +486,62 @@ function App() {
     }
   };
 
-  // Linked cine viewers: zoom/pan/reset (same window for both)
-  const zoomFactor = 0.85;
+  const updateViewWindow = (which, updater) => {
+    const setWindow = which === 'input' ? setInputViewWindow : setOutputViewWindow;
+    setWindow((w) => updater(w));
+  };
+
+  const inputZoom = 1 / Math.max(1e-6, inputViewWindow.end - inputViewWindow.start);
+  const outputZoom = 1 / Math.max(1e-6, outputViewWindow.end - outputViewWindow.start);
+
+  // Per-viewer zoom/pan/reset controls
+  const zoomFactor = 0.6;
   const panStep = 0.05;
-  const handleZoomIn = () => {
-    setViewWindow((w) => {
+  const minWindowSpan = 0.01;
+  const maxWindowSpan = 1;
+  const handleZoomIn = (which) => {
+    updateViewWindow(which, (w) => {
+      const currentSpan = w.end - w.start;
+      if (currentSpan <= minWindowSpan) return w;
+
       const mid = (w.start + w.end) / 2;
-      const half = (w.end - w.start) * zoomFactor / 2;
+      const span = Math.max(minWindowSpan, currentSpan * zoomFactor);
+      const half = span / 2;
       return { start: Math.max(0, mid - half), end: Math.min(1, mid + half) };
     });
   };
-  const handleZoomOut = () => {
-    setViewWindow((w) => {
+  const handleZoomOut = (which) => {
+    updateViewWindow(which, (w) => {
+      const currentSpan = w.end - w.start;
+      if (currentSpan >= maxWindowSpan) return { start: 0, end: 1 };
+
       const mid = (w.start + w.end) / 2;
-      const half = Math.min(0.5, (w.end - w.start) / (2 * zoomFactor)) ;
+      const span = Math.min(maxWindowSpan, currentSpan / zoomFactor);
+      const half = span / 2;
       return { start: Math.max(0, mid - half), end: Math.min(1, mid + half) };
     });
   };
-  const handlePanLeft = () => {
-    setViewWindow((w) => {
+  const handlePanLeft = (which) => {
+    updateViewWindow(which, (w) => {
       const d = w.end - w.start;
       const s = Math.max(0, w.start - panStep);
       return { start: s, end: Math.min(1, s + d) };
     });
   };
-  const handlePanRight = () => {
-    setViewWindow((w) => {
+  const handlePanRight = (which) => {
+    updateViewWindow(which, (w) => {
       const d = w.end - w.start;
       const e = Math.min(1, w.end + panStep);
       return { start: Math.max(0, e - d), end: e };
     });
   };
-  const handleResetView = () => setViewWindow({ start: 0, end: 1 });
+  const handleResetView = (which) => {
+    if (which === 'input') {
+      setInputViewWindow({ start: 0, end: 1 });
+    } else {
+      setOutputViewWindow({ start: 0, end: 1 });
+    }
+  };
 
   const handleSavePreset = () => {
     const schema = {
@@ -528,25 +608,76 @@ function App() {
     window.alert('Settings loaded successfully. Controls updated.');
   };
 
+  const prepareSignalForUi = (signal, sampleRate) => {
+    if (!signal || signal.length === 0) {
+      return { signal: [], sampleRate: Number(sampleRate) || 44100 };
+    }
+
+    const step = Math.max(1, Math.ceil(signal.length / MAX_UI_SIGNAL_SAMPLES));
+    if (step === 1) {
+      return {
+        signal: Array.from(signal),
+        sampleRate: Math.max(
+          MIN_PLAYBACK_SAMPLE_RATE,
+          Math.min(MAX_PLAYBACK_SAMPLE_RATE, Number(sampleRate) || 44100)
+        )
+      };
+    }
+
+    const reduced = [];
+    for (let i = 0; i < signal.length; i += step) {
+      reduced.push(Number(signal[i]) || 0);
+    }
+
+    return {
+      signal: reduced,
+      sampleRate: Math.max(
+        MIN_PLAYBACK_SAMPLE_RATE,
+        Math.min(MAX_PLAYBACK_SAMPLE_RATE, Math.round((Number(sampleRate) || 44100) / step))
+      )
+    };
+  };
+
   const handleModeSignalLoad = (signal, sampleRate, filename) => {
+    // Reset transport to avoid stale offsets from previous files.
+    handleStop();
+
+    const prepared = prepareSignalForUi(signal, sampleRate);
+
     // Store the actual uploaded signal data for current mode
     setModeUploadedSignals(prev => ({
       ...prev,
-      [activeModeId]: signal
+      [activeModeId]: prepared.signal
     }));
     setModeUploadedSampleRates(prev => ({
       ...prev,
-      [activeModeId]: sampleRate
+      [activeModeId]: prepared.sampleRate
     }));
     // Also update the audioFile name for display (per mode)
     setModeAudioFiles(prev => ({
       ...prev,
       [activeModeId]: {
         name: filename,
-        size: signal.length * 4,
+        size: prepared.signal.length * 4,
         type: 'audio/wav'
       }
     }));
+  };
+
+  const decodeAudioFile = async (file) => {
+    const arrayBuffer = await file.arrayBuffer();
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    try {
+      const decoded = await audioCtx.decodeAudioData(arrayBuffer.slice(0));
+      const channel = decoded.getChannelData(0);
+      const prepared = prepareSignalForUi(channel, decoded.sampleRate);
+      return {
+        signal: prepared.signal,
+        sampleRate: prepared.sampleRate
+      };
+    } finally {
+      await audioCtx.close();
+    }
   };
 
   const handleExport = () => {
@@ -554,12 +685,61 @@ function App() {
     window.alert('Export سيتم ربطها لاحقًا بالباك إند (تحميل WAV).');
   };
 
-  const handleAudioFileSelect = (file) => {
-    // Update audio file for current mode only
+  const handleAudioFileSelect = async (file) => {
+    // Reset transport so the new file always starts from t=0.
+    handleStop();
+
+    // Always show selected file name immediately.
     setModeAudioFiles(prev => ({
       ...prev,
       [activeModeId]: file
     }));
+
+    try {
+      const response = await uploadAudio(file);
+      const backendSignal = response?.data?.signal;
+      const backendSampleRate = response?.data?.audio?.sample_rate;
+
+      if (Array.isArray(backendSignal) && backendSignal.length > 0) {
+        const prepared = prepareSignalForUi(backendSignal, backendSampleRate);
+        setModeUploadedSignals(prev => ({
+          ...prev,
+          [activeModeId]: prepared.signal
+        }));
+        setModeUploadedSampleRates(prev => ({
+          ...prev,
+          [activeModeId]: prepared.sampleRate
+        }));
+        return;
+      }
+
+      // Backend truncates large payloads; decode locally when no signal is returned.
+      const decoded = await decodeAudioFile(file);
+      setModeUploadedSignals(prev => ({
+        ...prev,
+        [activeModeId]: decoded.signal
+      }));
+      setModeUploadedSampleRates(prev => ({
+        ...prev,
+        [activeModeId]: decoded.sampleRate || 44100
+      }));
+    } catch (error) {
+      // If backend is unavailable, still load locally so UI remains usable.
+      try {
+        const decoded = await decodeAudioFile(file);
+        setModeUploadedSignals(prev => ({
+          ...prev,
+          [activeModeId]: decoded.signal
+        }));
+        setModeUploadedSampleRates(prev => ({
+          ...prev,
+          [activeModeId]: decoded.sampleRate || 44100
+        }));
+      } catch (decodeError) {
+        console.error('Could not load selected audio file:', decodeError);
+        window.alert('Could not load this audio file. Please try WAV/MP3 with a supported codec.');
+      }
+    }
   };
 
   const goToMode = (id) => {
@@ -796,7 +976,7 @@ function App() {
                 data={signalData?.input_signal}
                 time={signalData?.time}
                 playbackTime={playbackTime}
-                viewWindow={viewWindow}
+                viewWindow={inputViewWindow}
                 variant="input"
                 isPlaying={isPlaying}
                 onPlay={handlePlay}
@@ -806,11 +986,11 @@ function App() {
                 onSpeedChange={handleSpeedChange}
                 volume={volume}
                 onVolumeChange={handleVolumeChange}
-                onZoomIn={handleZoomIn}
-                onZoomOut={handleZoomOut}
-                onPanLeft={handlePanLeft}
-                onPanRight={handlePanRight}
-                onResetView={handleResetView}
+                onZoomIn={() => handleZoomIn('input')}
+                onZoomOut={() => handleZoomOut('input')}
+                onPanLeft={() => handlePanLeft('input')}
+                onPanRight={() => handlePanRight('input')}
+                onResetView={() => handleResetView('input')}
               />
             </div>
             <div className="box signal-box">
@@ -819,7 +999,7 @@ function App() {
                 data={signalData?.output_signal}
                 time={signalData?.time}
                 playbackTime={playbackTime}
-                viewWindow={viewWindow}
+                viewWindow={outputViewWindow}
                 variant="output"
                 isPlaying={isPlaying}
                 onPlay={handlePlay}
@@ -829,11 +1009,11 @@ function App() {
                 onSpeedChange={handleSpeedChange}
                 volume={volume}
                 onVolumeChange={handleVolumeChange}
-                onZoomIn={handleZoomIn}
-                onZoomOut={handleZoomOut}
-                onPanLeft={handlePanLeft}
-                onPanRight={handlePanRight}
-                onResetView={handleResetView}
+                onZoomIn={() => handleZoomIn('output')}
+                onZoomOut={() => handleZoomOut('output')}
+                onPanLeft={() => handlePanLeft('output')}
+                onPanRight={() => handlePanRight('output')}
+                onResetView={() => handleResetView('output')}
               />
             </div>
           </div>
@@ -847,12 +1027,12 @@ function App() {
               <div className="box chart-box card-with-zoom">
                 <h3 className="box-label">Input FFT</h3>
                 <FFTChart data={signalData?.fft} audiogram={audiogram} variant="input" />
-                <span className="card-zoom">1.0×</span>
+                <span className="card-zoom">{inputZoom.toFixed(1)}×</span>
               </div>
               <div className="box chart-box card-with-zoom">
                 <h3 className="box-label">Output FFT</h3>
                 <FFTChart data={signalData?.fft} audiogram={audiogram} variant="output" />
-                <span className="card-zoom">1.0×</span>
+                <span className="card-zoom">{outputZoom.toFixed(1)}×</span>
               </div>
             </div>
           </div>
@@ -868,11 +1048,11 @@ function App() {
               <div className="row two-boxes">
                 <div className="box chart-box">
                   <h3 className="box-label">Input spectrogram</h3>
-                  <SpectrogramViewer title="" times={signalData.spectrogram.t} freqs={signalData.spectrogram.f} magnitudes={signalData.spectrogram.in} />
+                  <SpectrogramViewer title="" times={signalData.spectrogram.t} freqs={signalData.spectrogram.f} magnitudes={signalData.spectrogram.in} normalizationMax={sharedSpectrogramMax} />
                 </div>
                 <div className="box chart-box">
                   <h3 className="box-label">Output spectrogram</h3>
-                  <SpectrogramViewer title="" times={signalData.spectrogram.t} freqs={signalData.spectrogram.f} magnitudes={signalData.spectrogram.out} />
+                  <SpectrogramViewer title="" times={signalData.spectrogram.t} freqs={signalData.spectrogram.f} magnitudes={signalData.spectrogram.out} normalizationMax={sharedSpectrogramMax} />
                 </div>
               </div>
             )}

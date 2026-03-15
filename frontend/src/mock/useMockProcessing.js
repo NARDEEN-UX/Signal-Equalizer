@@ -36,6 +36,105 @@ function applyVoiceGains(voices, gains) {
   return out;
 }
 
+function movingAverage(signal, windowSize) {
+  const n = signal.length;
+  if (!n) return [];
+
+  const w = Math.max(1, Math.floor(windowSize));
+  const out = new Array(n).fill(0);
+  const prefix = new Array(n + 1).fill(0);
+
+  for (let i = 0; i < n; i += 1) {
+    prefix[i + 1] = prefix[i] + (signal[i] || 0);
+  }
+
+  for (let i = 0; i < n; i += 1) {
+    const start = Math.max(0, i - w);
+    const end = Math.min(n - 1, i + w);
+    const sum = prefix[end + 1] - prefix[start];
+    out[i] = sum / (end - start + 1);
+  }
+
+  return out;
+}
+
+function rms(values) {
+  if (!values?.length) return 0;
+  let sumSq = 0;
+  for (let i = 0; i < values.length; i += 1) {
+    const v = values[i] || 0;
+    sumSq += v * v;
+  }
+  return Math.sqrt(sumSq / values.length);
+}
+
+function buildEqualizedSignal(signal, gains) {
+  if (!signal?.length) return [];
+
+  const g = [0, 1, 2, 3].map((i) => clamp(Number(gains[i] ?? 1), 0, 2));
+  const low = movingAverage(signal, 80);
+  const midLowBase = movingAverage(signal, 24);
+  const midHighBase = movingAverage(signal, 7);
+
+  const n = signal.length;
+  const out = new Array(n).fill(0);
+
+  for (let i = 0; i < n; i += 1) {
+    const lowBand = low[i];
+    const midLow = midLowBase[i] - lowBand;
+    const midHigh = midHighBase[i] - midLowBase[i];
+    const highBand = signal[i] - midHighBase[i];
+    out[i] = g[0] * lowBand + g[1] * midLow + g[2] * midHigh + g[3] * highBand;
+  }
+
+  const inRms = rms(signal) || 1;
+  const outRms = rms(out) || 1;
+  const energyMatch = inRms / outRms;
+  return out.map((v) => v * energyMatch);
+}
+
+function computeLevelRms(signal, levels = 6) {
+  if (!signal?.length) return Array.from({ length: levels }, () => 0);
+  const n = signal.length;
+  const sliceSize = Math.max(1, Math.floor(n / levels));
+  const out = [];
+
+  for (let i = 0; i < levels; i += 1) {
+    const start = i * sliceSize;
+    const end = Math.min(n, start + sliceSize);
+    let sumSq = 0;
+    let count = 0;
+
+    for (let j = start; j < end; j += 1) {
+      const v = signal[j] || 0;
+      sumSq += v * v;
+      count += 1;
+    }
+
+    out.push(Math.sqrt(sumSq / (count || 1)));
+  }
+
+  return out;
+}
+
+function applyBandGainsToSpectrogram(normSpec, freqs, bands, gains) {
+  return normSpec.map((row, fIdx) => {
+    const f = freqs[fIdx] || 0;
+    let bandGain = 1;
+
+    for (let b = 0; b < bands.length; b += 1) {
+      const [lo, hi] = bands[b];
+      if (f >= lo && f <= hi) {
+        bandGain = gains[b] || 1;
+        break;
+      }
+    }
+
+    const g = clamp(bandGain, 0, 2);
+    return row.map((v) => clamp(v * g, 0, 2));
+  });
+}
+
 function pseudoFft(freqs, bands, gains) {
   const out = freqs.map(() => 0.02);
   for (let i = 0; i < freqs.length; i += 1) {
@@ -210,21 +309,15 @@ export function useMockProcessing({
       ? genericBands.map((b, i) => Number(b.gain ?? freqSliders[i]) || 1)
       : freqSliders);
 
-    // "Human": slider controls speakers (voices) more directly (better UX for the statement)
+    const clampedGains = gains.map((g) => clamp(Number(g) || 1, 0, 2));
+
+    // "Human": slider controls speakers directly.
+    // Other modes: apply a lightweight 4-band decomposition so waveform shape changes,
+    // not only overall amplitude (which can look unchanged after auto-scaling).
     const outputSignal =
       modeId === 'human'
-        ? applyVoiceGains(input.voices, gains)
-        : (() => {
-            // For non-human modes approximate the equaliser by scaling the
-            // waveform with an average band gain so that level clearly
-            // responds to slider changes.
-            const avgGain =
-              gains.length > 0
-                ? gains.reduce((s, g) => s + (Number(g) || 0), 0) / gains.length
-                : 1;
-            const factor = 0.7 + 0.15 * clamp(avgGain, 0, 2);
-            return input.mix.map((x) => x * factor);
-          })();
+        ? applyVoiceGains(input.voices, clampedGains)
+        : buildEqualizedSignal(input.mix, clampedGains);
 
     // FFT: if we have an uploaded / processed signal, compute a tiny real FFT
     // so that the spectrum actually reflects the current signal.
@@ -246,7 +339,7 @@ export function useMockProcessing({
         for (let b = 0; b < bands.length; b += 1) {
           const [lo, hi] = bands[b];
           if (f >= lo && f <= hi) {
-            g = Number(gains[b]) || 1;
+            g = clampedGains[b] || 1;
             break;
           }
         }
@@ -258,12 +351,11 @@ export function useMockProcessing({
       // Fallback to the previous pseudo-FFT if no signal is present
       fftFreq = linspace(512, 0, 8000);
       fftIn = pseudoFft(fftFreq, bands, [1, 1, 1, 1]);
-      fftOut = pseudoFft(fftFreq, bands, gains);
+      fftOut = pseudoFft(fftFreq, bands, clampedGains);
     }
 
-    // Spectrogram: if we have a real signal, compute a lightweight STFT so
-    // the texture actually follows the uploaded waveform. Otherwise fall back
-    // to the previous mock implementation.
+    // Spectrogram: use precomputed input STFT and apply frequency-band gains.
+    // Re-running STFT on every slider change causes visible UI latency.
     let specT;
     let specF;
     let specIn;
@@ -275,28 +367,15 @@ export function useMockProcessing({
       const maxMag = flat.reduce((m, v) => (v > m ? v : m), 1e-6);
       const norm = baseSpec.mag.map((row) => row.map((v) => v / maxMag));
       specIn = norm;
-      // Apply band gains row-wise so that different frequency bands respond
-      // to different sliders.
-      specOut = norm.map((row, fIdx) => {
-        const f = specF[fIdx] || 0;
-        let g = 1;
-        for (let b = 0; b < bands.length; b += 1) {
-          const [lo, hi] = bands[b];
-          if (f >= lo && f <= hi) {
-            g = Number(gains[b]) || 1;
-            break;
-          }
-        }
-        const gg = clamp(g, 0, 2);
-        return row.map((v) => clamp(v * gg, 0, 2));
-      });
+
+      specOut = applyBandGainsToSpectrogram(norm, specF, bands, clampedGains);
     } else {
       const energyScale = 0.55;
       specT = linspace(120, 0, seconds);
       specF = linspace(96, 0, 8000);
       specIn = pseudoSpectrogram(specF.length, specT.length, energyScale);
       const tone =
-        0.35 + 0.25 * clamp((Number(gains[0]) || 1) / 2, 0, 1);
+        0.35 + 0.25 * clamp((Number(clampedGains[0]) || 1) / 2, 0, 1);
       specOut = pseudoSpectrogram(specF.length, specT.length, tone);
     }
 
@@ -305,28 +384,18 @@ export function useMockProcessing({
     let w;
     if (input.mix && input.mix.length > 0) {
       const levels = 6;
-      const n = input.mix.length;
-      const sliceSize = Math.floor(n / levels) || 1;
-      const base = [];
-      for (let i = 0; i < levels; i += 1) {
-        const start = i * sliceSize;
-        const end = Math.min(n, start + sliceSize);
-        let sumSq = 0;
-        let count = 0;
-        for (let j = start; j < end; j += 1) {
-          const v = input.mix[j] || 0;
-          sumSq += v * v;
-          count += 1;
-        }
-        const rms = Math.sqrt(sumSq / (count || 1));
-        base.push(rms);
-      }
-      const maxBase = base.reduce((m, v) => (v > m ? v : m), 1e-6);
-      const normBase = base.map((v) => v / maxBase);
-      const out = normBase.map(
-        (v, i) => v * (Number(waveletSliders[i]) || 1)
-      );
-      w = { in: normBase, out };
+      const baseIn = computeLevelRms(input.mix, levels);
+      const baseOut = computeLevelRms(outputSignal, levels);
+      const maxIn = baseIn.reduce((m, v) => (v > m ? v : m), 1e-6);
+      const maxOut = baseOut.reduce((m, v) => (v > m ? v : m), 1e-6);
+
+      const normIn = baseIn.map((v) => v / maxIn);
+      const normOut = baseOut.map((v, i) => {
+        const waveletGain = Number(waveletSliders[i]) || 1;
+        return (v / maxOut) * waveletGain;
+      });
+
+      w = { in: normIn, out: normOut };
     } else {
       w = pseudoWaveletEnergy(6, waveletSliders);
     }

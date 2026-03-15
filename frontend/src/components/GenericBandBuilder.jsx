@@ -80,7 +80,7 @@ const GenericBandBuilder = ({ bands, setBands, maxHz = 20000, isEditable = true 
                 <span>High (Hz)</span>
                 <input type="number" value={b.high} min={0} max={maxHz} onChange={(e) => update(b.id, { high: e.target.value })} />
               </label>
-              <label className="field">
+              <label className="field gain-field">
                 <span>Gain</span>
                 <div className="gain-row">
                   <input
