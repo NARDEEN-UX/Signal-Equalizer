@@ -12,6 +12,7 @@ import ModeModal from './components/ModeModal';
 import ModeSignalUploader from './components/ModeSignalUploader';
 import GenericBandBuilder from './components/GenericBandBuilder';
 import './App.css';
+import { useBackendProcessing } from './hooks/useBackendProcessing';
 import { useMockProcessing } from './mock/useMockProcessing';
 import { saveSchema, loadSchema, getGenericDefault, getMusicDefault, getAnimalsDefault, getHumansDefault, getECGDefault, uploadAudio } from './api';
 
@@ -193,7 +194,7 @@ function App() {
     }
   };
 
-  const signalData = useMockProcessing({
+  const mockSignalData = useMockProcessing({
     modeId: activeModeId,
     freqSliders,
     waveletSliders,
@@ -202,6 +203,18 @@ function App() {
     inputSignal: uploadedSignal,
     sampleRate: uploadedSampleRate
   });
+
+  const { data: backendSignalData } = useBackendProcessing({
+    modeId: activeModeId,
+    freqSliders,
+    waveletSliders,
+    genericBands: activeModeId === 'generic' ? genericBands : modeFreqBands,
+    signalData: uploadedSignal || null,
+    useFallback: true
+  });
+
+  // Prefer backend processing when a real uploaded signal exists.
+  const signalData = uploadedSignal && backendSignalData ? backendSignalData : mockSignalData;
 
   const sharedSpectrogramMax = useMemo(() => {
     const spec = signalData?.spectrogram;
@@ -234,6 +247,25 @@ function App() {
     return maxVal;
   }, [signalData?.spectrogram]);
 
+  const sharedWaveformMax = useMemo(() => {
+    const inSignal = signalData?.input_signal;
+    const outSignal = signalData?.output_signal;
+    if (!Array.isArray(inSignal) && !Array.isArray(outSignal)) return null;
+
+    let maxVal = 1e-8;
+    const scan = (arr) => {
+      if (!Array.isArray(arr)) return;
+      for (let i = 0; i < arr.length; i += 1) {
+        const v = Math.abs(Number(arr[i]) || 0);
+        if (v > maxVal) maxVal = v;
+      }
+    };
+
+    scan(inSignal);
+    scan(outSignal);
+    return maxVal;
+  }, [signalData?.input_signal, signalData?.output_signal]);
+
   useEffect(() => {
     if (signalData?.time?.length) {
       durationRef.current = signalData.time[signalData.time.length - 1];
@@ -265,7 +297,7 @@ function App() {
                 ...prev,
                 music: response.data.bands
               }));
-              setFreqSliders(response.data.bands.map(b => b.gain || 1));
+              setFreqSliders(response.data.bands.map(b => (b.gain ?? 1)));
             }
             if (response.data?.sliders_freq) {
               setFreqSliders(response.data.sliders_freq);
@@ -278,7 +310,7 @@ function App() {
                 ...prev,
                 animal: response.data.bands
               }));
-              setFreqSliders(response.data.bands.map(b => b.gain || 1));
+              setFreqSliders(response.data.bands.map(b => (b.gain ?? 1)));
             }
             if (response.data?.sliders_freq) {
               setFreqSliders(response.data.sliders_freq);
@@ -291,7 +323,7 @@ function App() {
                 ...prev,
                 human: response.data.bands
               }));
-              setFreqSliders(response.data.bands.map(b => b.gain || 1));
+              setFreqSliders(response.data.bands.map(b => (b.gain ?? 1)));
             }
             if (response.data?.sliders_freq) {
               setFreqSliders(response.data.sliders_freq);
@@ -304,7 +336,7 @@ function App() {
                 ...prev,
                 ecg: response.data.bands
               }));
-              setFreqSliders(response.data.bands.map(b => b.gain || 1));
+              setFreqSliders(response.data.bands.map(b => (b.gain ?? 1)));
             }
             if (response.data?.sliders_freq) {
               setFreqSliders(response.data.sliders_freq);
@@ -598,11 +630,11 @@ function App() {
           name: b.name || `Channel ${i + 1}`,
           low: b.low,
           high: b.high,
-          gain: b.gain || 1
+          gain: b.gain ?? 1
         }))
       }));
       // Update frequency sliders
-      setFreqSliders(settings.bands.map(b => b.gain || 1));
+      setFreqSliders(settings.bands.map(b => (b.gain ?? 1)));
     }
     
     window.alert('Settings loaded successfully. Controls updated.');
@@ -977,6 +1009,7 @@ function App() {
                 time={signalData?.time}
                 playbackTime={playbackTime}
                 viewWindow={inputViewWindow}
+                amplitudeScale={sharedWaveformMax}
                 variant="input"
                 isPlaying={isPlaying}
                 onPlay={handlePlay}
@@ -1000,6 +1033,7 @@ function App() {
                 time={signalData?.time}
                 playbackTime={playbackTime}
                 viewWindow={outputViewWindow}
+                amplitudeScale={sharedWaveformMax}
                 variant="output"
                 isPlaying={isPlaying}
                 onPlay={handlePlay}

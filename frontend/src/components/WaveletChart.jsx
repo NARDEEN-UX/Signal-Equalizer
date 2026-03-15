@@ -6,6 +6,7 @@ const WaveletChart = ({ data, variant }) => {
 
   const maxIn = Math.max(...(data.in || [1]), 1e-8);
   const maxOut = Math.max(...(data.out || [1]), 1e-8);
+  const maxShared = Math.max(maxIn, maxOut, 1e-8);
   const showInput = !variant || variant === 'input';
   const showOutput = !variant || variant === 'output';
 
@@ -13,8 +14,8 @@ const WaveletChart = ({ data, variant }) => {
     <div className="wavelet-bars">
       {data.levels.map((level, i) => (
         <div key={i} className="wavelet-bar-wrap">
-          {showInput && <div className="wavelet-bar in" style={{ height: `${(data.in?.[i] ?? 0) / maxIn * 80}px` }} />}
-          {showOutput && <div className="wavelet-bar out" style={{ height: `${(data.out?.[i] ?? 0) / maxOut * 80}px` }} />}
+          {showInput && <div className="wavelet-bar in" style={{ height: `${(data.in?.[i] ?? 0) / maxShared * 80}px` }} />}
+          {showOutput && <div className="wavelet-bar out" style={{ height: `${(data.out?.[i] ?? 0) / maxShared * 80}px` }} />}
           <span>L{i}</span>
         </div>
       ))}

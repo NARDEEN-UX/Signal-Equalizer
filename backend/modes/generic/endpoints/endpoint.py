@@ -41,14 +41,14 @@ async def process_generic(request: GenericModeRequest):
     """
     try:
         signal = np.array(request.signal)
+
+        # Convert Pydantic models to plain dicts for service validation/processing.
+        bands = [{"low": b.low, "high": b.high} for b in request.bands]
         
         # Validate band configuration
-        is_valid, message = generic_service.validate_band_config(request.bands)
+        is_valid, message = generic_service.validate_band_config(bands)
         if not is_valid:
             raise ValueError(message)
-        
-        # Extract band frequencies and convert to list of dicts
-        bands = [{"low": b.low, "high": b.high} for b in request.bands]
         
         # Extract gains from band configs or use defaults
         gains = [b.gain for b in request.bands]

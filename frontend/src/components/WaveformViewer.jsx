@@ -6,6 +6,7 @@ const WaveformViewer = ({
   time,
   playbackTime,
   viewWindow = { start: 0, end: 1 },
+  amplitudeScale = null,
   variant = 'input',
   isPlaying,
   onPlay,
@@ -76,7 +77,8 @@ const WaveformViewer = ({
       const v = Math.abs(drawData[i]);
       if (v > maxVal) maxVal = v;
     }
-    const scale = (maxVal || 1) * 1.1;
+    const baseScale = Number(amplitudeScale) > 0 ? Number(amplitudeScale) : (maxVal || 1);
+    const scale = baseScale * 1.1;
     const half = height / 2;
 
     ctx.strokeStyle = strokeColor;
@@ -116,7 +118,7 @@ const WaveformViewer = ({
       ctx.lineTo(cursorX, height);
       ctx.stroke();
     }
-  }, [data, time, playbackTime, viewWindow, strokeColor, canvasWidth]);
+  }, [data, time, playbackTime, viewWindow, amplitudeScale, strokeColor, canvasWidth]);
 
   return (
     <div className="viewer-inner">

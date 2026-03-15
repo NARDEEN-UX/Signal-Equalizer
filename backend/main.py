@@ -5,7 +5,8 @@ Main application entry point for FastAPI server
 
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
+from pydantic import BaseModel, Field
 import numpy as np
 import soundfile as sf
 import io
@@ -42,6 +43,45 @@ app.include_router(music_router, prefix="/api/modes/music", tags=["Music Mode"])
 app.include_router(animals_router, prefix="/api/modes/animals", tags=["Animals Mode"])
 app.include_router(humans_router, prefix="/api/modes/humans", tags=["Humans Mode"])
 app.include_router(ecg_router, prefix="/api/modes/ecg", tags=["ECG Mode"])
+
+
+class SaveSettingsRequest(BaseModel):
+    mode: str = Field(min_length=1)
+    settings: dict
+
+
+class LoadSettingsRequest(BaseModel):
+    filename: str = Field(min_length=1)
+
+
+class SaveSchemaRequest(BaseModel):
+    filename: str = Field(min_length=1)
+    schema_data: dict = Field(alias="schema")
+
+
+class LoadSchemaRequest(BaseModel):
+    filename: str = Field(min_length=1)
+
+
+def _safe_json_filename(filename: str) -> str:
+    safe = os.path.basename(filename or "").strip()
+    if not safe:
+        raise ValueError("Invalid filename")
+    if not safe.endswith('.json'):
+        safe = f"{safe}.json"
+    return safe
+
+
+def _build_human_sample(sample_rate: int = 44100, seconds: float = 4.0) -> np.ndarray:
+    n = int(sample_rate * seconds)
+    t = np.linspace(0, seconds, n, endpoint=False)
+    voice_1 = 0.22 * np.sin(2 * np.pi * 110 * t) + 0.08 * np.sin(2 * np.pi * 220 * t)
+    voice_2 = 0.18 * np.sin(2 * np.pi * 220 * t) + 0.06 * np.sin(2 * np.pi * 440 * t)
+    voice_3 = 0.10 * np.sin(2 * np.pi * 350 * t) + 0.10 * np.sin(2 * np.pi * 700 * t)
+    voice_4 = 0.06 * np.sin(2 * np.pi * 120 * t) + 0.07 * np.sin(2 * np.pi * 4000 * t)
+    mix = voice_1 + voice_2 + voice_3 + voice_4
+    peak = float(np.max(np.abs(mix))) if len(mix) else 1.0
+    return (mix / peak * 0.9).astype(np.float32) if peak > 0 else mix.astype(np.float32)
 
 
 # ==================== Core Endpoints ====================
@@ -106,8 +146,25 @@ async def upload_audio(audio: UploadFile = File(...), settings: UploadFile = Non
         raise HTTPException(status_code=400, detail=f"Error uploading audio: {str(e)}")
 
 
+@app.get("/sample/human")
+async def sample_human():
+    """Generate a deterministic sample clip used by the frontend sample button."""
+    try:
+        sample_rate = 44100
+        signal = _build_human_sample(sample_rate=sample_rate)
+        buffer = io.BytesIO()
+        sf.write(buffer, signal, sample_rate, format='WAV')
+        return Response(
+            content=buffer.getvalue(),
+            media_type="audio/wav",
+            headers={"Content-Disposition": 'attachment; filename="human_sample.wav"'}
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error generating sample: {str(e)}")
+
+
 @app.post("/save-settings")
-async def save_settings(mode: str, settings: dict):
+async def save_settings(payload: SaveSettingsRequest):
     """
     Save equalizer settings to a JSON file
     
@@ -125,11 +182,11 @@ async def save_settings(mode: str, settings: dict):
         
         # Generate filename with timestamp
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"{settings_dir}/{mode}_settings_{timestamp}.json"
+        filename = f"{settings_dir}/{payload.mode}_settings_{timestamp}.json"
         
         # Save settings
         with open(filename, 'w') as f:
-            json.dump(settings, f, indent=2)
+            json.dump(payload.settings, f, indent=2)
         
         return JSONResponse({
             "status": "success",
@@ -141,7 +198,7 @@ async def save_settings(mode: str, settings: dict):
 
 
 @app.post("/load-settings")
-async def load_settings(filename: str):
+async def load_settings(payload: LoadSettingsRequest):
     """
     Load equalizer settings from a JSON file
     
@@ -152,7 +209,9 @@ async def load_settings(filename: str):
         Settings dictionary
     """
     try:
-        with open(filename, 'r') as f:
+        safe_filename = _safe_json_filename(payload.filename)
+        filepath = os.path.join("settings", safe_filename)
+        with open(filepath, 'r') as f:
             settings = json.load(f)
         return JSONResponse({
             "status": "success",
@@ -160,6 +219,40 @@ async def load_settings(filename: str):
         })
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Error loading settings: {str(e)}")
+
+
+@app.post("/save_schema")
+async def save_schema(payload: SaveSchemaRequest):
+    """Save a frontend preset schema."""
+    try:
+        presets_dir = os.path.join("settings", "presets")
+        os.makedirs(presets_dir, exist_ok=True)
+        safe_filename = _safe_json_filename(payload.filename)
+        filepath = os.path.join(presets_dir, safe_filename)
+
+        with open(filepath, 'w') as f:
+            json.dump(payload.schema_data, f, indent=2)
+
+        return JSONResponse({
+            "status": "success",
+            "filename": safe_filename,
+            "message": f"Preset saved to {safe_filename}"
+        })
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Error saving schema: {str(e)}")
+
+
+@app.post("/load_schema")
+async def load_schema(payload: LoadSchemaRequest):
+    """Load a frontend preset schema."""
+    try:
+        safe_filename = _safe_json_filename(payload.filename)
+        filepath = os.path.join("settings", "presets", safe_filename)
+        with open(filepath, 'r') as f:
+            schema = json.load(f)
+        return JSONResponse(schema)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Error loading schema: {str(e)}")
 
 
 @app.get("/health")

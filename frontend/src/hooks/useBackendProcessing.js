@@ -42,7 +42,7 @@ export function useBackendProcessing({
           result = await processGenericMode(
             Array.isArray(signal) ? signal : Object.values(signal),
             bands,
-            bands.map(b => b.gain || 1)
+            bands.map(b => (b.gain ?? 1))
           );
         } else if (modeId === 'music') {
           const names = ['Bass', 'Piano', 'Vocals', 'Violin'];

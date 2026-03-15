@@ -46,6 +46,8 @@ const FFTChart = ({ data, audiogram, variant }) => {
         ticks: { color: '#737373', font: { family: fontFamily, size: 10 } }
       },
       y: {
+        min: 0,
+        max: 2,
         title: { display: true, text: 'Magnitude', color: '#737373', font: { family: fontFamily, size: 11 } },
         grid: { color: 'rgba(255,255,255,0.06)' },
         ticks: { color: '#737373', font: { family: fontFamily, size: 10 } }

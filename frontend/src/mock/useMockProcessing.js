@@ -4,6 +4,11 @@ function clamp(v, min, max) {
   return Math.max(min, Math.min(max, v));
 }
 
+function toNumberOr(value, fallback) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}
+
 function linspace(n, start, end) {
   if (n <= 1) return [start];
   const step = (end - start) / (n - 1);
@@ -87,10 +92,8 @@ function buildEqualizedSignal(signal, gains) {
     out[i] = g[0] * lowBand + g[1] * midLow + g[2] * midHigh + g[3] * highBand;
   }
 
-  const inRms = rms(signal) || 1;
-  const outRms = rms(out) || 1;
-  const energyMatch = inRms / outRms;
-  return out.map((v) => v * energyMatch);
+  // Keep absolute attenuation/amplification so gain=0 is visibly weaker than gain=1.
+  return out;
 }
 
 function computeLevelRms(signal, levels = 6) {
@@ -125,7 +128,7 @@ function applyBandGainsToSpectrogram(normSpec, freqs, bands, gains) {
     for (let b = 0; b < bands.length; b += 1) {
       const [lo, hi] = bands[b];
       if (f >= lo && f <= hi) {
-        bandGain = gains[b] || 1;
+        bandGain = toNumberOr(gains[b], 1);
         break;
       }
     }
@@ -142,7 +145,7 @@ function pseudoFft(freqs, bands, gains) {
     let mag = 0.02;
     for (let b = 0; b < bands.length; b += 1) {
       const [lo, hi] = bands[b];
-      if (f >= lo && f <= hi) mag += 0.35 * (Number(gains[b]) || 1);
+      if (f >= lo && f <= hi) mag += 0.35 * toNumberOr(gains[b], 1);
     }
     // smooth bump to look like a spectrum
     mag += 0.15 * Math.exp(-Math.pow((f - 600) / 900, 2));
@@ -248,7 +251,7 @@ function computeSpectrogram(signal, fs, winSize = 256, hop = 128) {
 
 function pseudoWaveletEnergy(levels, gains) {
   const base = Array.from({ length: levels }, (_, i) => 0.3 + 0.15 * (levels - i));
-  const out = base.map((v, i) => v * (Number(gains[i]) || 1));
+  const out = base.map((v, i) => v * toNumberOr(gains[i], 1));
   return { in: base, out };
 }
 
@@ -306,10 +309,10 @@ export function useMockProcessing({
       : [[80, 180], [180, 300], [300, 3000], [3000, 8000]]);
 
     const gains = (genericBands?.length
-      ? genericBands.map((b, i) => Number(b.gain ?? freqSliders[i]) || 1)
+      ? genericBands.map((b, i) => toNumberOr(b.gain ?? freqSliders[i], 1))
       : freqSliders);
 
-    const clampedGains = gains.map((g) => clamp(Number(g) || 1, 0, 2));
+    const clampedGains = gains.map((g) => clamp(toNumberOr(g, 1), 0, 2));
 
     // "Human": slider controls speakers directly.
     // Other modes: apply a lightweight 4-band decomposition so waveform shape changes,
@@ -339,14 +342,14 @@ export function useMockProcessing({
         for (let b = 0; b < bands.length; b += 1) {
           const [lo, hi] = bands[b];
           if (f >= lo && f <= hi) {
-            g = clampedGains[b] || 1;
+            g = toNumberOr(clampedGains[b], 1);
             break;
           }
         }
         banded.push(normMag[i] * clamp(g, 0, 2));
       }
-      const outMax = banded.reduce((m, v) => (v > m ? v : m), 1e-6);
-      fftOut = banded.map((v) => v / outMax);
+      // Keep output on the same baseline as input to preserve absolute gain effect.
+      fftOut = banded;
     } else {
       // Fallback to the previous pseudo-FFT if no signal is present
       fftFreq = linspace(512, 0, 8000);
@@ -375,7 +378,7 @@ export function useMockProcessing({
       specF = linspace(96, 0, 8000);
       specIn = pseudoSpectrogram(specF.length, specT.length, energyScale);
       const tone =
-        0.35 + 0.25 * clamp((Number(clampedGains[0]) || 1) / 2, 0, 1);
+        0.35 + 0.25 * clamp(toNumberOr(clampedGains[0], 1) / 2, 0, 1);
       specOut = pseudoSpectrogram(specF.length, specT.length, tone);
     }
 
@@ -391,8 +394,9 @@ export function useMockProcessing({
 
       const normIn = baseIn.map((v) => v / maxIn);
       const normOut = baseOut.map((v, i) => {
-        const waveletGain = Number(waveletSliders[i]) || 1;
-        return (v / maxOut) * waveletGain;
+        const waveletGain = toNumberOr(waveletSliders[i], 1);
+        const baseline = maxIn > 0 ? maxIn : maxOut;
+        return (v / (baseline || 1e-6)) * waveletGain;
       });
 
       w = { in: normIn, out: normOut };
