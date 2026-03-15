@@ -156,6 +156,7 @@ function App() {
   const startTimeRef = useRef(0);
   const durationRef = useRef(0);
   const rafRef = useRef(null);
+  const offsetTimeRef = useRef(0);
 
   const activeMode = MODES.find((m) => m.id === activeModeId) || MODES[0];
 
@@ -336,21 +337,38 @@ function App() {
     source.onended = () => {
       setIsPlaying(false);
       setPlaybackTime(0);
+      offsetTimeRef.current = 0;
     };
 
-    source.start(0);
+    // Calculate offset to resume from paused position
+    // Find the sample index corresponding to the current playbackTime
+    let offsetTime = 0;
+    if (playbackTime > 0 && signalData.time) {
+      // Find the closest time index in the signal
+      let offsetIndex = 0;
+      for (let i = 0; i < signalData.time.length; i++) {
+        if (signalData.time[i] >= playbackTime) {
+          offsetIndex = i;
+          break;
+        }
+      }
+      offsetTime = signalData.time[offsetIndex] || playbackTime;
+    }
+
+    source.start(0, offsetTime);
 
     sourceRef.current = source;
     gainRef.current = gainNode;
     startTimeRef.current = ctx.currentTime;
+    offsetTimeRef.current = offsetTime;
     durationRef.current = signalData.time[signalData.time.length - 1];
 
     const tick = () => {
       if (!audioCtxRef.current || !sourceRef.current) return;
       const elapsed = (audioCtxRef.current.currentTime - startTimeRef.current) * playbackRate;
-      const clamped = Math.min(elapsed, durationRef.current);
+      const clamped = Math.min(offsetTimeRef.current + elapsed, durationRef.current);
       setPlaybackTime(clamped);
-      if (elapsed < durationRef.current) {
+      if (offsetTimeRef.current + elapsed < durationRef.current) {
         rafRef.current = requestAnimationFrame(tick);
       }
     };
@@ -360,20 +378,37 @@ function App() {
   };
 
   const handlePause = () => {
-    setIsPlaying(false);
+    // Stop the animation frame first to freeze the UI
+    if (rafRef.current) {
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    }
+
+    // Capture current playback time before stopping audio
+    if (audioCtxRef.current && sourceRef.current) {
+      const elapsed = (audioCtxRef.current.currentTime - startTimeRef.current) * playbackRate;
+      setPlaybackTime(Math.min(elapsed, durationRef.current));
+    }
+
+    // Stop the audio source
     if (sourceRef.current) {
       try {
         sourceRef.current.stop();
       } catch {
         // Already stopped
       }
+      sourceRef.current.disconnect();
+      sourceRef.current = null;
     }
+
+    setIsPlaying(false);
   };
 
   const handleStop = () => {
     stopAudio();
     setIsPlaying(false);
     setPlaybackTime(0);
+    offsetTimeRef.current = 0;
     if (audioCtxRef.current) {
       audioCtxRef.current.close();
       audioCtxRef.current = null;
