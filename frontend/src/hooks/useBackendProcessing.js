@@ -76,6 +76,14 @@ export function useBackendProcessing({
 
         if (result && result.data) {
           const respData = result.data;
+          const inSpec = respData.input_spectrogram;
+          const outSpec = respData.output_spectrogram;
+
+          const specTimes = outSpec?.times || inSpec?.times || [];
+          const specFreqs = outSpec?.frequencies || inSpec?.frequencies || [];
+          const specInMag = inSpec?.magnitude || [];
+          const specOutMag = outSpec?.magnitude || [];
+
           setData({
             time: signalData.time || Array.from({ length: respData.output_signal.length }, (_, i) => i / 44100),
             input_signal: signalData.mix || signal,
@@ -85,11 +93,11 @@ export function useBackendProcessing({
               in: [1, 1, 1, 1],
               out: respData.output_fft.magnitudes
             } : null,
-            spectrogram: respData.output_spectrogram ? {
-              t: respData.output_spectrogram.times,
-              f: respData.output_spectrogram.frequencies,
-              in: [[0.5, 0.5], [0.5, 0.5]],
-              out: respData.output_spectrogram.magnitude
+            spectrogram: outSpec || inSpec ? {
+              t: specTimes,
+              f: specFreqs,
+              in: specInMag,
+              out: specOutMag
             } : null,
             wavelet: { levels: Array.from({ length: 6 }, (_, i) => i), in: waveletSliders, out: waveletSliders }
           });

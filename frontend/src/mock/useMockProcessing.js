@@ -73,23 +73,59 @@ function rms(values) {
   return Math.sqrt(sumSq / values.length);
 }
 
-function buildEqualizedSignal(signal, gains) {
+function frequencyToWindow(freq, fs) {
+  const safeFreq = Math.max(1, Number(freq) || 1);
+  return clamp(Math.round(fs / (2 * Math.PI * safeFreq)), 1, 600);
+}
+
+function buildEqualizedSignal(signal, bands, gains, fs = 44100, maxHz = 20000) {
   if (!signal?.length) return [];
 
-  const g = [0, 1, 2, 3].map((i) => clamp(Number(gains[i] ?? 1), 0, 2));
-  const low = movingAverage(signal, 80);
-  const midLowBase = movingAverage(signal, 24);
-  const midHighBase = movingAverage(signal, 7);
+  const activeBands = (bands?.length
+    ? bands
+    : [[80, 180], [180, 300], [300, 3000], [3000, 8000]]
+  ).map(([lo, hi]) => {
+    const low = clamp(toNumberOr(lo, 0), 0, maxHz - 1);
+    const high = clamp(Math.max(toNumberOr(hi, low + 1), low + 1), low + 1, maxHz);
+    return [low, high];
+  });
+
+  const g = activeBands.map((_, i) => clamp(Number(gains[i] ?? 1), 0, 2));
+  const smoothCache = new Map();
+
+  const getSmoothed = (window) => {
+    if (!smoothCache.has(window)) {
+      smoothCache.set(window, movingAverage(signal, window));
+    }
+    return smoothCache.get(window);
+  };
 
   const n = signal.length;
   const out = new Array(n).fill(0);
 
-  for (let i = 0; i < n; i += 1) {
-    const lowBand = low[i];
-    const midLow = midLowBase[i] - lowBand;
-    const midHigh = midHighBase[i] - midLowBase[i];
-    const highBand = signal[i] - midHighBase[i];
-    out[i] = g[0] * lowBand + g[1] * midLow + g[2] * midHigh + g[3] * highBand;
+  for (let b = 0; b < activeBands.length; b += 1) {
+    const [lowHz, highHz] = activeBands[b];
+    const gain = g[b] ?? 1;
+
+    const lowSmooth = lowHz <= 0 ? null : getSmoothed(frequencyToWindow(lowHz, fs));
+    const highSmooth = highHz >= maxHz ? null : getSmoothed(frequencyToWindow(highHz, fs));
+
+    for (let i = 0; i < n; i += 1) {
+      const sample = signal[i] || 0;
+      let bandComponent;
+
+      if (!lowSmooth && highSmooth) {
+        bandComponent = highSmooth[i];
+      } else if (lowSmooth && !highSmooth) {
+        bandComponent = sample - lowSmooth[i];
+      } else if (lowSmooth && highSmooth) {
+        bandComponent = highSmooth[i] - lowSmooth[i];
+      } else {
+        bandComponent = sample;
+      }
+
+      out[i] += gain * bandComponent;
+    }
   }
 
   // Keep absolute attenuation/amplification so gain=0 is visibly weaker than gain=1.
@@ -320,7 +356,7 @@ export function useMockProcessing({
     const outputSignal =
       modeId === 'human'
         ? applyVoiceGains(input.voices, clampedGains)
-        : buildEqualizedSignal(input.mix, clampedGains);
+        : buildEqualizedSignal(input.mix, bands, clampedGains, fs);
 
     // FFT: if we have an uploaded / processed signal, compute a tiny real FFT
     // so that the spectrum actually reflects the current signal.

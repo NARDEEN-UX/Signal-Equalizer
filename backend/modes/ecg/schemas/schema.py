@@ -29,6 +29,7 @@ class ECGModeResponse(BaseModel):
     status: str
     output_signal: List[float]
     output_fft: Optional[dict] = None
+    input_spectrogram: Optional[dict] = None
     output_spectrogram: Optional[dict] = None
     processing_time: float
 

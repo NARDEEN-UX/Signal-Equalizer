@@ -4,6 +4,30 @@ function clamp(v, min, max) {
   return Math.max(min, Math.min(max, v));
 }
 
+const MIN_BAND_WIDTH_HZ = 1;
+
+function toFiniteNumber(value, fallback) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function normalizeBandRange(low, high, maxHz) {
+  const maxLimit = Math.max(MIN_BAND_WIDTH_HZ, toFiniteNumber(maxHz, 20000));
+  let safeLow = toFiniteNumber(low, 0);
+  let safeHigh = toFiniteNumber(high, safeLow + 500);
+
+  safeLow = clamp(safeLow, 0, Math.max(0, maxLimit - MIN_BAND_WIDTH_HZ));
+  safeHigh = clamp(safeHigh, safeLow + MIN_BAND_WIDTH_HZ, maxLimit);
+
+  // If user pushes low to the ceiling, pin to a valid last band [max-1, max].
+  if (safeHigh <= safeLow) {
+    safeLow = Math.max(0, maxLimit - MIN_BAND_WIDTH_HZ);
+    safeHigh = maxLimit;
+  }
+
+  return { low: safeLow, high: safeHigh };
+}
+
 const DEFAULT_BANDS = [
   { id: 'b1', name: 'Band 1', low: 80, high: 180, gain: 1 },
   { id: 'b2', name: 'Band 2', low: 180, high: 300, gain: 1 },
@@ -13,15 +37,33 @@ const DEFAULT_BANDS = [
 
 const GenericBandBuilder = ({ bands, setBands, maxHz = 20000, isEditable = true }) => {
   const safeBands = bands?.length ? bands : DEFAULT_BANDS;
+  const [draftHz, setDraftHz] = React.useState({});
+
+  React.useEffect(() => {
+    const bandIds = new Set(safeBands.map((b) => b.id));
+    setDraftHz((prev) => {
+      const next = {};
+      Object.keys(prev).forEach((k) => {
+        const id = k.split(':')[0];
+        if (bandIds.has(id)) next[k] = prev[k];
+      });
+      return next;
+    });
+  }, [safeBands]);
 
   const addBand = () => {
     if (!isEditable) return;
     const nextIdx = safeBands.length + 1;
     const id = `b${Date.now()}`;
-    const lastHigh = safeBands[safeBands.length - 1]?.high ?? 2000;
+    const maxLimit = Math.max(MIN_BAND_WIDTH_HZ, toFiniteNumber(maxHz, 20000));
+    const lastHigh = toFiniteNumber(safeBands[safeBands.length - 1]?.high, 2000);
+    const proposedLow = clamp(lastHigh, 0, Math.max(0, maxLimit - MIN_BAND_WIDTH_HZ));
+    const proposedHigh = Math.min(maxLimit, proposedLow + 500);
+    const range = normalizeBandRange(proposedLow, proposedHigh, maxLimit);
+
     setBands([
       ...safeBands,
-      { id, name: `Band ${nextIdx}`, low: clamp(lastHigh, 0, maxHz), high: clamp(lastHigh + 500, 0, maxHz), gain: 1 }
+      { id, name: `Band ${nextIdx}`, low: range.low, high: range.high, gain: 1 }
     ]);
   };
 
@@ -34,18 +76,51 @@ const GenericBandBuilder = ({ bands, setBands, maxHz = 20000, isEditable = true 
     setBands(
       safeBands.map((b) => {
         if (b.id !== id) return b;
-        const low = patch.low != null ? Number(patch.low) : Number(b.low);
-        const high = patch.high != null ? Number(patch.high) : Number(b.high);
-        const gain = patch.gain != null ? Number(patch.gain) : Number(b.gain);
+        const lowInput = patch.low != null ? toFiniteNumber(patch.low, Number(b.low)) : Number(b.low);
+        const highInput = patch.high != null ? toFiniteNumber(patch.high, Number(b.high)) : Number(b.high);
+        const gain = patch.gain != null ? toFiniteNumber(patch.gain, Number(b.gain)) : Number(b.gain);
+        const range = normalizeBandRange(lowInput, highInput, maxHz);
         return {
           ...b,
           ...patch,
-          low: clamp(low, 0, maxHz),
-          high: clamp(Math.max(high, low + 1), 0, maxHz),
+          low: range.low,
+          high: range.high,
           gain: clamp(gain, 0, 2)
         };
       })
     );
+  };
+
+  const draftKey = (id, field) => `${id}:${field}`;
+
+  const setDraft = (id, field, value) => {
+    const k = draftKey(id, field);
+    setDraftHz((prev) => ({ ...prev, [k]: value }));
+  };
+
+  const clearDraft = (id, field) => {
+    const k = draftKey(id, field);
+    setDraftHz((prev) => {
+      if (!(k in prev)) return prev;
+      const next = { ...prev };
+      delete next[k];
+      return next;
+    });
+  };
+
+  const commitDraftHz = (id, field, fallbackValue) => {
+    const k = draftKey(id, field);
+    const raw = draftHz[k];
+    if (raw == null) return;
+
+    const parsed = Number(raw);
+    update(id, { [field]: Number.isFinite(parsed) ? parsed : fallbackValue });
+    clearDraft(id, field);
+  };
+
+  const getDisplayHz = (band, field) => {
+    const k = draftKey(band.id, field);
+    return k in draftHz ? draftHz[k] : String(band[field]);
   };
 
   const title = isEditable ? 'Custom Bands' : 'Band Controls';
@@ -74,11 +149,35 @@ const GenericBandBuilder = ({ bands, setBands, maxHz = 20000, isEditable = true 
             <div className="generic-band-grid">
               <label className="field">
                 <span>Low (Hz)</span>
-                <input type="number" value={b.low} min={0} max={maxHz} onChange={(e) => update(b.id, { low: e.target.value })} />
+                <input
+                  type="number"
+                  value={getDisplayHz(b, 'low')}
+                  min={0}
+                  max={maxHz}
+                  onChange={(e) => setDraft(b.id, 'low', e.target.value)}
+                  onBlur={() => commitDraftHz(b.id, 'low', Number(b.low))}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.currentTarget.blur();
+                    }
+                  }}
+                />
               </label>
               <label className="field">
                 <span>High (Hz)</span>
-                <input type="number" value={b.high} min={0} max={maxHz} onChange={(e) => update(b.id, { high: e.target.value })} />
+                <input
+                  type="number"
+                  value={getDisplayHz(b, 'high')}
+                  min={0}
+                  max={maxHz}
+                  onChange={(e) => setDraft(b.id, 'high', e.target.value)}
+                  onBlur={() => commitDraftHz(b.id, 'high', Number(b.high))}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.currentTarget.blur();
+                    }
+                  }}
+                />
               </label>
               <label className="field gain-field">
                 <span>Gain</span>

@@ -49,6 +49,9 @@ class ECGModeService:
         
         # Build frequency ranges from component names
         freq_ranges = self._get_frequency_ranges(component_names)
+
+        # Compute input analysis for accurate A/B visualization.
+        input_spectrogram = self._compute_spectrogram_data(signal)
         
         # Apply equalization
         equalized_signal = self._apply_ecg_equalization(signal, freq_ranges, gains)
@@ -62,6 +65,7 @@ class ECGModeService:
         return {
             "signal": equalized_signal.tolist(),
             "fft": output_fft,
+            "input_spectrogram": input_spectrogram,
             "spectrogram": output_spectrogram,
             "processing_time": processing_time
         }
@@ -117,14 +121,31 @@ class ECGModeService:
     def _compute_spectrogram_data(self, signal: np.ndarray) -> dict:
         """Compute spectrogram for output signal"""
         from scipy.signal import spectrogram
-        # Use shorter window for better time resolution
-        f, t, Sxx = spectrogram(signal, self.sample_rate, nperseg=256)
-        Sxx_db = 10 * np.log10(Sxx + 1e-10)
+        # ECG favors shorter windows while still using standard relative dB conversion.
+        f, t, Sxx = spectrogram(
+            signal,
+            self.sample_rate,
+            window='hann',
+            nperseg=256,
+            noverlap=192,
+            scaling='spectrum',
+            mode='psd'
+        )
+
+        ref = max(float(np.max(Sxx)), 1e-12)
+        Sxx_db = 10 * np.log10(np.maximum(Sxx, 1e-12) / ref)
+        Sxx_db = np.maximum(Sxx_db, -80.0)
+
+        freq_step = max(1, len(f) // 100)
+        time_step = max(1, len(t) // 100)
+        f_ds = f[::freq_step]
+        t_ds = t[::time_step]
+        Sxx_ds = Sxx_db[::freq_step, ::time_step]
         
         return {
-            "frequencies": f.tolist(),
-            "times": t.tolist(),
-            "magnitude": (Sxx_db[::max(1, len(Sxx_db)//100), ::max(1, len(Sxx_db[0])//100)]).tolist()
+            "frequencies": f_ds.tolist(),
+            "times": t_ds.tolist(),
+            "magnitude": Sxx_ds.tolist()
         }
 
 

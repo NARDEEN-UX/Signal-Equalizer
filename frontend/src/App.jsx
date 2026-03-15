@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import AudioUploader from './components/AudioUploader';
 import WaveformViewer from './components/WaveformViewer';
 import SliderGroup from './components/SliderGroup';
 import EqualizerCurve from './components/EqualizerCurve';
@@ -217,8 +216,8 @@ function App() {
   const signalData = uploadedSignal && backendSignalData ? backendSignalData : mockSignalData;
 
   const sharedSpectrogramMax = useMemo(() => {
-    const spec = signalData?.spectrogram;
-    if (!spec?.in || !spec?.out) return null;
+    const specIn = signalData?.spectrogram?.in;
+    if (!specIn) return null;
     let maxVal = 1e-8;
 
     const scan = (matrix) => {
@@ -237,20 +236,18 @@ function App() {
       }
     };
 
-    scan(spec.in);
-    scan(spec.out);
+    scan(specIn);
 
     if (!(maxVal > 0)) {
       return null;
     }
 
     return maxVal;
-  }, [signalData?.spectrogram]);
+  }, [signalData?.spectrogram?.in]);
 
   const sharedWaveformMax = useMemo(() => {
     const inSignal = signalData?.input_signal;
-    const outSignal = signalData?.output_signal;
-    if (!Array.isArray(inSignal) && !Array.isArray(outSignal)) return null;
+    if (!Array.isArray(inSignal)) return null;
 
     let maxVal = 1e-8;
     const scan = (arr) => {
@@ -262,9 +259,8 @@ function App() {
     };
 
     scan(inSignal);
-    scan(outSignal);
     return maxVal;
-  }, [signalData?.input_signal, signalData?.output_signal]);
+  }, [signalData?.input_signal]);
 
   useEffect(() => {
     if (signalData?.time?.length) {
@@ -846,7 +842,6 @@ function App() {
           >
             <span className="btn-icon">📁</span> Mode Signals
           </button>
-          <AudioUploader onFileSelect={handleAudioFileSelect} onSettingsSelect={handleSettingsSelect} currentFileName={audioFile?.name} />
           <button type="button" className="btn btn-export" onClick={handleExport}>
             <span className="btn-icon">↓</span> Export
           </button>

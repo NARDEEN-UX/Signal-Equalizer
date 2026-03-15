@@ -53,6 +53,7 @@ async def process_music(request: MusicModeRequest):
             "status": "success",
             "output_signal": result["signal"],
             "output_fft": result["fft"],
+            "input_spectrogram": result.get("input_spectrogram"),
             "output_spectrogram": result["spectrogram"],
             "processing_time": result["processing_time"]
         }
