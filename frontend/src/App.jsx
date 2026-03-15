@@ -103,7 +103,12 @@ function App() {
   const [playbackRate, setPlaybackRate] = useState(1);
   const [volume, setVolume] = useState(1);
   const [modeModalOpen, setModeModalOpen] = useState(false);
-  const [genericBands, setGenericBands] = useState([]);
+  const [genericBands, setGenericBands] = useState([
+    { id: 'b1', name: 'Band 1', low: 80, high: 180, gain: 1 },
+    { id: 'b2', name: 'Band 2', low: 180, high: 300, gain: 1 },
+    { id: 'b3', name: 'Band 3', low: 300, high: 3000, gain: 1 },
+    { id: 'b4', name: 'Band 4', low: 3000, high: 8000, gain: 1 }
+  ]);
   const [modeFreqConfig, setModeFreqConfig] = useState({
     music: [
       { id: 'music-0', name: 'Bass', low: 20, high: 250, gain: 1 },
