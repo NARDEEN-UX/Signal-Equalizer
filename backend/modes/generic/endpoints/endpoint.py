@@ -2,13 +2,18 @@
 Generic Mode Endpoints
 """
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, UploadFile, File
 from typing import List
 import numpy as np
 import json
 import os
+import io
+import soundfile as sf
+from datetime import datetime
 from ..schemas.schema import GenericModeRequest, GenericModeResponse, GenericSettingsSchema
 from ..services.generic_service import generic_service
+
+UPLOADS_DIR = os.path.join(os.path.dirname(__file__), '../../../uploads/generic')
 
 router = APIRouter()
 
