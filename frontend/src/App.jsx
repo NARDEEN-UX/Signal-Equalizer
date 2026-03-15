@@ -310,6 +310,11 @@ function App() {
       audioCtxRef.current = ctx;
     }
 
+    // Resume context if suspended
+    if (ctx.state === 'suspended') {
+      ctx.resume();
+    }
+
     stopAudio();
 
     const dt = signalData.time[1] - signalData.time[0] || 1 / 44100;
@@ -326,6 +331,13 @@ function App() {
     gainNode.gain.value = volume;
 
     source.connect(gainNode).connect(ctx.destination);
+    
+    // Add ended event listener to stop playback when audio finishes
+    source.onended = () => {
+      setIsPlaying(false);
+      setPlaybackTime(0);
+    };
+
     source.start(0);
 
     sourceRef.current = source;
@@ -334,14 +346,12 @@ function App() {
     durationRef.current = signalData.time[signalData.time.length - 1];
 
     const tick = () => {
-      if (!audioCtxRef.current || !isPlaying) return;
+      if (!audioCtxRef.current || !sourceRef.current) return;
       const elapsed = (audioCtxRef.current.currentTime - startTimeRef.current) * playbackRate;
       const clamped = Math.min(elapsed, durationRef.current);
       setPlaybackTime(clamped);
       if (elapsed < durationRef.current) {
         rafRef.current = requestAnimationFrame(tick);
-      } else {
-        setIsPlaying(false);
       }
     };
 
@@ -351,8 +361,12 @@ function App() {
 
   const handlePause = () => {
     setIsPlaying(false);
-    if (audioCtxRef.current) {
-      audioCtxRef.current.suspend();
+    if (sourceRef.current) {
+      try {
+        sourceRef.current.stop();
+      } catch {
+        // Already stopped
+      }
     }
   };
 
