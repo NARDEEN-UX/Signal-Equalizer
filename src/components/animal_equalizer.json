@@ -1,0 +1,44 @@
+{
+  "bands": [
+    {
+      "name": "Cat",
+      "ranges": [
+        {
+          "low": 500,
+          "high": 1900
+        }
+      ],
+      "factor": 1
+    },
+    {
+      "name": "Frog",
+      "ranges": [
+        {
+          "low": 1700,
+          "high": 2500
+        }
+      ],
+      "factor": 1
+    },
+    {
+      "name": "Bird",
+      "ranges": [
+        {
+          "low": 2300,
+          "high": 5900
+        }
+      ],
+      "factor": 1
+    },
+    {
+      "name": "Wolf",
+      "ranges": [
+        {
+          "low": 300,
+          "high": 1650
+        }
+      ],
+      "factor": 1
+    }
+  ]
+}

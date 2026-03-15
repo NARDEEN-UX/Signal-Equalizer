@@ -1,0 +1,245 @@
+.home {
+  background: linear-gradient(135deg, #0a0e13 0%, #1a1f2e 100%);
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 20px;
+  overflow: hidden;
+  position: relative;
+}
+
+.home::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: radial-gradient(circle at 20% 50%, rgba(138, 43, 226, 0.1) 0%, transparent 50%),
+              radial-gradient(circle at 80% 80%, rgba(75, 0, 130, 0.1) 0%, transparent 50%);
+  pointer-events: none;
+}
+
+.home-container {
+  max-width: 1200px;
+  width: 100%;
+  position: relative;
+  z-index: 1;
+}
+
+.home-header {
+  text-align: center;
+  margin-bottom: 60px;
+  animation: fadeInDown 0.8s ease-out;
+}
+
+.home-title {
+  font-size: 56px;
+  font-weight: 700;
+  background: linear-gradient(135deg, #a46bf0ff 0%, #6ac1e4ff 50%, #c5d145ff 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  margin-bottom: 15px;
+  letter-spacing: -1px;
+}
+
+.home-subtitle {
+  font-size: 20px;
+  color: #8892b0;
+  font-weight: 300;
+  letter-spacing: 0.5px;
+}
+
+.cards-container {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 40px;
+  margin-bottom: 40px;
+  padding: 0 20px;
+}
+
+.signal-card {
+  background: linear-gradient(145deg, #161b22 0%, #0d1117 100%);
+  border-radius: 20px;
+  padding: 40px 30px;
+  cursor: pointer;
+  transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  border: 2px solid transparent;
+  position: relative;
+  overflow: hidden;
+  animation: fadeInUp 0.8s ease-out;
+}
+
+.signal-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(135deg, transparent 0%, rgba(255, 255, 255, 0.03) 100%);
+  opacity: 0;
+  transition: opacity 0.4s ease;
+}
+
+.signal-card:hover::before {
+  opacity: 1;
+}
+
+.medical-card {
+  border-color: #e790f6;
+}
+
+.medical-card:hover {
+  transform: translateY(-10px);
+  box-shadow: 0 20px 60px rgba(231, 144, 246, 0.3);
+  border-color: #e790f6;
+}
+
+.medical-card .card-icon {
+  color: #e790f6;
+}
+
+.sound-card {
+  border-color: #6ac1e4;
+}
+
+.sound-card:hover {
+  transform: translateY(-10px);
+  box-shadow: 0 20px 60px rgba(106, 193, 228, 0.3);
+  border-color: #6ac1e4;
+}
+
+.sound-card .card-icon {
+  color: #6ac1e4;
+}
+
+.card-icon {
+  margin-bottom: 25px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 80px;
+  transition: transform 0.4s ease;
+}
+
+.signal-card:hover .card-icon {
+  transform: scale(1.1) rotate(5deg);
+}
+
+.card-title {
+  font-size: 28px;
+  font-weight: 600;
+  color: #ffffff;
+  margin-bottom: 15px;
+  text-align: center;
+}
+
+.card-description {
+  font-size: 16px;
+  color: #8892b0;
+  text-align: center;
+  line-height: 1.6;
+  margin-bottom: 25px;
+  min-height: 50px;
+}
+
+.card-features {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.feature-tag {
+  background: rgba(255, 255, 255, 0.05);
+  color: #c9d1d9;
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 500;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  transition: all 0.3s ease;
+}
+
+.signal-card:hover .feature-tag {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.home-footer {
+  text-align: center;
+  margin-top: 40px;
+  animation: fadeIn 1s ease-out 0.5s both;
+}
+
+.home-footer p {
+  color: #6e7681;
+  font-size: 14px;
+  font-weight: 300;
+}
+
+/* Animations */
+@keyframes fadeInDown {
+  from {
+    opacity: 0;
+    transform: translateY(-30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .home-title {
+    font-size: 36px;
+  }
+
+  .home-subtitle {
+    font-size: 16px;
+  }
+
+  .cards-container {
+    grid-template-columns: 1fr;
+    gap: 30px;
+  }
+
+  .signal-card {
+    padding: 30px 20px;
+  }
+}
+
+/* Keep old button styles for compatibility if needed elsewhere */
+button {
+  background-color: #800080;
+  color: white;
+  border: none;
+  padding: 15px 30px;
+  font-size: 20px;
+  border-radius: 10px;
+  cursor: pointer;
+}
