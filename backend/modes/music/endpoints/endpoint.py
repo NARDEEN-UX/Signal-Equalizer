@@ -45,9 +45,20 @@ async def process_music(request: MusicModeRequest):
         
         if len(request.gains) != len(request.instrument_names):
             raise ValueError("Number of gains must match number of instruments")
+
+        print("[wavelet] backend received level gains:", request.wavelet_gains)
         
         # Process signal
-        result = music_service.process_signal(signal, request.gains, request.instrument_names, sample_rate=request.sample_rate)
+        result = music_service.process_signal(
+            signal,
+            request.gains,
+            request.instrument_names,
+            sample_rate=request.sample_rate,
+            wavelet=request.wavelet,
+            wavelet_level=request.wavelet_level,
+            sliders_wavelet=request.sliders_wavelet,
+            wavelet_gains=request.wavelet_gains
+        )
         
         return {
             "status": "success",
@@ -56,6 +67,8 @@ async def process_music(request: MusicModeRequest):
             "output_fft": result["fft"],
             "input_spectrogram": result.get("input_spectrogram"),
             "output_spectrogram": result["spectrogram"],
+            "input_coeffs": result.get("input_coeffs"),
+            "output_coeffs": result.get("output_coeffs"),
             "processing_time": result["processing_time"]
         }
     except Exception as e:

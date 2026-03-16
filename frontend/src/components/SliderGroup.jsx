@@ -2,7 +2,11 @@ import React from 'react';
 
 const SliderGroup = ({ count, labels, values, onChange }) => {
   const handleChange = (index, newVal) => {
-    const updated = [...values];
+    const base = Array.from({ length: count }, (_, i) => {
+      const n = Number(values?.[i]);
+      return Number.isFinite(n) ? n : 1;
+    });
+    const updated = [...base];
     updated[index] = parseFloat(newVal);
     onChange(updated);
   };
@@ -10,12 +14,14 @@ const SliderGroup = ({ count, labels, values, onChange }) => {
   return (
     <div className="slider-group">
       {Array.from({ length: count }).map((_, i) => {
-        const val = values[i];
+        const n = Number(values?.[i]);
+        const val = Number.isFinite(n) ? n : 1;
         const pct = ((val - 0) / 2) * 100;
+        const label = labels?.[i] || `Band ${i + 1}`;
         return (
           <div key={i} className="slider-item">
             <div className="slider-row">
-              <label>{labels[i]}</label>
+              <label>{label}</label>
               <span className="slider-value">{val.toFixed(2)}×</span>
             </div>
             <div className="slider-track-wrap" style={{ '--val': val }}>
@@ -27,7 +33,7 @@ const SliderGroup = ({ count, labels, values, onChange }) => {
                 step="0.01"
                 value={val}
                 onChange={(e) => handleChange(i, e.target.value)}
-                aria-label={labels[i]}
+                aria-label={label}
               />
             </div>
           </div>

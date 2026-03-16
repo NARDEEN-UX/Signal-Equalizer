@@ -31,8 +31,8 @@
     }
   ],
   "sliders_freq": [1.0, 1.0, 1.0, 1.0],
-  "sliders_wavelet": [1.0, 1.0, 1.0, 1.0],
-  "wavelet": "db4",
+  "sliders_wavelet": [1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
+  "wavelet": "db6",
   "wavelet_level": 6,
   "sample_rate": 500,
   "description": "Default ECG mode configuration with 4 cardiac components"

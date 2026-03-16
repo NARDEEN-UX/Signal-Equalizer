@@ -286,10 +286,57 @@ function computeSpectrogram(signal, fs, winSize = 256, hop = 128) {
   return { t: times, f: freqs, mag: mags };
 }
 
-function pseudoWaveletEnergy(levels, gains) {
-  const base = Array.from({ length: levels }, (_, i) => 0.3 + 0.15 * (levels - i));
-  const out = base.map((v, i) => v * toNumberOr(gains[i], 1));
-  return { in: base, out };
+const MUSIC_LEVEL_MAP = {
+  bass: [5, 6],
+  piano: [3, 4],
+  vocals: [3, 4, 5],
+  violin: [3, 4]
+};
+
+function makeLevelLabels(levels) {
+  return Array.from({ length: levels }, (_, i) => `L${i + 1}`);
+}
+
+function downsample(arr, maxPoints = 320) {
+  if (!Array.isArray(arr) || arr.length <= maxPoints) return arr || [];
+  const step = Math.max(1, Math.floor(arr.length / maxPoints));
+  const out = [];
+  for (let i = 0; i < arr.length; i += step) out.push(arr[i]);
+  return out;
+}
+
+function computePseudoDetailCoeffs(signal, levels = 6) {
+  if (!Array.isArray(signal) || !signal.length) return Array.from({ length: levels }, () => []);
+  const coeffs = [];
+  for (let lv = 1; lv <= levels; lv += 1) {
+    const step = 2 ** lv;
+    const half = Math.max(1, Math.floor(step / 2));
+    const detail = [];
+    for (let i = 0; i < signal.length; i += step) {
+      const a = Number(signal[i] || 0);
+      const b = Number(signal[Math.min(signal.length - 1, i + half)] || 0);
+      detail.push(a - b);
+    }
+    coeffs.push(downsample(detail));
+  }
+  return coeffs;
+}
+
+function computeMusicLevelGains(levels, bands, gains) {
+  const levelGains = Array.from({ length: levels }, () => 1);
+  for (let i = 0; i < (bands?.length || 0); i += 1) {
+    const name = String(bands[i]?.name || '').trim().toLowerCase();
+    if (name === 'others') continue; // Keep neutral by spec.
+    const mapped = MUSIC_LEVEL_MAP[name] || [];
+    const g = clamp(toNumberOr(gains[i], 1), 0, 2);
+    for (let j = 0; j < mapped.length; j += 1) {
+      const lv = mapped[j];
+      if (lv >= 1 && lv <= levels) {
+        levelGains[lv - 1] *= g;
+      }
+    }
+  }
+  return levelGains;
 }
 
 /**
@@ -423,27 +470,21 @@ export function useMockProcessing({
       specOut = pseudoSpectrogram(specF.length, specT.length, tone);
     }
 
-    // Wavelet domain energy: derive a simple multi-band energy profile from the
-    // current signal so that uploads affect the bars.
-    let w;
-    if (input.mix && input.mix.length > 0) {
-      const levels = 6;
-      const baseIn = computeLevelRms(input.mix, levels);
-      const baseOut = computeLevelRms(outputSignal, levels);
-      const maxIn = baseIn.reduce((m, v) => (v > m ? v : m), 1e-6);
-      const maxOut = baseOut.reduce((m, v) => (v > m ? v : m), 1e-6);
+    // Wavelet coefficient arrays for L1..L6. Music mode applies instrument-to-level mapping.
+    const levelCount = 6;
+    const inputCoeffs = computePseudoDetailCoeffs(input.mix || [], levelCount);
+    let outputCoeffs = inputCoeffs.map((arr) => arr.map((v) => v));
 
-      const normIn = baseIn.map((v) => v / maxIn);
-      const normOut = baseOut.map((v, i) => {
-        const waveletGain = toNumberOr(waveletSliders[i], 1);
-        const baseline = maxIn > 0 ? maxIn : maxOut;
-        return (v / (baseline || 1e-6)) * waveletGain;
-      });
-
-      w = { in: normIn, out: normOut };
-    } else {
-      w = pseudoWaveletEnergy(6, waveletSliders);
+    if (modeId === 'music') {
+      const levelGains = computeMusicLevelGains(levelCount, genericBands || [], clampedGains);
+      outputCoeffs = inputCoeffs.map((arr, i) => arr.map((v) => v * levelGains[i]));
     }
+
+    const explicitLevelGains = Array.from({ length: levelCount }, (_, i) => {
+      const g = toNumberOr(waveletSliders?.[i], 1);
+      return clamp(g, 0, 2);
+    });
+    outputCoeffs = outputCoeffs.map((arr, i) => arr.map((v) => v * explicitLevelGains[i]));
 
     setData({
       time: input.time,
@@ -451,7 +492,12 @@ export function useMockProcessing({
       output_signal: outputSignal,
       fft: { freq: fftFreq, in: fftIn, out: fftOut },
       spectrogram: { t: specT, f: specF, in: specIn, out: specOut },
-      wavelet: { levels: Array.from({ length: 6 }, (_, i) => i), in: w.in, out: w.out }
+      wavelet: {
+        wavelet: waveletType,
+        levels: makeLevelLabels(levelCount),
+        input_coeffs: inputCoeffs,
+        output_coeffs: outputCoeffs
+      }
     });
   }, [freqSliders, waveletSliders, modeId, genericBands, waveletType, input, baseFft, baseSpec]);
 

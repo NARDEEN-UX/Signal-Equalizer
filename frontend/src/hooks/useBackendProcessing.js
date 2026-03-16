@@ -1,344 +1,160 @@
-/**
- * useBackendProcessing Hook
- * Handles communication with backend for signal processing
- * Supports all modes including 5-band animal mode
- * 
- * Updated: 2024
- * Version: 2.0
- */
+import { useEffect, useState } from 'react';
+import {
+  processGenericMode,
+  processMusicMode,
+  processAnimalsMode,
+  processHumansMode,
+  processECGMode
+} from '../api';
 
-import { useCallback, useState, useEffect } from 'react';
+const toNum = (v, fallback = 0) => {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : fallback;
+};
 
-export const useBackendProcessing = (modeFreqConfig) => {
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-  const [processedData, setProcessedData] = useState(null);
+const makeTime = (length, sampleRate) => {
+  const sr = Math.max(1, toNum(sampleRate, 44100));
+  return Array.from({ length }, (_, i) => i / sr);
+};
 
-  /**
-   * Extract gains from modeFreqConfig bands
-   * Works with any number of bands (3, 4, 5, etc.)
-   * 
-   * @returns {Array} Array of gain values
-   */
-  const extractGains = useCallback(() => {
-    if (!modeFreqConfig?.bands || !Array.isArray(modeFreqConfig.bands)) {
-      return [];
+const MUSIC_LEVEL_MAP = {
+  bass: ['L5', 'L6'],
+  piano: ['L3', 'L4'],
+  vocals: ['L3', 'L4', 'L5'],
+  violin: ['L3', 'L4']
+};
+
+const buildMusicWaveletGains = (bands) => {
+  const gains = { L1: 1, L2: 1, L3: 1, L4: 1, L5: 1, L6: 1 };
+  if (!Array.isArray(bands)) return gains;
+
+  for (let i = 0; i < bands.length; i += 1) {
+    const name = String(bands[i]?.name || '').trim().toLowerCase();
+    if (name === 'others') continue;
+    const mapped = MUSIC_LEVEL_MAP[name] || [];
+    const g = Math.max(0, Math.min(2, toNum(bands[i]?.gain, 1)));
+    for (let j = 0; j < mapped.length; j += 1) {
+      const level = mapped[j];
+      gains[level] *= g;
     }
+  }
 
-    return modeFreqConfig.bands.map((band) => band.gain || 1.0);
-  }, [modeFreqConfig]);
+  return gains;
+};
 
-  /**
-   * Extract band names from modeFreqConfig
-   * Works with any number of bands
-   * 
-   * @returns {Array} Array of band name strings
-   */
-  const extractBandNames = useCallback(() => {
-    if (!modeFreqConfig?.bands || !Array.isArray(modeFreqConfig.bands)) {
-      return [];
-    }
+const normalizeResponse = (apiData, inputSignal, sampleRate) => {
+  const outputSignal = Array.isArray(apiData?.output_signal) ? apiData.output_signal : inputSignal;
 
-    return modeFreqConfig.bands.map((band) => band.name || band.id);
-  }, [modeFreqConfig]);
+  const inFft = apiData?.input_fft || {};
+  const outFft = apiData?.output_fft || {};
 
-  /**
-   * Extract frequency information from bands
-   * Returns array of {id, name, low, high, gain} objects
-   * 
-   * @returns {Array} Array of frequency band objects
-   */
-  const extractFrequencyBands = useCallback(() => {
-    if (!modeFreqConfig?.bands || !Array.isArray(modeFreqConfig.bands)) {
-      return [];
-    }
+  const inSpec = apiData?.input_spectrogram || {};
+  const outSpec = apiData?.output_spectrogram || {};
 
-    return modeFreqConfig.bands.map((band) => ({
-      id: band.id,
-      name: band.name,
-      low: band.low,
-      high: band.high,
-      gain: band.gain || 1.0
-    }));
-  }, [modeFreqConfig]);
-
-  /**
-   * Send audio to backend for processing
-   * 
-   * @param {AudioBuffer | Float32Array} audioData - Input audio data
-   * @param {string} mode - Processing mode (music, animals, human, ecg, generic)
-   * @returns {Promise} Processing result
-   */
-  const processAudio = useCallback(
-    async (audioData, mode = 'animals') => {
-      setLoading(true);
-      setError(null);
-
-      try {
-        // Validate inputs
-        if (!audioData) {
-          throw new Error('No audio data provided');
-        }
-
-        if (!modeFreqConfig) {
-          throw new Error('No mode configuration available');
-        }
-
-        // Convert AudioBuffer to array if needed
-        let audioArray = audioData;
-        if (audioData instanceof AudioBuffer) {
-          audioArray = audioData.getChannelData(0);
-        }
-
-        // Prepare request payload
-        const gains = extractGains();
-        const bands = extractFrequencyBands();
-
-        const payload = {
-          mode: mode,
-          audio: Array.from(audioArray),
-          gains: gains,
-          bands: bands,
-          sampleRate: modeFreqConfig.sample_rate || 44100
-        };
-
-        // Send to backend
-        const response = await fetch('/api/process', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify(payload)
-        });
-
-        if (!response.ok) {
-          throw new Error(`Backend error: ${response.statusText}`);
-        }
-
-        const result = await response.json();
-
-        // Store processed data
-        setProcessedData(result);
-
-        return result;
-      } catch (err) {
-        setError(err.message);
-        console.error('Backend processing error:', err);
-        throw err;
-      } finally {
-        setLoading(false);
-      }
-    },
-    [modeFreqConfig, extractGains, extractFrequencyBands]
-  );
-
-  /**
-   * Apply band-specific processing
-   * 
-   * @param {string} bandName - Name of band to process
-   * @param {AudioBuffer} audioData - Input audio
-   * @returns {Promise} Band-specific result
-   */
-  const processBand = useCallback(
-    async (bandName, audioData) => {
-      setLoading(true);
-      setError(null);
-
-      try {
-        const band = modeFreqConfig?.bands?.find(
-          (b) => b.name === bandName || b.id === bandName
-        );
-
-        if (!band) {
-          throw new Error(`Band not found: ${bandName}`);
-        }
-
-        // Convert audio if needed
-        let audioArray = audioData;
-        if (audioData instanceof AudioBuffer) {
-          audioArray = audioData.getChannelData(0);
-        }
-
-        const payload = {
-          mode: modeFreqConfig.mode,
-          band: {
-            id: band.id,
-            name: band.name,
-            low: band.low,
-            high: band.high,
-            gain: band.gain
-          },
-          audio: Array.from(audioArray),
-          sampleRate: modeFreqConfig.sample_rate || 44100
-        };
-
-        const response = await fetch('/api/process-band', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify(payload)
-        });
-
-        if (!response.ok) {
-          throw new Error(`Backend error: ${response.statusText}`);
-        }
-
-        return await response.json();
-      } catch (err) {
-        setError(err.message);
-        console.error('Band processing error:', err);
-        throw err;
-      } finally {
-        setLoading(false);
-      }
-    },
-    [modeFreqConfig]
-  );
-
-  /**
-   * Get band information from backend
-   * 
-   * @param {string} mode - Mode identifier
-   * @returns {Promise} Band information
-   */
-  const getBandInfo = useCallback(async (mode = 'animals') => {
-    try {
-      const response = await fetch(`/api/modes/${mode}/info`);
-
-      if (!response.ok) {
-        throw new Error(`Failed to fetch band info: ${response.statusText}`);
-      }
-
-      return await response.json();
-    } catch (err) {
-      console.error('Error fetching band info:', err);
-      throw err;
-    }
-  }, []);
-
-  /**
-   * Get frequency statistics for audio
-   * 
-   * @param {AudioBuffer | Float32Array} audioData - Input audio
-   * @returns {Promise} Frequency statistics
-   */
-  const getFrequencyStats = useCallback(
-    async (audioData) => {
-      setLoading(true);
-      setError(null);
-
-      try {
-        // Convert audio if needed
-        let audioArray = audioData;
-        if (audioData instanceof AudioBuffer) {
-          audioArray = audioData.getChannelData(0);
-        }
-
-        const payload = {
-          mode: modeFreqConfig?.mode || 'animals',
-          audio: Array.from(audioArray),
-          sampleRate: modeFreqConfig?.sample_rate || 44100
-        };
-
-        const response = await fetch('/api/frequency-stats', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify(payload)
-        });
-
-        if (!response.ok) {
-          throw new Error(`Failed to get stats: ${response.statusText}`);
-        }
-
-        return await response.json();
-      } catch (err) {
-        setError(err.message);
-        console.error('Error getting frequency stats:', err);
-        throw err;
-      } finally {
-        setLoading(false);
-      }
-    },
-    [modeFreqConfig]
-  );
-
-  /**
-   * Validate band configuration
-   * Ensures band array matches slider arrays
-   * 
-   * @returns {Object} Validation result {valid: boolean, issues: string[]}
-   */
-  const validateConfig = useCallback(() => {
-    const issues = [];
-
-    if (!modeFreqConfig) {
-      issues.push('No mode configuration available');
-      return { valid: false, issues };
-    }
-
-    const bandCount = modeFreqConfig.bands?.length || 0;
-    const freqCount = modeFreqConfig.sliders_freq?.length || 0;
-    const waveletCount = modeFreqConfig.sliders_wavelet?.length || 0;
-
-    if (bandCount === 0) {
-      issues.push('No bands defined');
-    }
-
-    if (bandCount !== freqCount) {
-      issues.push(
-        `Band count (${bandCount}) != sliders_freq count (${freqCount})`
-      );
-    }
-
-    if (freqCount !== waveletCount) {
-      issues.push(
-        `sliders_freq count (${freqCount}) != sliders_wavelet count (${waveletCount})`
-      );
-    }
-
-    // Validate each band
-    modeFreqConfig.bands?.forEach((band, idx) => {
-      if (!band.id) issues.push(`Band ${idx} missing id`);
-      if (!band.name) issues.push(`Band ${idx} missing name`);
-      if (typeof band.low !== 'number') issues.push(`Band ${idx} invalid low frequency`);
-      if (typeof band.high !== 'number') issues.push(`Band ${idx} invalid high frequency`);
-      if (band.low >= band.high) {
-        issues.push(`Band ${idx} low frequency >= high frequency`);
-      }
-    });
-
-    return {
-      valid: issues.length === 0,
-      issues,
-      bandCount,
-      freqCount,
-      waveletCount
-    };
-  }, [modeFreqConfig]);
+  const inputCoeffs = Array.isArray(apiData?.input_coeffs) ? apiData.input_coeffs : [];
+  const outputCoeffs = Array.isArray(apiData?.output_coeffs) ? apiData.output_coeffs : [];
+  const levelCount = Math.min(inputCoeffs.length || 0, outputCoeffs.length || 0);
 
   return {
-    // Functions
-    processAudio,
-    processBand,
-    getBandInfo,
-    getFrequencyStats,
-    extractGains,
-    extractBandNames,
-    extractFrequencyBands,
-    validateConfig,
-    
-    // State
-    loading,
-    error,
-    processedData,
-    
-    // Methods to clear state
-    clearError: () => setError(null),
-    clearProcessedData: () => setProcessedData(null)
+    time: makeTime(outputSignal.length, sampleRate),
+    input_signal: inputSignal,
+    output_signal: outputSignal,
+    fft: {
+      freq: Array.isArray(outFft?.frequencies) ? outFft.frequencies : [],
+      in: Array.isArray(inFft?.magnitudes) ? inFft.magnitudes : [],
+      out: Array.isArray(outFft?.magnitudes) ? outFft.magnitudes : []
+    },
+    spectrogram: {
+      t: Array.isArray(outSpec?.times) ? outSpec.times : [],
+      f: Array.isArray(outSpec?.frequencies) ? outSpec.frequencies : [],
+      in: Array.isArray(inSpec?.magnitude) ? inSpec.magnitude : [],
+      out: Array.isArray(outSpec?.magnitude) ? outSpec.magnitude : []
+    },
+    wavelet: {
+      levels: Array.from({ length: levelCount }, (_, i) => `L${i + 1}`),
+      input_coeffs: inputCoeffs,
+      output_coeffs: outputCoeffs
+    }
   };
+};
+
+export const useBackendProcessing = ({
+  modeId,
+  genericBands,
+  sampleRate,
+  signalData,
+  useFallback = true,
+  waveletType = 'db8'
+}) => {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    if (!Array.isArray(signalData) || signalData.length === 0) {
+      setData(null);
+      setLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+
+    const run = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const bands = Array.isArray(genericBands) ? genericBands : [];
+        const gains = bands.map((b) => toNum(b?.gain, 1));
+        const names = bands.map((b, i) => String(b?.name || `Band ${i + 1}`));
+
+        let response;
+        if (modeId === 'music') {
+          const waveletGains = buildMusicWaveletGains(bands);
+          console.log('[wavelet] sending level gains', waveletGains);
+          response = await processMusicMode(signalData, gains, names, sampleRate, waveletType, 6, waveletGains);
+        } else if (modeId === 'animal') {
+          response = await processAnimalsMode(signalData, gains, names, sampleRate);
+        } else if (modeId === 'human') {
+          response = await processHumansMode(signalData, gains, names, sampleRate);
+        } else if (modeId === 'ecg') {
+          response = await processECGMode(signalData, gains, names, sampleRate);
+        } else {
+          response = await processGenericMode(signalData, bands, sampleRate);
+        }
+
+        if (!cancelled) {
+          const out = Array.isArray(response?.data?.output_signal) ? response.data.output_signal : [];
+          if (out.length) {
+            let minV = Infinity;
+            let maxV = -Infinity;
+            for (let i = 0; i < out.length; i += 1) {
+              const v = Number(out[i]);
+              if (Number.isFinite(v)) {
+                if (v < minV) minV = v;
+                if (v > maxV) maxV = v;
+              }
+            }
+            console.log('[wavelet] received output signal range', { min: minV, max: maxV });
+          }
+          setData(normalizeResponse(response?.data || {}, signalData, sampleRate));
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setError(err?.message || 'Backend processing failed');
+          if (!useFallback) setData(null);
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+
+    run();
+    return () => {
+      cancelled = true;
+    };
+  }, [modeId, genericBands, sampleRate, signalData, useFallback, waveletType]);
+
+  return { data, loading, error };
 };
 
 export default useBackendProcessing;

@@ -49,8 +49,8 @@
     }
   ],
   "sliders_freq": [1.0, 1.0, 1.0, 1.0, 1.0],
-  "sliders_wavelet": [1.0, 1.0, 1.0, 1.0, 1.0],
-  "wavelet": "db4",
+  "sliders_wavelet": [1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
+  "wavelet": "sym8",
   "wavelet_level": 6,
   "sample_rate": 44100,
   "frequency_notes": "Based on scientific bioacoustics research from Cornell Lab of Ornithology and NOAA"

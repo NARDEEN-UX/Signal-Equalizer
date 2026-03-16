@@ -2,7 +2,7 @@
 Schemas for Music Mode
 """
 
-from typing import List, Optional
+from typing import List, Optional, Dict
 from pydantic import BaseModel, Field
 
 
@@ -20,6 +20,7 @@ class MusicModeRequest(BaseModel):
     gains: List[float] = Field(description="Gains for each instrument (0-2)")
     instrument_names: List[str] = Field(description="Names of instruments")
     sliders_wavelet: Optional[List[float]] = None
+    wavelet_gains: Optional[Dict[str, float]] = None
     wavelet: str = "db4"
     wavelet_level: int = 6
 
@@ -32,6 +33,8 @@ class MusicModeResponse(BaseModel):
     output_fft: Optional[dict] = None
     input_spectrogram: Optional[dict] = None
     output_spectrogram: Optional[dict] = None
+    input_coeffs: Optional[List[List[float]]] = None
+    output_coeffs: Optional[List[List[float]]] = None
     processing_time: float
 
 

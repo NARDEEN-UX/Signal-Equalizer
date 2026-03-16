@@ -38,8 +38,8 @@
     }
   ],
   "sliders_freq": [1.0, 1.0, 1.0, 1.0, 1.0],
-  "sliders_wavelet": [1.0, 1.0, 1.0, 1.0],
-  "wavelet": "db4",
+  "sliders_wavelet": [1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
+  "wavelet": "db8",
   "wavelet_level": 6,
   "sample_rate": 44100,
   "description": "Default music mode configuration with 5 instruments including Others"

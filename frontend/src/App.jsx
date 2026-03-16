@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import WaveformViewer from './components/WaveformViewer';
-import SliderGroup from './components/SliderGroup';
 import EqualizerCurve from './components/EqualizerCurve';
 import FFTChart from './components/FFTChart';
 import WaveletChart from './components/WaveletChart';
@@ -127,6 +126,67 @@ const DEFAULT_MODE_BANDS = {
   ]
 };
 
+const WAVELET_BASIS_OPTIONS = [
+  { value: 'haar', label: 'Haar', sliderLabels: ['L1', 'L2', 'L3', 'L4', 'L5', 'L6'] },
+  { value: 'db4', label: 'Daubechies 4 (db4)', sliderLabels: ['L1', 'L2', 'L3', 'L4', 'L5', 'L6'] },
+  { value: 'db6', label: 'Daubechies 6 (db6)', sliderLabels: ['L1', 'L2', 'L3', 'L4', 'L5', 'L6'] },
+  { value: 'db8', label: 'Daubechies 8 (db8)', sliderLabels: ['L1', 'L2', 'L3', 'L4', 'L5', 'L6'] },
+  { value: 'sym5', label: 'Symlet 5 (sym5)', sliderLabels: ['L1', 'L2', 'L3', 'L4', 'L5', 'L6'] },
+  { value: 'sym8', label: 'Symlet 8 (sym8)', sliderLabels: ['L1', 'L2', 'L3', 'L4', 'L5', 'L6'] },
+  { value: 'coif3', label: 'Coiflet 3 (coif3)', sliderLabels: ['L1', 'L2', 'L3', 'L4', 'L5', 'L6'] },
+  { value: 'bior3.5', label: 'Biorthogonal 3.5 (bior3.5)', sliderLabels: ['L1', 'L2', 'L3', 'L4', 'L5', 'L6'] },
+  { value: 'dmey', label: 'Discrete Meyer (dmey)', sliderLabels: ['L1', 'L2', 'L3', 'L4', 'L5', 'L6'] }
+];
+
+const WAVELET_BASIS_MAP = WAVELET_BASIS_OPTIONS.reduce((acc, item) => {
+  acc[item.value] = item;
+  return acc;
+}, {});
+
+const MODE_DEFAULT_WAVELET = {
+  generic: 'db4',
+  music: 'db8',
+  animal: 'sym8',
+  animals: 'sym8',
+  human: 'sym5',
+  humans: 'sym5',
+  ecg: 'bior3.5'
+};
+
+const WAVELET_RECOMMENDATION_BY_MODE = {
+  generic: 'db4: robust general-purpose orthogonal basis for mixed content.',
+  music: 'db8: good detail retention for harmonic instrument mixtures.',
+  animal: 'sym8: smoother reconstruction for complex bioacoustic textures.',
+  human: 'Sym5: smooth reconstruction and good speech-formant behavior.',
+  ecg: 'bior3.5: common ECG-friendly biorthogonal basis.'
+};
+
+const normalizeWaveletName = (waveletName, fallback = 'db4') => {
+  const raw = String(waveletName || '').trim().toLowerCase();
+  if (!raw) return fallback;
+  if (raw === 'biorthogonal3.5' || raw === 'bior35') return 'bior3.5';
+  if (WAVELET_BASIS_MAP[raw]) return raw;
+  return fallback;
+};
+
+const getModeWaveletDefault = (modeId) => MODE_DEFAULT_WAVELET[modeId] || 'db4';
+
+const buildWaveletDefaults = (waveletName) => {
+  const key = normalizeWaveletName(waveletName, 'db4');
+  const labels = WAVELET_BASIS_MAP[key]?.sliderLabels || WAVELET_BASIS_MAP.db4.sliderLabels;
+  return Array.from({ length: labels.length }, () => 1);
+};
+
+const normalizeWaveletSliders = (waveletName, sliders) => {
+  const defaults = buildWaveletDefaults(waveletName);
+  if (!Array.isArray(sliders) || sliders.length === 0) return defaults;
+
+  return defaults.map((d, i) => {
+    const n = Number(sliders[i]);
+    return Number.isFinite(n) ? Math.max(0, Math.min(2, n)) : d;
+  });
+};
+
 function App() {
   const MAX_UI_SIGNAL_SAMPLES = 120000;
   const MIN_PLAYBACK_SAMPLE_RATE = 3000;
@@ -136,7 +196,7 @@ function App() {
   const [homeMode, setHomeMode] = useState('Home');
   const [activeModeId, setActiveModeId] = useState('generic');
   const [freqSliders, setFreqSliders] = useState([1, 1, 1, 1]);
-  const [waveletSliders, setWaveletSliders] = useState([1, 1, 1, 1]);
+  const [waveletSliders, setWaveletSliders] = useState(buildWaveletDefaults(getModeWaveletDefault('generic')));
   const [audiogram, setAudiogram] = useState(false);
   const [showSpec, setShowSpec] = useState(false);
   const [inputSpecColorScale, setInputSpecColorScale] = useState('inferno');
@@ -161,7 +221,7 @@ function App() {
   // Unified band configuration for all modes
   const [modeFreqConfig, setModeFreqConfig] = useState(DEFAULT_MODE_BANDS);
 
-  const [waveletType, setWaveletType] = useState('haar');
+  const [waveletType, setWaveletType] = useState(getModeWaveletDefault('generic'));
   const [equalizerTab, setEqualizerTab] = useState('equalizer'); // 'equalizer' | 'ai'
   // Linked viewer window (0-1 normalized signal range) shared by input and output.
   const [linkedViewWindow, setLinkedViewWindow] = useState({ start: 0, end: 1 });
@@ -176,6 +236,8 @@ function App() {
   const offsetTimeRef = useRef(0);
 
   const activeMode = MODES.find((m) => m.id === activeModeId) || MODES[0];
+  const activeWaveletBasis = WAVELET_BASIS_MAP[normalizeWaveletName(waveletType, getModeWaveletDefault(activeModeId))] || WAVELET_BASIS_MAP.db4;
+  const recommendedWavelet = WAVELET_RECOMMENDATION_BY_MODE[activeModeId] || WAVELET_RECOMMENDATION_BY_MODE.generic;
 
   // Get frequency bands for current mode
   const modeFreqBands = modeFreqConfig[activeModeId] || DEFAULT_MODE_BANDS[activeModeId] || [];
@@ -203,8 +265,8 @@ function App() {
   const { data: backendSignalData } = useBackendProcessing({
     modeId: activeModeId,
     freqSliders: modeFreqBands.map(b => Number(b.gain) || 1),
-    waveletSliders,
     genericBands: modeFreqBands,
+    waveletType,
     sampleRate: uploadedSampleRate,
     signalData: uploadedSignal || null,
     useFallback: true
@@ -272,6 +334,13 @@ function App() {
     setFftZoomWindow({ x: null, y: null });
   }, [activeModeId, audiogram, uploadedSignal, uploadedSampleRate]);
 
+  useEffect(() => {
+    // Apply researched per-mode default wavelet basis before any backend defaults arrive.
+    const modeDefault = getModeWaveletDefault(activeModeId);
+    setWaveletType(modeDefault);
+    setWaveletSliders(buildWaveletDefaults(modeDefault));
+  }, [activeModeId]);
+
   // Load default settings when mode changes
   useEffect(() => {
     const loadDefaults = async () => {
@@ -287,8 +356,10 @@ function App() {
               }));
               setFreqSliders(response.data.bands.map(b => (b.gain ?? 1)));
             }
-            if (response.data?.sliders_wavelet) {
-              setWaveletSliders(response.data.sliders_wavelet);
+            {
+              const selectedWavelet = normalizeWaveletName(response.data?.wavelet, getModeWaveletDefault('generic'));
+              setWaveletType(selectedWavelet);
+              setWaveletSliders(normalizeWaveletSliders(selectedWavelet, response.data?.sliders_wavelet));
             }
             break;
           case 'music':
@@ -300,8 +371,10 @@ function App() {
               }));
               setFreqSliders(response.data.bands.map(b => (b.gain ?? 1)));
             }
-            if (response.data?.sliders_wavelet) {
-              setWaveletSliders(response.data.sliders_wavelet);
+            {
+              const selectedWavelet = normalizeWaveletName(response.data?.wavelet, getModeWaveletDefault('music'));
+              setWaveletType(selectedWavelet);
+              setWaveletSliders(normalizeWaveletSliders(selectedWavelet, response.data?.sliders_wavelet));
             }
             break;
           case 'animal':
@@ -313,8 +386,10 @@ function App() {
               }));
               setFreqSliders(response.data.bands.map(b => (b.gain ?? 1)));
             }
-            if (response.data?.sliders_wavelet) {
-              setWaveletSliders(response.data.sliders_wavelet);
+            {
+              const selectedWavelet = normalizeWaveletName(response.data?.wavelet, getModeWaveletDefault('animal'));
+              setWaveletType(selectedWavelet);
+              setWaveletSliders(normalizeWaveletSliders(selectedWavelet, response.data?.sliders_wavelet));
             }
             break;
           case 'human':
@@ -326,8 +401,10 @@ function App() {
               }));
               setFreqSliders(response.data.bands.map(b => (b.gain ?? 1)));
             }
-            if (response.data?.sliders_wavelet) {
-              setWaveletSliders(response.data.sliders_wavelet);
+            {
+              const selectedWavelet = normalizeWaveletName(response.data?.wavelet, getModeWaveletDefault('human'));
+              setWaveletType(selectedWavelet);
+              setWaveletSliders(normalizeWaveletSliders(selectedWavelet, response.data?.sliders_wavelet));
             }
             break;
           case 'ecg':
@@ -339,8 +416,10 @@ function App() {
               }));
               setFreqSliders(response.data.bands.map(b => (b.gain ?? 1)));
             }
-            if (response.data?.sliders_wavelet) {
-              setWaveletSliders(response.data.sliders_wavelet);
+            {
+              const selectedWavelet = normalizeWaveletName(response.data?.wavelet, getModeWaveletDefault('ecg'));
+              setWaveletType(selectedWavelet);
+              setWaveletSliders(normalizeWaveletSliders(selectedWavelet, response.data?.sliders_wavelet));
             }
             break;
           default:
@@ -575,6 +654,7 @@ function App() {
       mode: activeModeId,
       sliders_freq: modeFreqBands.map(b => Number(b.gain) || 1),
       sliders_wavelet: waveletSliders,
+      wavelet: waveletType,
       bands: modeFreqBands
     };
     saveSchema('equalizer_preset.json', schema).then(() => {
@@ -586,16 +666,47 @@ function App() {
   const handleLoadPreset = () => {
     loadSchema('equalizer_preset.json').then((res) => {
       const d = res.data;
-      if (d.mode) setActiveModeId(d.mode);
-      if (Array.isArray(d.sliders_freq)) setFreqSliders(d.sliders_freq);
-      if (Array.isArray(d.sliders_wavelet)) setWaveletSliders(d.sliders_wavelet);
-      if (Array.isArray(d.bands) && d.bands.length) {
+      const currentMode = activeModeId;
+      const presetMode = d.mode;
+      const modeMismatch = Boolean(presetMode) && presetMode !== currentMode;
+
+      if (Array.isArray(d.sliders_freq)) {
+        const gains = d.sliders_freq.map((v) => {
+          const n = Number(v);
+          return Number.isFinite(n) ? Math.max(0, Math.min(2, n)) : 1;
+        });
+        setFreqSliders(gains);
+
+        // Keep preset loading in the current mode; never force mode switching.
+        setModeFreqConfig((prev) => {
+          const currentBands = Array.isArray(prev[currentMode]) ? prev[currentMode] : [];
+          if (!currentBands.length) return prev;
+          return {
+            ...prev,
+            [currentMode]: currentBands.map((b, i) => ({
+              ...b,
+              gain: Number.isFinite(gains[i]) ? gains[i] : Number(b.gain) || 1
+            }))
+          };
+        });
+      }
+
+      const selectedWavelet = normalizeWaveletName(d.wavelet, getModeWaveletDefault(currentMode));
+      setWaveletType(selectedWavelet);
+      setWaveletSliders(normalizeWaveletSliders(selectedWavelet, d.sliders_wavelet));
+
+      if (Array.isArray(d.bands) && d.bands.length && !modeMismatch) {
         setModeFreqConfig(prev => ({
           ...prev,
-          [d.mode || activeModeId]: d.bands
+          [currentMode]: d.bands
         }));
       }
-      window.alert('Preset loaded. Controls updated.');
+
+      if (modeMismatch) {
+        window.alert(`Preset loaded into current mode (${currentMode}). Preset was saved for ${presetMode}, so band layout was not switched.`);
+      } else {
+        window.alert('Preset loaded. Controls updated.');
+      }
     }).catch(() => {
       window.alert('Load failed. Ensure backend is running and preset file exists.');
     });
@@ -637,9 +748,9 @@ function App() {
       setFreqSliders(settings.sliders_freq);
     }
     
-    if (Array.isArray(settings.sliders_wavelet) && settings.sliders_wavelet.length > 0) {
-      setWaveletSliders(settings.sliders_wavelet);
-    }
+    const selectedWavelet = normalizeWaveletName(settings.wavelet, getModeWaveletDefault(settings.mode || activeModeId));
+    setWaveletType(selectedWavelet);
+    setWaveletSliders(normalizeWaveletSliders(selectedWavelet, settings.sliders_wavelet));
     
     // Apply band configurations for the mode
     if (settings.bands && Array.isArray(settings.bands)) {
@@ -980,49 +1091,45 @@ function App() {
 
                 {/* Band Information - Works for all modes */}
                 {modeFreqBands && modeFreqBands.length > 0 && (
-                  <div className="bands-info">
-                    {modeFreqBands.map((b) => (
-                      <div key={b.id} className="band-info-item">
-                        <span className="band-info-label">{b.name}</span>
-                        <span className="band-info-examples">{b.examples && `(${b.examples})`}</span>
-                        <span className="band-info-gain">{Number(b.gain).toFixed(2)}×</span>
-                      </div>
-                    ))}
-                  </div>
+                  <>
+                    <div className="bands-info">
+                      {modeFreqBands.map((b) => (
+                        <div key={b.id} className="band-info-item">
+                          <span className="band-info-label">{b.name}</span>
+                          <span className="band-info-examples">{b.examples && `(${b.examples})`}</span>
+                          <span className="band-info-gain">{Number(b.gain).toFixed(2)}×</span>
+                        </div>
+                      ))}
+                    </div>
+
+                    {activeModeId !== 'generic' && (
+                      <>
+                        <div className="field" style={{ marginTop: '0.5rem' }}>
+                          <span>Wavelet Basis</span>
+                          <select
+                            className="select"
+                            value={waveletType}
+                            onChange={(e) => {
+                              const nextType = normalizeWaveletName(e.target.value, getModeWaveletDefault(activeModeId));
+                              setWaveletType(nextType);
+                              setWaveletSliders((prev) => normalizeWaveletSliders(nextType, prev));
+                            }}
+                          >
+                            {WAVELET_BASIS_OPTIONS.map((option) => (
+                              <option key={option.value} value={option.value}>{option.label}</option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <p className="helper-text" style={{ marginTop: '0.2rem' }}>{recommendedWavelet}</p>
+                      </>
+                    )}
+                  </>
                 )}
 
-                {/* Sliders - Works for all modes */}
-                {modeFreqBands.length > 0 && (
-                  <SliderGroup 
-                    count={modeFreqBands.length} 
-                    labels={modeFreqBands.map((b) => b.name)} 
-                    values={modeFreqBands.map((b) => Number(b.gain))} 
-                    onChange={(gains) => {
-                      setModeFreqBands(
-                        modeFreqBands.map((b, i) => ({ ...b, gain: gains[i] }))
-                      );
-                    }} 
-                  />
-                )}
               </div>
+              <button type="button" className="btn btn-small" style={{ marginTop: '0.5rem' }} onClick={handleLoadPreset}>Load preset</button>
             </div>
-          )}
-          {equalizerTab === 'equalizer' && (
-            <>
-              <div className="box wavelet-box">
-                <h2 className="box-title">Wavelet</h2>
-                <SliderGroup count={4} labels={['L1', 'L2', 'L3', 'L4']} values={waveletSliders} onChange={setWaveletSliders} />
-                <div className="field" style={{ marginTop: '0.5rem' }}>
-                  <span>Basis</span>
-                  <select className="select" value={waveletType} onChange={(e) => setWaveletType(e.target.value)}>
-                    <option value="haar">Haar</option>
-                    <option value="db4">Daubechies 4</option>
-                    <option value="sym5">Symlet 5</option>
-                  </select>
-                </div>
-                <button type="button" className="btn btn-small" style={{ marginTop: '0.5rem' }} onClick={handleLoadPreset}>Load preset</button>
-              </div>
-            </>
           )}
           {equalizerTab === 'ai' && (
             <div className="box ai-box">
@@ -1152,17 +1259,12 @@ function App() {
             )}
           </div>
 
-          {activeModeId !== 'generic' && (
+          {activeModeId !== 'generic' && signalData?.wavelet && (
             <div className="row section-row">
-              <h2 className="section-title">Wavelet Domain Energy</h2>
-              <div className="row two-boxes">
+              <h2 className="section-title">Wavelet Graph ({activeWaveletBasis.label})</h2>
+              <div className="row">
                 <div className="box chart-box">
-                  <h3 className="box-label">Input</h3>
-                  <WaveletChart data={signalData?.wavelet} variant="input" />
-                </div>
-                <div className="box chart-box">
-                  <h3 className="box-label">Output</h3>
-                  <WaveletChart data={signalData?.wavelet} variant="output" />
+                  <WaveletChart data={signalData?.wavelet} />
                 </div>
               </div>
             </div>
