@@ -294,7 +294,13 @@ class AnimalModeSeparator:
 
 
 # ============================================================================
-# Flask Route Handlers
+# SINGLETON INSTANCE - THIS IS WHAT YOUR ENDPOINT IMPORTS
+# ============================================================================
+animals_service = AnimalModeSeparator(sample_rate=44100)
+
+
+# ============================================================================
+# Flask Route Handlers (Optional - for reference)
 # ============================================================================
 
 def create_animal_routes(app):
@@ -305,13 +311,11 @@ def create_animal_routes(app):
         app: Flask application instance
     """
     
-    separator = AnimalModeSeparator(sample_rate=44100)
-    
     @app.route('/api/modes/animals/info', methods=['GET'])
     def get_animal_info():
         """Get animal band information"""
         try:
-            bands_info = separator.get_band_info()
+            bands_info = animals_service.get_band_info()
             return {
                 'status': 'success',
                 'mode': 'animals',
@@ -334,6 +338,7 @@ def create_animal_routes(app):
         }
         """
         try:
+            from flask import request
             data = request.get_json()
             
             # Get audio data (implement based on your audio handling)
@@ -345,7 +350,7 @@ def create_animal_routes(app):
             gains = data.get('gains', [1.0, 1.0, 1.0, 1.0, 1.0])
             
             # Separate animals
-            result = separator.separate_animals(audio_data, gains)
+            result = animals_service.separate_animals(audio_data, gains)
             
             return {
                 'status': 'success',
@@ -360,13 +365,14 @@ def create_animal_routes(app):
     def get_animal_stats():
         """Get frequency statistics for audio"""
         try:
+            from flask import request
             data = request.get_json()
             
             if 'audio' not in data:
                 return {'status': 'error', 'message': 'No audio provided'}, 400
             
             # Get frequency statistics
-            stats = separator.get_frequency_stats(audio_data)
+            stats = animals_service.get_frequency_stats(audio_data)
             
             return {
                 'status': 'success',
@@ -378,13 +384,9 @@ def create_animal_routes(app):
 
 if __name__ == '__main__':
     # Example usage
-    separator = AnimalModeSeparator(sample_rate=44100)
-    
-    # Get band info
-    print("Animal Bands Information:")
-    print(json.dumps(separator.get_band_info(), indent=2))
-    
-    # Example: separate with custom gains
-    # test_audio = np.random.randn(44100)
-    # result = separator.separate_animals(test_audio, gains=[1.5, 1.0, 0.8, 1.2, 0.9])
-    # print("Separation complete")
+    print("Animal Mode Service Initialized")
+    print(f"Sample Rate: {animals_service.sample_rate} Hz")
+    print(f"Number of Bands: {animals_service.num_bands}")
+    print("\nAvailable Bands:")
+    for band_info in animals_service.get_band_info():
+        print(f"  - {band_info['name']}: {band_info['low']}-{band_info['high']} Hz")
