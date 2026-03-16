@@ -165,6 +165,7 @@ function App() {
   const [equalizerTab, setEqualizerTab] = useState('equalizer'); // 'equalizer' | 'ai'
   // Linked viewer window (0-1 normalized signal range) shared by input and output.
   const [linkedViewWindow, setLinkedViewWindow] = useState({ start: 0, end: 1 });
+  const [fftZoomWindow, setFftZoomWindow] = useState({ x: null, y: null });
 
   const audioCtxRef = useRef(null);
   const sourceRef = useRef(null);
@@ -264,6 +265,12 @@ function App() {
       durationRef.current = signalData.time[signalData.time.length - 1];
     }
   }, [signalData]);
+
+  useEffect(() => {
+    // Reset FFT zoom only when visualization context changes,
+    // not on every processed data object refresh.
+    setFftZoomWindow({ x: null, y: null });
+  }, [activeModeId, audiogram, uploadedSignal, uploadedSampleRate]);
 
   // Load default settings when mode changes
   useEffect(() => {
@@ -1085,12 +1092,24 @@ function App() {
             <div className="row two-boxes">
               <div className="box chart-box card-with-zoom">
                 <h3 className="box-label">Input FFT</h3>
-                <FFTChart data={signalData?.fft} audiogram={audiogram} variant="input" />
+                <FFTChart
+                  data={signalData?.fft}
+                  audiogram={audiogram}
+                  variant="input"
+                  zoomWindow={fftZoomWindow}
+                  onZoomWindowChange={setFftZoomWindow}
+                />
                 <span className="card-zoom">{linkedZoom.toFixed(1)}×</span>
               </div>
               <div className="box chart-box card-with-zoom">
                 <h3 className="box-label">Output FFT</h3>
-                <FFTChart data={signalData?.fft} audiogram={audiogram} variant="output" />
+                <FFTChart
+                  data={signalData?.fft}
+                  audiogram={audiogram}
+                  variant="output"
+                  zoomWindow={fftZoomWindow}
+                  onZoomWindowChange={setFftZoomWindow}
+                />
                 <span className="card-zoom">{linkedZoom.toFixed(1)}×</span>
               </div>
             </div>

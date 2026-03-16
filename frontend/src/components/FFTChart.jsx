@@ -15,7 +15,7 @@ import {
 ChartJS.register(CategoryScale, LinearScale, LogarithmicScale, PointElement, LineElement, Title, Tooltip, Legend);
 
 /** One FFT plot: freq vs magnitude; variant "input"|"output" for single-panel cards, or both. */
-const FFTChart = ({ data, audiogram, variant }) => {
+const FFTChart = ({ data, audiogram, variant, zoomWindow = null, onZoomWindowChange = null }) => {
   if (!data || !Array.isArray(data.freq) || !Array.isArray(data.in) || !Array.isArray(data.out)) {
     return <div className="chart-wrap">No FFT data</div>;
   }
@@ -26,6 +26,9 @@ const FFTChart = ({ data, audiogram, variant }) => {
   const [xWindow, setXWindow] = useState(null);
   const [yWindow, setYWindow] = useState(null);
   const [drag, setDrag] = useState(null);
+  const controlled = Boolean(onZoomWindowChange);
+  const effectiveXWindow = controlled ? (zoomWindow?.x || null) : xWindow;
+  const effectiveYWindow = controlled ? (zoomWindow?.y || null) : yWindow;
 
   const yDomain = useMemo(() => {
     const combined = [
@@ -54,9 +57,10 @@ const FFTChart = ({ data, audiogram, variant }) => {
   }, [freq]);
 
   useEffect(() => {
+    if (controlled) return;
     setXWindow(null);
     setYWindow(null);
-  }, [data, audiogram]);
+  }, [data, audiogram, controlled]);
 
   const clampWindow = (min, max) => {
     const fullMin = domain.min;
@@ -193,13 +197,23 @@ const FFTChart = ({ data, audiogram, variant }) => {
       return;
     }
 
-    setXWindow(clampWindow(Math.min(f0, f1), Math.max(f0, f1)));
-    setYWindow(clampYWindow(Math.min(mTop, mBottom), Math.max(mTop, mBottom)));
+    const nextX = clampWindow(Math.min(f0, f1), Math.max(f0, f1));
+    const nextY = clampYWindow(Math.min(mTop, mBottom), Math.max(mTop, mBottom));
+    if (controlled) {
+      onZoomWindowChange?.({ x: nextX, y: nextY });
+    } else {
+      setXWindow(nextX);
+      setYWindow(nextY);
+    }
   };
 
   const handleResetZoom = () => {
-    setXWindow(null);
-    setYWindow(null);
+    if (controlled) {
+      onZoomWindowChange?.({ x: null, y: null });
+    } else {
+      setXWindow(null);
+      setYWindow(null);
+    }
   };
 
   const datasets = [];
@@ -222,15 +236,15 @@ const FFTChart = ({ data, audiogram, variant }) => {
     scales: {
       x: {
         type: audiogram ? 'logarithmic' : 'linear',
-        min: xWindow?.min,
-        max: xWindow?.max,
+        min: effectiveXWindow?.min,
+        max: effectiveXWindow?.max,
         title: { display: true, text: 'Frequency (Hz)', color: '#737373', font: { family: fontFamily, size: 11 } },
         grid: { color: 'rgba(255,255,255,0.06)' },
         ticks: { color: '#737373', font: { family: fontFamily, size: 10 } }
       },
       y: {
-        min: yWindow?.min ?? yDomain.min,
-        max: yWindow?.max ?? yDomain.max,
+        min: effectiveYWindow?.min ?? yDomain.min,
+        max: effectiveYWindow?.max ?? yDomain.max,
         title: { display: true, text: 'Magnitude', color: '#737373', font: { family: fontFamily, size: 11 } },
         grid: { color: 'rgba(255,255,255,0.06)' },
         ticks: { color: '#737373', font: { family: fontFamily, size: 10 } }
