@@ -141,10 +141,10 @@ function App() {
       { id: 'animal-3', name: 'Others', low: 100, high: 16000, gain: 1 }
     ],
     human: [
-      { id: 'human-0', name: 'Adult Male', low: 350, high: 900, gain: 1 },
+      { id: 'human-0', name: 'Adult Male', low: 450, high: 1400, gain: 1 },
       { id: 'human-1', name: 'Adult Female', low: 1500, high: 4000, gain: 1 },
       { id: 'human-2', name: 'Child', low: 900, high: 1500, gain: 1 },
-      { id: 'human-3', name: 'Elderly', low: 50, high: 350, gain: 1 }
+      { id: 'human-3', name: 'Elderly', low: 350, high: 700, gain: 1 }
     ],
     ecg: [
       { id: 'ecg-0', name: 'Normal', low: 0.5, high: 45, gain: 1 },
@@ -961,12 +961,27 @@ function App() {
                   }}
                 />
 
-                {/* Band Builder - Works for Generic and Human modes */}
-                {(activeModeId === 'generic' || activeModeId === 'human') && (
+                {/* Band Builder - Only for Generic mode (editable) */}
+                {activeModeId === 'generic' && (
                   <GenericBandBuilder
                     bands={modeFreqBands}
                     setBands={setModeFreqBands}
                     isEditable={true}
+                  />
+                )}
+
+                {/* Standard Sliders with Read-only Band Info for Human mode */}
+                {activeModeId === 'human' && modeFreqBands.length > 0 && (
+                  <SliderGroup
+                    count={modeFreqBands.length}
+                    labels={modeFreqBands.map((b) => b.name)}
+                    values={modeFreqBands.map((b) => Number(b.gain))}
+                    bands={modeFreqBands}
+                    onChange={(gains) => {
+                      setModeFreqBands(
+                        modeFreqBands.map((b, i) => ({ ...b, gain: gains[i] }))
+                      );
+                    }}
                   />
                 )}
 
@@ -976,6 +991,7 @@ function App() {
                     count={modeFreqBands.length}
                     labels={modeFreqBands.map((b) => b.name)}
                     values={modeFreqBands.map((b) => Number(b.gain))}
+                    bands={modeFreqBands}
                     onChange={(gains) => {
                       setModeFreqBands(
                         modeFreqBands.map((b, i) => ({ ...b, gain: gains[i] }))

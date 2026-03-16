@@ -16,13 +16,13 @@ class HumansModeService:
     # Non-overlapping ranges for clear separation in output
     VOICE_RANGES = {
         # Primary voice types - non-overlapping frequency bands
-        "Adult Male": [[350, 900]],           # 350-900 Hz
+        "Adult Male": [[450, 1400]],          # 450-1400 Hz (85Hz fundamental, deep adult male)
         "Adult Female": [[1500, 4000]],       # 1500-4000 Hz
         "Child": [[900, 1500]],               # 900-1500 Hz
-        "Elderly": [[50, 350]],               # 50-350 Hz
+        "Elderly": [[350, 700]],              # 350-700 Hz (70Hz fundamental, lowest due to vocal cord aging)
 
         # Legacy mappings for backward compatibility
-        "Male": [[350, 900]],
+        "Male": [[450, 1400]],
         "Female": [[1500, 4000]],
         "Young": [[900, 1500]],
         "Old": [[50, 350]],

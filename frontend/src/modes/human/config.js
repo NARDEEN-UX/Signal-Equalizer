@@ -12,10 +12,10 @@ export const HUMAN_MODE_CONFIG = {
   sliderLabels: ['Adult Male', 'Adult Female', 'Child', 'Elderly'],
   voiceTypes: ['Adult Male', 'Adult Female', 'Child', 'Elderly'],
   freqBands: [
-    { min: 700, max: 1200, label: 'Adult Male' },
-    { min: 1500, max: 2300, label: 'Adult Female' },
-    { min: 1200, max: 1500, label: 'Child' },
-    { min: 350, max: 700, label: 'Elderly' }
+    { min: 500, max: 1400, label: 'Adult Male' },
+    { min: 1500, max: 4000, label: 'Adult Female' },
+    { min: 900, max: 1500, label: 'Child' },
+    { min: 50, max: 350, label: 'Elderly' }
   ],
   wavelet: 'db4',
   waveletLevels: 6,

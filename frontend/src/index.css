@@ -1400,13 +1400,26 @@ body {
   gap: 0.75rem;
 }
 
+.slider-label-col {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  flex-shrink: 0;
+  min-width: 5rem;
+}
+
 .slider-item label {
   font-size: 0.8125rem;
   font-weight: 600;
   color: var(--text-secondary);
   letter-spacing: 0.01em;
   flex-shrink: 0;
-  min-width: 5rem;
+}
+
+.slider-band-info {
+  font-size: 0.7rem;
+  color: var(--text-tertiary, #999);
+  font-weight: 400;
 }
 
 .slider-item .slider-value {
