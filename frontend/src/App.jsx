@@ -91,6 +91,41 @@ const LANDING_MODES = [
   { id: 'ecg', title: 'ECG Abnormalities', desc: 'Detect cardiac arrhythmias' }
 ];
 
+// Default band configurations for each mode
+const DEFAULT_MODE_BANDS = {
+  generic: [
+    { id: 'b1', name: 'Band 1', low: 80, high: 180, gain: 1 },
+    { id: 'b2', name: 'Band 2', low: 180, high: 300, gain: 1 },
+    { id: 'b3', name: 'Band 3', low: 300, high: 3000, gain: 1 },
+    { id: 'b4', name: 'Band 4', low: 3000, high: 8000, gain: 1 }
+  ],
+  music: [
+    { id: 'music-0', name: 'Bass', low: 20, high: 250, gain: 1.0 },
+    { id: 'music-1', name: 'Piano', low: 27, high: 4186, gain: 1.0 },
+    { id: 'music-2', name: 'Vocals', low: 80, high: 8000, gain: 1.0 },
+    { id: 'music-3', name: 'Violin', low: 196, high: 3520, gain: 1.0 },
+    { id: 'music-4', name: 'Others', low: 20, high: 20000, gain: 1.0 }
+  ],
+  animal: [
+    { id: 'animal-0', name: 'Birds', low: 2000, high: 8000, gain: 1 },
+    { id: 'animal-1', name: 'Dogs', low: 500, high: 2000, gain: 1 },
+    { id: 'animal-2', name: 'Cats', low: 1000, high: 4000, gain: 1 },
+    { id: 'animal-3', name: 'Others', low: 100, high: 16000, gain: 1 }
+  ],
+  human: [
+    { id: 'human-0', name: 'Voice 1', low: 80, high: 8000, gain: 1 },
+    { id: 'human-1', name: 'Voice 2', low: 80, high: 8000, gain: 1 },
+    { id: 'human-2', name: 'Voice 3', low: 80, high: 8000, gain: 1 },
+    { id: 'human-3', name: 'Voice 4', low: 80, high: 8000, gain: 1 }
+  ],
+  ecg: [
+    { id: 'ecg-0', name: 'Normal', low: 0.5, high: 45, gain: 1 },
+    { id: 'ecg-1', name: 'Arrhythmia 1', low: 0.5, high: 45, gain: 1 },
+    { id: 'ecg-2', name: 'Arrhythmia 2', low: 0.5, high: 45, gain: 1 },
+    { id: 'ecg-3', name: 'Arrhythmia 3', low: 0.5, high: 45, gain: 1 }
+  ]
+};
+
 function App() {
   const MAX_UI_SIGNAL_SAMPLES = 120000;
   const MIN_PLAYBACK_SAMPLE_RATE = 3000;
@@ -121,38 +156,10 @@ function App() {
   const uploadedSignal = modeUploadedSignals[activeModeId] || null;
   const uploadedSampleRate = modeUploadedSampleRates[activeModeId] || 44100;
   const audioFile = modeAudioFiles[activeModeId] || null;
-  const [genericBands, setGenericBands] = useState([
-    { id: 'b1', name: 'Band 1', low: 80, high: 180, gain: 1 },
-    { id: 'b2', name: 'Band 2', low: 180, high: 300, gain: 1 },
-    { id: 'b3', name: 'Band 3', low: 300, high: 3000, gain: 1 },
-    { id: 'b4', name: 'Band 4', low: 3000, high: 8000, gain: 1 }
-  ]);
-  const [modeFreqConfig, setModeFreqConfig] = useState({
-    music: [
-      { id: 'music-0', name: 'Bass', low: 20, high: 250, gain: 1 },
-      { id: 'music-1', name: 'Piano', low: 250, high: 4000, gain: 1 },
-      { id: 'music-2', name: 'Vocals', low: 300, high: 3000, gain: 1 },
-      { id: 'music-3', name: 'Violin', low: 200, high: 7000, gain: 1 }
-    ],
-    animal: [
-      { id: 'animal-0', name: 'Birds', low: 2000, high: 8000, gain: 1 },
-      { id: 'animal-1', name: 'Dogs', low: 500, high: 2000, gain: 1 },
-      { id: 'animal-2', name: 'Cats', low: 1000, high: 4000, gain: 1 },
-      { id: 'animal-3', name: 'Others', low: 100, high: 16000, gain: 1 }
-    ],
-    human: [
-      { id: 'human-0', name: 'Voice 1', low: 80, high: 8000, gain: 1 },
-      { id: 'human-1', name: 'Voice 2', low: 80, high: 8000, gain: 1 },
-      { id: 'human-2', name: 'Voice 3', low: 80, high: 8000, gain: 1 },
-      { id: 'human-3', name: 'Voice 4', low: 80, high: 8000, gain: 1 }
-    ],
-    ecg: [
-      { id: 'ecg-0', name: 'Normal', low: 0.5, high: 45, gain: 1 },
-      { id: 'ecg-1', name: 'Arrhythmia 1', low: 0.5, high: 45, gain: 1 },
-      { id: 'ecg-2', name: 'Arrhythmia 2', low: 0.5, high: 45, gain: 1 },
-      { id: 'ecg-3', name: 'Arrhythmia 3', low: 0.5, high: 45, gain: 1 }
-    ]
-  });
+
+  // Unified band configuration for all modes
+  const [modeFreqConfig, setModeFreqConfig] = useState(DEFAULT_MODE_BANDS);
+
   const [waveletType, setWaveletType] = useState('haar');
   const [equalizerTab, setEqualizerTab] = useState('equalizer'); // 'equalizer' | 'ai'
   // Linked viewer window (0-1 normalized signal range) shared by input and output.
@@ -168,39 +175,24 @@ function App() {
 
   const activeMode = MODES.find((m) => m.id === activeModeId) || MODES[0];
 
-  // Convert preset mode sliders to band format for unified BandBuilder
-  const modeFreqBands = activeModeId === 'generic' 
-    ? genericBands 
-    : (modeFreqConfig[activeModeId] || []).map((b, i) => ({
-        ...b,
-        gain: freqSliders[i] ?? 1
-      }));
+  // Get frequency bands for current mode
+  const modeFreqBands = modeFreqConfig[activeModeId] || DEFAULT_MODE_BANDS[activeModeId] || [];
 
+  // Update frequency bands for current mode
   const setModeFreqBands = (bands) => {
-    if (activeModeId === 'generic') {
-      setGenericBands(bands);
-    } else {
-      const gains = bands.map(b => Number(b.gain));
-      setFreqSliders(gains);
-      // Also update frequency config for this mode
-      setModeFreqConfig(prev => ({
-        ...prev,
-        [activeModeId]: bands.map(b => ({
-          id: b.id,
-          name: b.name,
-          low: b.low,
-          high: b.high,
-          gain: b.gain
-        }))
-      }));
-    }
+    setModeFreqConfig(prev => ({
+      ...prev,
+      [activeModeId]: bands
+    }));
+    // Update frequency sliders to match the new gains
+    setFreqSliders(bands.map(b => Number(b.gain) || 1));
   };
 
   const mockSignalData = useMockProcessing({
     modeId: activeModeId,
-    freqSliders,
+    freqSliders: modeFreqBands.map(b => Number(b.gain) || 1),
     waveletSliders,
-    genericBands: activeModeId === 'generic' ? genericBands : modeFreqBands,
+    genericBands: modeFreqBands,
     waveletType,
     inputSignal: uploadedSignal,
     sampleRate: uploadedSampleRate
@@ -208,9 +200,9 @@ function App() {
 
   const { data: backendSignalData } = useBackendProcessing({
     modeId: activeModeId,
-    freqSliders,
+    freqSliders: modeFreqBands.map(b => Number(b.gain) || 1),
     waveletSliders,
-    genericBands: activeModeId === 'generic' ? genericBands : modeFreqBands,
+    genericBands: modeFreqBands,
     sampleRate: uploadedSampleRate,
     signalData: uploadedSignal || null,
     useFallback: true
@@ -281,10 +273,11 @@ function App() {
           case 'generic':
             response = await getGenericDefault();
             if (response.data?.bands) {
-              setGenericBands(response.data.bands);
-            }
-            if (response.data?.sliders_freq) {
-              setFreqSliders(response.data.sliders_freq);
+              setModeFreqConfig(prev => ({
+                ...prev,
+                generic: response.data.bands
+              }));
+              setFreqSliders(response.data.bands.map(b => (b.gain ?? 1)));
             }
             if (response.data?.sliders_wavelet) {
               setWaveletSliders(response.data.sliders_wavelet);
@@ -299,8 +292,8 @@ function App() {
               }));
               setFreqSliders(response.data.bands.map(b => (b.gain ?? 1)));
             }
-            if (response.data?.sliders_freq) {
-              setFreqSliders(response.data.sliders_freq);
+            if (response.data?.sliders_wavelet) {
+              setWaveletSliders(response.data.sliders_wavelet);
             }
             break;
           case 'animal':
@@ -312,8 +305,8 @@ function App() {
               }));
               setFreqSliders(response.data.bands.map(b => (b.gain ?? 1)));
             }
-            if (response.data?.sliders_freq) {
-              setFreqSliders(response.data.sliders_freq);
+            if (response.data?.sliders_wavelet) {
+              setWaveletSliders(response.data.sliders_wavelet);
             }
             break;
           case 'human':
@@ -325,8 +318,8 @@ function App() {
               }));
               setFreqSliders(response.data.bands.map(b => (b.gain ?? 1)));
             }
-            if (response.data?.sliders_freq) {
-              setFreqSliders(response.data.sliders_freq);
+            if (response.data?.sliders_wavelet) {
+              setWaveletSliders(response.data.sliders_wavelet);
             }
             break;
           case 'ecg':
@@ -338,8 +331,8 @@ function App() {
               }));
               setFreqSliders(response.data.bands.map(b => (b.gain ?? 1)));
             }
-            if (response.data?.sliders_freq) {
-              setFreqSliders(response.data.sliders_freq);
+            if (response.data?.sliders_wavelet) {
+              setWaveletSliders(response.data.sliders_wavelet);
             }
             break;
           default:
@@ -572,9 +565,9 @@ function App() {
   const handleSavePreset = () => {
     const schema = {
       mode: activeModeId,
-      sliders_freq: freqSliders,
+      sliders_freq: modeFreqBands.map(b => Number(b.gain) || 1),
       sliders_wavelet: waveletSliders,
-      ...(activeModeId === 'generic' && genericBands.length ? { generic_bands: genericBands } : {})
+      bands: modeFreqBands
     };
     saveSchema('equalizer_preset.json', schema).then(() => {
       window.alert('Preset saved. You can edit the file in backend/schemas/ and load it later.');
@@ -588,7 +581,12 @@ function App() {
       if (d.mode) setActiveModeId(d.mode);
       if (Array.isArray(d.sliders_freq)) setFreqSliders(d.sliders_freq);
       if (Array.isArray(d.sliders_wavelet)) setWaveletSliders(d.sliders_wavelet);
-      if (Array.isArray(d.generic_bands) && d.generic_bands.length) setGenericBands(d.generic_bands);
+      if (Array.isArray(d.bands) && d.bands.length) {
+        setModeFreqConfig(prev => ({
+          ...prev,
+          [d.mode || activeModeId]: d.bands
+        }));
+      }
       window.alert('Preset loaded. Controls updated.');
     }).catch(() => {
       window.alert('Load failed. Ensure backend is running and preset file exists.');
@@ -611,16 +609,11 @@ function App() {
       setActiveModeId(mode);
     }
 
-    if (mode === 'generic') {
-      setGenericBands(normalizedBands);
-      return;
-    }
-
-    setModeFreqConfig((prev) => ({
+    setModeFreqConfig(prev => ({
       ...prev,
       [mode]: normalizedBands
     }));
-    setFreqSliders(normalizedBands.map((b) => Number(b.gain) || 1));
+    setFreqSliders(normalizedBands.map(b => Number(b.gain) || 1));
   };
 
   const handleSettingsSelect = (settings) => {
@@ -641,22 +634,19 @@ function App() {
     }
     
     // Apply band configurations for the mode
-    if (settings.mode === 'generic' && Array.isArray(settings.bands)) {
-      setGenericBands(settings.bands);
-    } else if (settings.mode && settings.bands && Array.isArray(settings.bands)) {
-      // For other modes, update the configuration
+    if (settings.bands && Array.isArray(settings.bands)) {
+      const normalizedBands = settings.bands.map((b, i) => ({
+        id: b.id || `${settings.mode || activeModeId}-${i}`,
+        name: b.name || `Channel ${i + 1}`,
+        low: Number(b.low) || 0,
+        high: Number(b.high) || 1,
+        gain: Number(b.gain) ?? 1
+      }));
       setModeFreqConfig(prev => ({
         ...prev,
-        [settings.mode]: settings.bands.map((b, i) => ({
-          id: b.id || `${settings.mode}-${i}`,
-          name: b.name || `Channel ${i + 1}`,
-          low: b.low,
-          high: b.high,
-          gain: b.gain ?? 1
-        }))
+        [settings.mode || activeModeId]: normalizedBands
       }));
-      // Update frequency sliders
-      setFreqSliders(settings.bands.map(b => (b.gain ?? 1)));
+      setFreqSliders(normalizedBands.map(b => b.gain));
     }
     
     window.alert('Settings loaded successfully. Controls updated.');
@@ -929,11 +919,9 @@ function App() {
                     type="button" 
                     className="icon-btn" 
                     onClick={() => {
-                      if (activeModeId === 'generic') {
-                        setGenericBands(genericBands.map((b) => ({ ...b, gain: 1 })));
-                      } else {
-                        setFreqSliders([1, 1, 1, 1]);
-                      }
+                      setModeFreqBands(
+                        modeFreqBands.map((b) => ({ ...b, gain: 1 }))
+                      );
                     }} 
                     title="Reset"
                   >↺</button>
@@ -979,6 +967,18 @@ function App() {
                         </div>
                       ))}
                     </div>
+                  </div>
+                )}
+
+                {/* Band Information - Works for all modes */}
+                {modeFreqBands && modeFreqBands.length > 0 && (
+                  <div className="bands-info">
+                    {modeFreqBands.map((b) => (
+                      <div key={b.id} className="band-info-item">
+                        <span className="band-info-label">{b.name}</span>
+                        <span className="band-info-gain">{Number(b.gain).toFixed(2)}×</span>
+                      </div>
+                    ))}
                   </div>
                 )}
 

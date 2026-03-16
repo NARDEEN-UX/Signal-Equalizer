@@ -28,12 +28,19 @@
       "low": 196,
       "high": 3520,
       "gain": 1.0
+    },
+    {
+      "id": "music-4",
+      "name": "Others",
+      "low": 20,
+      "high": 20000,
+      "gain": 1.0
     }
   ],
-  "sliders_freq": [1.0, 1.0, 1.0, 1.0],
+  "sliders_freq": [1.0, 1.0, 1.0, 1.0, 1.0],
   "sliders_wavelet": [1.0, 1.0, 1.0, 1.0],
   "wavelet": "db4",
   "wavelet_level": 6,
   "sample_rate": 44100,
-  "description": "Default music mode configuration with 4 instruments"
+  "description": "Default music mode configuration with 5 instruments including Others"
 }

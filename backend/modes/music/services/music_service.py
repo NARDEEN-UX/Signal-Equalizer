@@ -1,18 +1,20 @@
 """
 Music Mode Service
 Handles musical instrument separation and equalization
+
+Updated to support configurable frequency bands from music_default.json
 """
 
 import numpy as np
 from scipy.fft import fft, fftfreq
 import time
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Dict
 
 
 class MusicModeService:
-    """Service for music mode signal processing"""
+    """Service for music mode signal processing with configurable bands"""
     
-    # Predefined instrument frequency ranges
+    # Default instrument frequency ranges (used as fallback)
     INSTRUMENT_RANGES = {
         "Bass": [(20, 250)],
         "Piano": [(27, 4186)],
@@ -21,7 +23,8 @@ class MusicModeService:
         "Drums": [(20, 10000)],
         "Guitar": [(82, 3520)],
         "Flute": [(262, 3951)],
-        "Trumpet": [(165, 2349)]
+        "Trumpet": [(165, 2349)],
+        "Others": [(20, 20000)]
     }
     
     def __init__(self):
@@ -32,7 +35,8 @@ class MusicModeService:
         signal: np.ndarray,
         gains: List[float],
         instrument_names: List[str],
-        sample_rate: float = None
+        sample_rate: float = None,
+        bands: Optional[List[Dict]] = None
     ) -> dict:
         """
         Process signal with instrument-based equalization
@@ -41,6 +45,9 @@ class MusicModeService:
             signal: Input signal array
             gains: Gain values for each instrument (0-2)
             instrument_names: Names of instruments being controlled
+            sample_rate: Sample rate of the signal
+            bands: Optional list of band configurations with frequency ranges
+                   Format: [{"id": str, "name": str, "low": float, "high": float, "gain": float}, ...]
             
         Returns:
             Dictionary with processed signal and analysis
@@ -48,14 +55,14 @@ class MusicModeService:
         start_time = time.time()
         sr = float(sample_rate) if sample_rate and sample_rate > 0 else float(self.default_sample_rate)
         
-        # Build frequency ranges from instrument names
-        freq_ranges = self._get_frequency_ranges(instrument_names)
+        # Use provided bands if available, otherwise build from instrument names
+        freq_ranges = self._get_frequency_ranges_from_bands(bands) if bands else self._get_frequency_ranges(instrument_names)
 
         # Compute input analysis for accurate A/B visualization.
         input_fft = self._compute_fft_data(signal, sr)
         input_spectrogram = self._compute_spectrogram_data(signal, sr)
         
-        # Apply equalization
+        # Apply equalization using gains and frequency ranges
         equalized_signal = self._apply_instrument_equalization(signal, freq_ranges, gains, sr)
         
         # Compute analysis
@@ -73,8 +80,37 @@ class MusicModeService:
             "processing_time": processing_time
         }
     
+    def _get_frequency_ranges_from_bands(self, bands: List[Dict]) -> List[Tuple[float, float]]:
+        """
+        Extract frequency ranges from band configuration objects
+        
+        Args:
+            bands: List of band objects with 'low' and 'high' frequency fields
+            
+        Returns:
+            List of (low, high) frequency tuples
+        """
+        ranges = []
+        for band in bands:
+            if isinstance(band, dict) and 'low' in band and 'high' in band:
+                low = float(band.get('low', 20))
+                high = float(band.get('high', 20000))
+                ranges.append((low, high))
+            else:
+                # Default fallback
+                ranges.append((20, 20000))
+        return ranges
+    
     def _get_frequency_ranges(self, instrument_names: List[str]) -> List[Tuple[float, float]]:
-        """Get frequency ranges for instruments"""
+        """
+        Get frequency ranges for instruments by name lookup
+        
+        Args:
+            instrument_names: Names of instruments to look up
+            
+        Returns:
+            List of (low, high) frequency tuples
+        """
         ranges = []
         for name in instrument_names:
             if name in self.INSTRUMENT_RANGES:
@@ -95,7 +131,18 @@ class MusicModeService:
         gains: List[float],
         sample_rate: float
     ) -> np.ndarray:
-        """Apply equalization based on instrument frequency ranges"""
+        """
+        Apply equalization based on instrument frequency ranges
+        
+        Args:
+            signal: Input signal
+            freq_ranges: List of (low_freq, high_freq) tuples
+            gains: Gain values corresponding to each frequency range
+            sample_rate: Sample rate of the signal
+            
+        Returns:
+            Equalized signal
+        """
         fft_data = fft(signal)
         freqs = fftfreq(len(signal), 1.0 / sample_rate)
         
@@ -108,7 +155,16 @@ class MusicModeService:
         return equalized
     
     def _compute_fft_data(self, signal: np.ndarray, sample_rate: float) -> dict:
-        """Compute FFT for output signal"""
+        """
+        Compute FFT for output signal
+        
+        Args:
+            signal: Input signal
+            sample_rate: Sample rate
+            
+        Returns:
+            Dictionary with frequencies and magnitudes
+        """
         fft_vals = fft(signal)
         freqs = fftfreq(len(signal), 1.0 / sample_rate)
         magnitudes = np.abs(fft_vals)
@@ -125,7 +181,16 @@ class MusicModeService:
         }
     
     def _compute_spectrogram_data(self, signal: np.ndarray, sample_rate: float) -> dict:
-        """Compute spectrogram for output signal"""
+        """
+        Compute spectrogram for output signal
+        
+        Args:
+            signal: Input signal
+            sample_rate: Sample rate
+            
+        Returns:
+            Dictionary with time, frequency, and magnitude data
+        """
         from scipy.signal import spectrogram
         f, t, Sxx = spectrogram(
             signal,

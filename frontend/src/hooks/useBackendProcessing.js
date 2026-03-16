@@ -83,6 +83,10 @@ function computeLevelRms(signal, levels = 6) {
 /**
  * Hook to process signals via backend APIs
  * Falls back to mock data if backend is unavailable
+ * 
+ * Now works with unified band configuration system where:
+ * - genericBands: array of band objects with { id, name, low, high, gain }
+ * - freqSliders: derived from band gains (genericBands.map(b => b.gain))
  */
 export function useBackendProcessing({
   modeId,
@@ -112,6 +116,7 @@ export function useBackendProcessing({
         let result;
 
         if (modeId === 'generic') {
+          // For generic mode, pass the full band objects to the API
           const bands = genericBands || [];
           result = await processGenericMode(
             Array.isArray(signal) ? signal : Object.values(signal),
@@ -119,34 +124,50 @@ export function useBackendProcessing({
             sampleRate
           );
         } else if (modeId === 'music') {
-          const names = ['Bass', 'Piano', 'Vocals', 'Violin'];
+          // For music mode, extract band information
+          const bands = genericBands || [];
+          const names = bands.map(b => b.name) || ['Bass', 'Piano', 'Vocals', 'Violin'];
+          const sliders = bands.map(b => Number(b.gain) || 1) || [1, 1, 1, 1];
+          
           result = await processMusicMode(
             Array.isArray(signal) ? signal : Object.values(signal),
-            freqSliders,
+            sliders,
             names,
             sampleRate
           );
         } else if (modeId === 'animal') {
-          const names = ['Cat', 'Dog', 'Bird', 'Elephant'];
+          // For animal mode
+          const bands = genericBands || [];
+          const names = bands.map(b => b.name) || ['Birds', 'Dogs', 'Cats', 'Others'];
+          const sliders = bands.map(b => Number(b.gain) || 1) || [1, 1, 1, 1];
+          
           result = await processAnimalsMode(
             Array.isArray(signal) ? signal : Object.values(signal),
-            freqSliders,
+            sliders,
             names,
             sampleRate
           );
         } else if (modeId === 'human') {
-          const names = ['Young', 'Old', 'Male', 'Female'];
+          // For human mode
+          const bands = genericBands || [];
+          const names = bands.map(b => b.name) || ['Voice 1', 'Voice 2', 'Voice 3', 'Voice 4'];
+          const sliders = bands.map(b => Number(b.gain) || 1) || [1, 1, 1, 1];
+          
           result = await processHumansMode(
             Array.isArray(signal) ? signal : Object.values(signal),
-            freqSliders,
+            sliders,
             names,
             sampleRate
           );
         } else if (modeId === 'ecg') {
-          const names = ['Normal', 'Atrial Fibrillation', 'Ventricular Tachycardia', 'Heart Block'];
+          // For ECG mode
+          const bands = genericBands || [];
+          const names = bands.map(b => b.name) || ['Normal', 'Arrhythmia 1', 'Arrhythmia 2', 'Arrhythmia 3'];
+          const sliders = bands.map(b => Number(b.gain) || 1) || [1, 1, 1, 1];
+          
           result = await processECGMode(
             Array.isArray(signal) ? signal : Object.values(signal),
-            freqSliders,
+            sliders,
             names,
             sampleRate
           );
@@ -177,18 +198,8 @@ export function useBackendProcessing({
             const outFreq = respData.output_fft.frequencies;
             const outMag = respData.output_fft.magnitudes.map((v) => Number(v) || 0);
 
-            let inFreq = [];
-            let inMag = [];
-            if (respData.input_fft?.frequencies?.length && respData.input_fft?.magnitudes?.length) {
-              inFreq = respData.input_fft.frequencies;
-              inMag = respData.input_fft.magnitudes.map((v) => Number(v) || 0);
-            } else {
-              const inFft = computeRealFft(inputSignal, effectiveSampleRate, 2048);
-              inFreq = inFft.freq;
-              inMag = inFft.mag;
-            }
-
-            const inMagAligned = outFreq.map((f) => interpolateLinear(inFreq, inMag, Number(f) || 0));
+            const inFft = computeRealFft(inputSignal, effectiveSampleRate, 2048);
+            const inMagAligned = outFreq.map((f) => interpolateLinear(inFft.freq, inFft.mag, Number(f) || 0));
 
             const maxIn = Math.max(...inMagAligned, 1e-8);
             const maxOut = Math.max(...outMag, 1e-8);
