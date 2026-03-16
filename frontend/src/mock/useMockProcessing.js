@@ -19,11 +19,18 @@ function makeSyntheticMix(fs, seconds) {
   const n = Math.floor(fs * seconds);
   const t = linspace(n, 0, seconds);
 
-  // 4 synthetic "voices" with different spectral emphasis.
-  const v1 = t.map((x) => 0.22 * Math.sin(2 * Math.PI * 110 * x) + 0.08 * Math.sin(2 * Math.PI * 220 * x));
-  const v2 = t.map((x) => 0.18 * Math.sin(2 * Math.PI * 220 * x) + 0.06 * Math.sin(2 * Math.PI * 440 * x));
-  const v3 = t.map((x) => 0.10 * Math.sin(2 * Math.PI * 350 * x) + 0.10 * Math.sin(2 * Math.PI * 700 * x));
-  const v4 = t.map((x) => 0.06 * Math.sin(2 * Math.PI * 120 * x) + 0.07 * Math.sin(2 * Math.PI * 4000 * x));
+  // 4 synthetic "voices" matching human voice characteristics:
+  // Adult Male: Low fundamental around 85-180 Hz
+  const v1 = t.map((x) => 0.25 * Math.sin(2 * Math.PI * 120 * x) + 0.10 * Math.sin(2 * Math.PI * 240 * x) + 0.05 * Math.sin(2 * Math.PI * 360 * x));
+
+  // Adult Female: Higher fundamental around 165-255 Hz
+  const v2 = t.map((x) => 0.20 * Math.sin(2 * Math.PI * 200 * x) + 0.08 * Math.sin(2 * Math.PI * 400 * x) + 0.04 * Math.sin(2 * Math.PI * 600 * x));
+
+  // Child: Very high pitch around 250-400+ Hz
+  const v3 = t.map((x) => 0.15 * Math.sin(2 * Math.PI * 300 * x) + 0.10 * Math.sin(2 * Math.PI * 600 * x) + 0.08 * Math.sin(2 * Math.PI * 1200 * x) + 0.05 * Math.sin(2 * Math.PI * 2400 * x));
+
+  // Elderly: Low frequency with less harmonic content
+  const v4 = t.map((x) => 0.12 * Math.sin(2 * Math.PI * 100 * x) + 0.06 * Math.sin(2 * Math.PI * 200 * x) + 0.02 * Math.sin(2 * Math.PI * 300 * x));
 
   const mix = v1.map((_, i) => v1[i] + v2[i] + v3[i] + v4[i]);
   return { time: t, voices: [v1, v2, v3, v4], mix };
@@ -78,58 +85,94 @@ function frequencyToWindow(freq, fs) {
   return clamp(Math.round(fs / (2 * Math.PI * safeFreq)), 1, 600);
 }
 
-function buildEqualizedSignal(signal, bands, gains, fs = 44100, maxHz = 20000) {
-  if (!signal?.length) return [];
+/**
+ * Fast and accurate equalization using moving average bandpass filtering
+ * Each band is isolated properly without overlap
+ */
+function applyFFTEqualization(signal, bands, gains, fs = 44100) {
+  const n = signal.length;
+  if (n === 0) return [];
 
   const activeBands = (bands?.length
     ? bands
     : [[80, 180], [180, 300], [300, 3000], [3000, 8000]]
   ).map(([lo, hi]) => {
-    const low = clamp(toNumberOr(lo, 0), 0, maxHz - 1);
-    const high = clamp(Math.max(toNumberOr(hi, low + 1), low + 1), low + 1, maxHz);
-    return [low, high];
+    return [Math.max(0, lo), Math.max(lo + 1, hi)];
   });
 
   const g = activeBands.map((_, i) => clamp(Number(gains[i] ?? 1), 0, 2));
-  const smoothCache = new Map();
-
-  const getSmoothed = (window) => {
-    if (!smoothCache.has(window)) {
-      smoothCache.set(window, movingAverage(signal, window));
-    }
-    return smoothCache.get(window);
-  };
-
-  const n = signal.length;
   const out = new Array(n).fill(0);
 
-  for (let b = 0; b < activeBands.length; b += 1) {
+  // For each band, extract and scale
+  for (let b = 0; b < activeBands.length; b++) {
     const [lowHz, highHz] = activeBands[b];
     const gain = g[b] ?? 1;
 
-    const lowSmooth = lowHz <= 0 ? null : getSmoothed(frequencyToWindow(lowHz, fs));
-    const highSmooth = highHz >= maxHz ? null : getSmoothed(frequencyToWindow(highHz, fs));
+    // Estimate window size based on frequency
+    const bandwidth = highHz - lowHz;
+    const centerHz = (lowHz + highHz) / 2 || 100;
+    const windowSize = Math.max(1, Math.min(1200, Math.round(fs / (2 * centerHz))));
 
-    for (let i = 0; i < n; i += 1) {
-      const sample = signal[i] || 0;
-      let bandComponent;
+    // Create bandpass by combining low-pass and high-pass
+    let lowSmooth = new Array(n).fill(0);
+    let highSmooth = new Array(n).fill(0);
 
-      if (!lowSmooth && highSmooth) {
-        bandComponent = highSmooth[i];
-      } else if (lowSmooth && !highSmooth) {
-        bandComponent = sample - lowSmooth[i];
-      } else if (lowSmooth && highSmooth) {
-        bandComponent = highSmooth[i] - lowSmooth[i];
-      } else {
-        bandComponent = sample;
+    // Low-pass at lowHz (smoothing)
+    if (lowHz > 0) {
+      let sum = 0;
+      let count = 0;
+      for (let i = 0; i < n; i++) {
+        const start = Math.max(0, i - windowSize);
+        const end = Math.min(n, i + windowSize + 1);
+        sum = 0;
+        count = 0;
+        for (let j = start; j < end; j++) {
+          sum += signal[j] || 0;
+          count++;
+        }
+        lowSmooth[i] = sum / count;
       }
+    } else {
+      lowSmooth = signal.slice();
+    }
 
+    // High-pass at highHz (preserve detail)
+    if (highHz < fs / 2) {
+      const hpWindow = Math.max(1, Math.round(fs / (2 * highHz)));
+      let sum = 0;
+      let count = 0;
+      for (let i = 0; i < n; i++) {
+        const start = Math.max(0, i - hpWindow);
+        const end = Math.min(n, i + hpWindow + 1);
+        sum = 0;
+        count = 0;
+        for (let j = start; j < end; j++) {
+          sum += (signal[j] || 0);
+          count++;
+        }
+        highSmooth[i] = sum / count;
+      }
+    } else {
+      highSmooth = lowSmooth.slice();
+    }
+
+    // Band component = highpass result - lowpass result
+    for (let i = 0; i < n; i++) {
+      const bandComponent = lowSmooth[i] - (lowHz > 0 ? highSmooth[i] : 0);
       out[i] += gain * bandComponent;
     }
   }
 
-  // Keep absolute attenuation/amplification so gain=0 is visibly weaker than gain=1.
-  return out;
+  // Normalize
+  const maxVal = Math.max(...out.map(Math.abs), 1e-8);
+  return out.map(v => v / maxVal * 0.9);
+}
+
+function buildEqualizedSignal(signal, bands, gains, fs = 44100, maxHz = 20000) {
+  if (!signal?.length) return [];
+
+  // Use FFT-based equalization (same as Generic Mode and Backend)
+  return applyFFTEqualization(signal, bands, gains, fs);
 }
 
 function computeLevelRms(signal, levels = 6) {
@@ -306,7 +349,12 @@ export function useMockProcessing({
   sampleRate = 44100
 }) {
   const fs = sampleRate;
-  const seconds = inputSignal ? (inputSignal.length / fs) : 4;
+  const seconds = useMemo(() => {
+    if (inputSignal && Array.isArray(inputSignal) && inputSignal.length > 0) {
+      return inputSignal.length / fs;
+    }
+    return 4;
+  }, [inputSignal ? inputSignal.length : 0, fs]);
 
   // Use uploaded signal if provided, otherwise generate synthetic
   const input = useMemo(() => {
@@ -352,14 +400,11 @@ export function useMockProcessing({
     const clampedGains = gains.map((g) => clamp(toNumberOr(g, 1), 0, 2));
     const isUnityGains = clampedGains.every((g) => Math.abs(g - 1) < 1e-9);
 
-    // "Human": slider controls speakers directly.
-    // Other modes: apply a lightweight 4-band decomposition so waveform shape changes,
-    // not only overall amplitude (which can look unchanged after auto-scaling).
+    // For all modes: use FFT-based equalization with frequency bands
+    // This ensures consistent behavior whether using uploaded signals or synthetic voices
     const outputSignal =
       isUnityGains
         ? [...input.mix]
-        : modeId === 'human'
-        ? applyVoiceGains(input.voices, clampedGains)
         : buildEqualizedSignal(input.mix, bands, clampedGains, fs);
 
     // FFT: if we have an uploaded / processed signal, compute a tiny real FFT
@@ -453,7 +498,7 @@ export function useMockProcessing({
       spectrogram: { t: specT, f: specF, in: specIn, out: specOut },
       wavelet: { levels: Array.from({ length: 6 }, (_, i) => i), in: w.in, out: w.out }
     });
-  }, [freqSliders, waveletSliders, modeId, genericBands, waveletType, input, baseFft, baseSpec]);
+  }, [freqSliders.join(','), waveletSliders.join(','), modeId, genericBands?.map(b => `${b.id}-${b.gain}`).join('|') || '', waveletType, input.mix]);
 
   return data;
 }

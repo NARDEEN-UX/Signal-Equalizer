@@ -135,12 +135,14 @@ export function useBackendProcessing({
             sampleRate
           );
         } else if (modeId === 'human') {
-          const names = ['Young', 'Old', 'Male', 'Female'];
+          const names = ['Adult Male', 'Adult Female', 'Child', 'Elderly'];
+          const freqRanges = genericBands ? genericBands.map(b => [b.low, b.high]) : null;
           result = await processHumansMode(
             Array.isArray(signal) ? signal : Object.values(signal),
             freqSliders,
             names,
-            sampleRate
+            sampleRate,
+            freqRanges
           );
         } else if (modeId === 'ecg') {
           const names = ['Normal', 'Atrial Fibrillation', 'Ventricular Tachycardia', 'Heart Block'];
@@ -224,14 +226,20 @@ export function useBackendProcessing({
         console.error('Backend processing error:', err);
         setError(err.message);
         setLoading(false);
-        // Fallback handled by caller
       }
     };
 
     // Add a small delay to avoid too many requests
     const timeout = setTimeout(processSignal, 100);
     return () => clearTimeout(timeout);
-  }, [modeId, freqSliders, waveletSliders, genericBands, sampleRate, signalData]);
+  }, [
+    modeId,
+    freqSliders.join(','),
+    waveletSliders.join(','),
+    genericBands ? genericBands.map(b => `${b.id}-${b.gain}`).join('|') : '',
+    sampleRate,
+    Array.isArray(signalData) ? signalData.length : 0
+  ]);
 
   return { data, loading, error };
 }

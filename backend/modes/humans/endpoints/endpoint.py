@@ -33,30 +33,47 @@ def load_default_settings():
 async def process_humans(request: HumansModeRequest):
     """
     Process signal with humans mode (voice-based) equalization
-    
+
     Args:
         request: HumansModeRequest with signal, gains, and voice names
-        
+
     Returns:
         Equalized signal and analysis
     """
     try:
-        signal = np.array(request.signal)
-        
+        signal = np.array(request.signal, dtype=np.float32)
+
+        # Ensure signal is 1D
+        if len(signal.shape) > 1:
+            signal = signal.flatten()
+
         if len(request.gains) != len(request.voice_names):
             raise ValueError("Number of gains must match number of voices")
-        
+
+        # Use custom frequency ranges if provided, otherwise use voice names
+        custom_ranges = None
+        if request.custom_freq_ranges:
+            custom_ranges = [tuple(r) if isinstance(r, (list, tuple)) else r for r in request.custom_freq_ranges]
+
         # Process signal
-        result = humans_service.process_signal(signal, request.gains, request.voice_names, sample_rate=request.sample_rate)
-        
+        result = humans_service.process_signal(
+            signal,
+            request.gains,
+            request.voice_names,
+            sample_rate=request.sample_rate,
+            custom_freq_ranges=custom_ranges
+        )
+
         return {
             "status": "success",
-            "output_signal": result["signal"],
-            "input_fft": result.get("input_fft"),
-            "output_fft": result["fft"],
-            "input_spectrogram": result.get("input_spectrogram"),
-            "output_spectrogram": result["spectrogram"],
-            "processing_time": result["processing_time"]
+            "data": {
+                "output_signal": result["signal"],
+                "input_fft": result.get("input_fft"),
+                "output_fft": result["fft"],
+                "input_spectrogram": result.get("input_spectrogram"),
+                "output_spectrogram": result["spectrogram"],
+                "processing_time": result["processing_time"]
+            }
         }
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))

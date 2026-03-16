@@ -19,6 +19,7 @@ class HumansModeRequest(BaseModel):
     sample_rate: int = 44100
     gains: List[float] = Field(description="Gains for each human voice (0-2)")
     voice_names: List[str] = Field(description="Names/descriptions of voices")
+    custom_freq_ranges: Optional[List[tuple]] = None
     sliders_wavelet: Optional[List[float]] = None
     wavelet: str = "db4"
     wavelet_level: int = 6
@@ -27,12 +28,7 @@ class HumansModeRequest(BaseModel):
 class HumansModeResponse(BaseModel):
     """Response from humans mode processing"""
     status: str
-    output_signal: List[float]
-    input_fft: Optional[dict] = None
-    output_fft: Optional[dict] = None
-    input_spectrogram: Optional[dict] = None
-    output_spectrogram: Optional[dict] = None
-    processing_time: float
+    data: dict = Field(description="Processing results with output_signal, fft, spectrograms, etc.")
 
 
 class HumansSettingsSchema(BaseModel):

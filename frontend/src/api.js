@@ -72,13 +72,18 @@ export const processAnimalsMode = (signal, gains, animalNames, sampleRate = 4410
   });
 };
 
-export const processHumansMode = (signal, gains, voiceNames, sampleRate = 44100) => {
-  return API.post('/api/modes/humans/process', {
+
+export const processHumansMode = (signal, gains, voiceNames, sampleRate = 44100, customFreqRanges = null) => {
+  const payload = {
     signal,
     gains,
     voice_names: voiceNames,
     sample_rate: sampleRate
-  });
+  };
+  if (customFreqRanges && Array.isArray(customFreqRanges)) {
+    payload.custom_freq_ranges = customFreqRanges;
+  }
+  return API.post('/api/modes/humans/process', payload);
 };
 
 export const processECGMode = (signal, gains, componentNames, sampleRate = 500) => {
