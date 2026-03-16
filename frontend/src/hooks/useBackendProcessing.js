@@ -177,8 +177,18 @@ export function useBackendProcessing({
             const outFreq = respData.output_fft.frequencies;
             const outMag = respData.output_fft.magnitudes.map((v) => Number(v) || 0);
 
-            const inFft = computeRealFft(inputSignal, effectiveSampleRate, 2048);
-            const inMagAligned = outFreq.map((f) => interpolateLinear(inFft.freq, inFft.mag, Number(f) || 0));
+            let inFreq = [];
+            let inMag = [];
+            if (respData.input_fft?.frequencies?.length && respData.input_fft?.magnitudes?.length) {
+              inFreq = respData.input_fft.frequencies;
+              inMag = respData.input_fft.magnitudes.map((v) => Number(v) || 0);
+            } else {
+              const inFft = computeRealFft(inputSignal, effectiveSampleRate, 2048);
+              inFreq = inFft.freq;
+              inMag = inFft.mag;
+            }
+
+            const inMagAligned = outFreq.map((f) => interpolateLinear(inFreq, inMag, Number(f) || 0));
 
             const maxIn = Math.max(...inMagAligned, 1e-8);
             const maxOut = Math.max(...outMag, 1e-8);

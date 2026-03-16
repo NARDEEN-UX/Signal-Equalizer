@@ -28,6 +28,7 @@ class MusicModeResponse(BaseModel):
     """Response from music mode processing"""
     status: str
     output_signal: List[float]
+    input_fft: Optional[dict] = None
     output_fft: Optional[dict] = None
     input_spectrogram: Optional[dict] = None
     output_spectrogram: Optional[dict] = None

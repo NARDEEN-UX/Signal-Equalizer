@@ -26,7 +26,22 @@ const FFTChart = ({ data, audiogram, variant }) => {
   const [xWindow, setXWindow] = useState(null);
   const [yWindow, setYWindow] = useState(null);
   const [drag, setDrag] = useState(null);
-  const yDomain = { min: 0, max: 2 };
+
+  const yDomain = useMemo(() => {
+    const combined = [
+      ...(Array.isArray(data?.in) ? data.in : []),
+      ...(Array.isArray(data?.out) ? data.out : [])
+    ];
+
+    let maxVal = 0;
+    for (let i = 0; i < combined.length; i += 1) {
+      const v = Number(combined[i]);
+      if (Number.isFinite(v) && v > maxVal) maxVal = v;
+    }
+
+    const paddedMax = maxVal > 0 ? maxVal * 1.05 : 2;
+    return { min: 0, max: Math.max(0.1, paddedMax) };
+  }, [data]);
 
   const domain = useMemo(() => {
     const positive = freq.filter((f) => f > 0);
@@ -214,8 +229,8 @@ const FFTChart = ({ data, audiogram, variant }) => {
         ticks: { color: '#737373', font: { family: fontFamily, size: 10 } }
       },
       y: {
-        min: yWindow?.min,
-        max: yWindow?.max,
+        min: yWindow?.min ?? yDomain.min,
+        max: yWindow?.max ?? yDomain.max,
         title: { display: true, text: 'Magnitude', color: '#737373', font: { family: fontFamily, size: 11 } },
         grid: { color: 'rgba(255,255,255,0.06)' },
         ticks: { color: '#737373', font: { family: fontFamily, size: 10 } }

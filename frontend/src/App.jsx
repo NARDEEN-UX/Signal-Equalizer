@@ -982,18 +982,6 @@ function App() {
                   </div>
                 )}
 
-                {/* Band Information - Works for all modes */}
-                {modeFreqBands && modeFreqBands.length > 0 && (
-                  <div className="bands-info">
-                    {modeFreqBands.map((b) => (
-                      <div key={b.id} className="band-info-item">
-                        <span className="band-info-label">{b.name}</span>
-                        <span className="band-info-gain">{Number(b.gain).toFixed(2)}×</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
                 {/* Sliders - Works for all modes */}
                 {modeFreqBands.length > 0 && (
                   <SliderGroup 

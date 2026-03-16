@@ -59,6 +59,7 @@ async def process_generic(request: GenericModeRequest):
         return {
             "status": "success",
             "output_signal": result["signal"],
+            "input_fft": result.get("input_fft"),
             "output_fft": result["fft"],
             "input_spectrogram": result.get("input_spectrogram"),
             "output_spectrogram": result["spectrogram"],

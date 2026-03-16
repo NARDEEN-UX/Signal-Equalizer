@@ -61,6 +61,7 @@ class HumansModeService:
         freq_ranges = self._get_frequency_ranges(voice_names)
 
         # Compute input analysis for accurate A/B visualization.
+        input_fft = self._compute_fft_data(signal, sr)
         input_spectrogram = self._compute_spectrogram_data(signal, sr)
         
         # Apply equalization
@@ -74,6 +75,7 @@ class HumansModeService:
         
         return {
             "signal": equalized_signal.tolist(),
+            "input_fft": input_fft,
             "fft": output_fft,
             "input_spectrogram": input_spectrogram,
             "spectrogram": output_spectrogram,
