@@ -176,6 +176,16 @@ export const deleteHumanSignal = (filename) => {
   return API.delete(`/api/modes/humans/signal/${filename}`);
 };
 
+// ==================== Human Test Voices ====================
+
+export const listTestVoices = () => {
+  return API.get('/api/modes/humans/test-voices');
+};
+
+export const loadTestVoice = (filename) => {
+  return API.post(`/api/modes/humans/test-voices/${filename}/load`);
+};
+
 // ==================== ECG Mode Signal Upload ====================
 
 export const uploadECGSignal = (file) => {

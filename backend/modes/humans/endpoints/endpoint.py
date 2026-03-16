@@ -216,3 +216,80 @@ async def delete_human_signal(filename: str):
         raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Error deleting signal: {str(e)}")
+
+
+# ==================== Test Data Management ====================
+
+@router.get("/test-voices")
+async def list_test_voices():
+    """List available test voice files from data directory"""
+    try:
+        data_dir = os.path.join(os.path.dirname(__file__), '../data/wav')
+        os.makedirs(data_dir, exist_ok=True)
+
+        voices = []
+        if os.path.exists(data_dir):
+            for filename in os.listdir(data_dir):
+                if filename.endswith(('.wav', '.mp3', '.flac')):
+                    filepath = os.path.join(data_dir, filename)
+                    file_size = os.path.getsize(filepath)
+                    try:
+                        signal, sample_rate = sf.read(filepath)
+                        if len(signal.shape) > 1:
+                            signal = signal[:, 0]
+
+                        voices.append({
+                            "filename": filename,
+                            "path": f"/api/modes/humans/test-voices/{filename}",
+                            "size": file_size,
+                            "sample_rate": int(sample_rate),
+                            "duration": float(len(signal) / sample_rate),
+                            "samples": len(signal)
+                        })
+                    except Exception as e:
+                        print(f"Error reading {filename}: {e}")
+
+        return {
+            "status": "success",
+            "test_voices": voices,
+            "count": len(voices)
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Error listing test voices: {str(e)}")
+
+
+@router.post("/test-voices/{filename}/load")
+async def load_test_voice(filename: str):
+    """Load a test voice file for processing"""
+    try:
+        # Security: validate filename
+        safe_filename = os.path.basename(filename)
+        if not safe_filename or '..' in safe_filename:
+            raise HTTPException(status_code=403, detail="Invalid filename")
+
+        data_dir = os.path.join(os.path.dirname(__file__), '../data/wav')
+        filepath = os.path.join(data_dir, safe_filename)
+
+        # Security: ensure path is within data directory
+        if not os.path.abspath(filepath).startswith(os.path.abspath(data_dir)):
+            raise HTTPException(status_code=403, detail="Access denied")
+
+        if not os.path.exists(filepath):
+            raise HTTPException(status_code=404, detail="Test voice file not found")
+
+        signal, sample_rate = sf.read(filepath)
+        if len(signal.shape) > 1:
+            signal = signal[:, 0]
+
+        return {
+            "status": "success",
+            "filename": filename,
+            "signal": signal.tolist(),
+            "sample_rate": int(sample_rate),
+            "duration": float(len(signal) / sample_rate),
+            "samples": len(signal)
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Error loading test voice: {str(e)}")
