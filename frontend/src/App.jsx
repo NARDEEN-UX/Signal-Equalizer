@@ -10,6 +10,7 @@ import AudiogramToggle from './components/AudiogramToggle';
 import ModeModal from './components/ModeModal';
 import ModeSignalUploader from './components/ModeSignalUploader';
 import GenericBandBuilder from './components/GenericBandBuilder';
+import BandPresetModal from './components/BandPresetModal';
 import './App.css';
 import { useBackendProcessing } from './hooks/useBackendProcessing';
 import { useMockProcessing } from './mock/useMockProcessing';
@@ -109,6 +110,7 @@ function App() {
   const [playbackRate, setPlaybackRate] = useState(1);
   const [volume, setVolume] = useState(1);
   const [modeModalOpen, setModeModalOpen] = useState(false);
+  const [bandPresetModalOpen, setBandPresetModalOpen] = useState(false);
   const [signalUploaderOpen, setSignalUploaderOpen] = useState(false);
   // Store uploaded signals per mode to isolate uploads
   const [modeUploadedSignals, setModeUploadedSignals] = useState({});
@@ -593,6 +595,34 @@ function App() {
     });
   };
 
+  const handleApplyBandPreset = (preset) => {
+    if (!preset || !Array.isArray(preset.bands) || !preset.bands.length) return;
+
+    const normalizedBands = preset.bands.map((b, i) => ({
+      id: String(b.id || `${preset.mode || activeModeId}-${i}`),
+      name: String(b.name || `Band ${i + 1}`),
+      low: Number(b.low) || 0,
+      high: Number(b.high) || 1,
+      gain: Number.isFinite(Number(b.gain)) ? Number(b.gain) : 1
+    }));
+
+    const mode = preset.mode || activeModeId;
+    if (mode !== activeModeId) {
+      setActiveModeId(mode);
+    }
+
+    if (mode === 'generic') {
+      setGenericBands(normalizedBands);
+      return;
+    }
+
+    setModeFreqConfig((prev) => ({
+      ...prev,
+      [mode]: normalizedBands
+    }));
+    setFreqSliders(normalizedBands.map((b) => Number(b.gain) || 1));
+  };
+
   const handleSettingsSelect = (settings) => {
     if (!settings) return;
     
@@ -872,6 +902,14 @@ function App() {
         }}
       />
 
+      <BandPresetModal
+        open={bandPresetModalOpen}
+        onClose={() => setBandPresetModalOpen(false)}
+        activeModeId={activeModeId}
+        bands={modeFreqBands}
+        onApplyPreset={handleApplyBandPreset}
+      />
+
       {signalUploaderOpen && (
         <ModeSignalUploader
           mode={activeModeId}
@@ -899,6 +937,12 @@ function App() {
                     }} 
                     title="Reset"
                   >↺</button>
+                  <button
+                    type="button"
+                    className="icon-btn"
+                    onClick={() => setBandPresetModalOpen(true)}
+                    title="Band presets"
+                  >🗂</button>
                   <button type="button" className="icon-btn" onClick={handleSavePreset} title="Save">💾</button>
                 </div>
               </div>

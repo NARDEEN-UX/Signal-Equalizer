@@ -1255,6 +1255,132 @@ body {
   margin-left: 0.25rem;
 }
 
+/* ---- Band presets modal ---- */
+.band-preset-card {
+  width: min(760px, 100%);
+  max-height: min(82vh, 760px);
+  display: flex;
+  flex-direction: column;
+}
+
+.band-preset-actions {
+  padding: 0.85rem 0.25rem 0.55rem;
+  border-bottom: 1px solid var(--border-subtle);
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.band-preset-save-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) auto auto;
+  gap: 0.5rem;
+}
+
+.band-preset-import-row {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.band-preset-error {
+  color: #ffb3b3;
+  font-size: 0.82rem;
+}
+
+.band-preset-list {
+  margin-top: 0.65rem;
+  padding: 0.35rem 0.2rem 0.2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  overflow-y: auto;
+}
+
+.band-preset-empty {
+  border: 1px dashed var(--border);
+  color: var(--text-muted);
+  border-radius: 12px;
+  padding: 0.9rem;
+  text-align: center;
+  font-size: 0.86rem;
+}
+
+.band-preset-item {
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 12px;
+  padding: 0.7rem 0.8rem;
+  text-align: left;
+  cursor: pointer;
+  color: var(--text);
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.band-preset-item:hover {
+  border-color: var(--accent);
+  background: var(--accent-subtle);
+}
+
+.band-preset-item.active {
+  border-color: #39d4e7;
+  box-shadow: 0 0 0 1px rgba(57, 212, 231, 0.4) inset;
+}
+
+.band-preset-item-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.band-preset-name {
+  font-weight: 800;
+  font-size: 0.92rem;
+}
+
+.band-preset-right {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.band-preset-date {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+}
+
+.band-preset-delete {
+  opacity: 0.8;
+}
+
+.band-preset-delete:hover {
+  opacity: 1;
+}
+
+.band-preset-band-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.55rem;
+}
+
+.band-preset-tag {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text-secondary);
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 0.13rem 0.45rem;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 680px) {
+  .band-preset-save-row {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* ---- Professional sliders ---- */
 .slider-group {
   display: flex;
