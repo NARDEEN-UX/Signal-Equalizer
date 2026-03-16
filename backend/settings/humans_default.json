@@ -1,32 +1,59 @@
 {
   "mode": "humans",
+  "speakers": ["Adult Male", "Adult Female", "Child", "Elderly"],
+  "frequency_sliders": [
+    {
+      "name": "Adult Male",
+      "id": "human-0",
+      "enabled": true,
+      "ranges": [[350, 900]]
+    },
+    {
+      "name": "Adult Female",
+      "id": "human-1",
+      "enabled": true,
+      "ranges": [[1500, 4000]]
+    },
+    {
+      "name": "Child",
+      "id": "human-2",
+      "enabled": true,
+      "ranges": [[900, 1500]]
+    },
+    {
+      "name": "Elderly",
+      "id": "human-3",
+      "enabled": true,
+      "ranges": [[50, 350]]
+    }
+  ],
   "bands": [
     {
       "id": "human-0",
-      "name": "Young",
-      "low": 200,
-      "high": 15000,
+      "name": "Adult Male",
+      "low": 350,
+      "high": 900,
       "gain": 1.0
     },
     {
       "id": "human-1",
-      "name": "Old",
-      "low": 80,
+      "name": "Adult Female",
+      "low": 1500,
       "high": 4000,
       "gain": 1.0
     },
     {
       "id": "human-2",
-      "name": "Male",
-      "low": 85,
-      "high": 255,
+      "name": "Child",
+      "low": 900,
+      "high": 1500,
       "gain": 1.0
     },
     {
       "id": "human-3",
-      "name": "Female",
-      "low": 165,
-      "high": 255,
+      "name": "Elderly",
+      "low": 50,
+      "high": 350,
       "gain": 1.0
     }
   ],
@@ -34,6 +61,12 @@
   "sliders_wavelet": [1.0, 1.0, 1.0, 1.0],
   "wavelet": "db4",
   "wavelet_level": 6,
+  "wavelet_components": {
+    "Adult Male": ["D3", "D4"],
+    "Adult Female": ["D2", "D3"],
+    "Child": ["D1", "D2"],
+    "Elderly": ["D3"]
+  },
   "sample_rate": 44100,
-  "description": "Default humans mode configuration with 4 voice types"
+  "description": "Human voices mode with non-overlapping frequency bands - Elderly (50-350Hz), Adult Male (350-900Hz), Child (900-1500Hz), Adult Female (1500-4000Hz)"
 }

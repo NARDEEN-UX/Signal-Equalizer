@@ -11,32 +11,32 @@ from typing import List, Tuple
 
 class HumansModeService:
     """Service for humans mode signal processing"""
-    
+
     # Voice characteristic frequency ranges
     # Non-overlapping ranges for clear separation in output
     VOICE_RANGES = {
-        # Primary voice types - optimized for isolation
-        "Adult Male": [[700, 1200]],      # Fundamental + harmonics 120Hz
-        "Adult Female": [[1500, 2300]],   # Fundamental + harmonics 210Hz
-        "Child": [[1200, 1500]],          # Fundamental + harmonics 320Hz (high)
-        "Elderly": [[350, 700]],          # Fundamental + harmonics 95Hz (lowest)
+        # Primary voice types - non-overlapping frequency bands
+        "Adult Male": [[350, 900]],           # 350-900 Hz
+        "Adult Female": [[1500, 4000]],       # 1500-4000 Hz
+        "Child": [[900, 1500]],               # 900-1500 Hz
+        "Elderly": [[50, 350]],               # 50-350 Hz
 
         # Legacy mappings for backward compatibility
-        "Male": [[700, 1200]],
-        "Female": [[1500, 2300]],
-        "Young": [[1200, 1500]],
-        "Old": [[350, 700]],
+        "Male": [[350, 900]],
+        "Female": [[1500, 4000]],
+        "Young": [[900, 1500]],
+        "Old": [[50, 350]],
 
-        # Language-specific characteristics (approximate formant regions)
-        "Arabic": [[100, 8000]],
-        "English": [[85, 12000]],
-        "Spanish": [[85, 10000]],
-        "French": [[85, 10000]],
-        "German": [[80, 9000]],
-        "Chinese": [[100, 8000]],
+        # Language-specific characteristics
+        "Arabic": [[50, 4000]],
+        "English": [[50, 4000]],
+        "Spanish": [[50, 4000]],
+        "French": [[50, 4000]],
+        "German": [[50, 4000]],
+        "Chinese": [[50, 4000]],
 
         # Mixed descriptors
-        "Adult": [[350, 2300]],
+        "Adult": [[50, 4000]],
     }
     
     def __init__(self):
@@ -122,7 +122,7 @@ class HumansModeService:
         gains: List[float],
         sample_rate: float
     ) -> np.ndarray:
-        """Apply equalization based on voice frequency ranges - supports multi-range per voice"""
+        """Apply equalization with smooth transitions (Butterworth-like approach)"""
         if len(signal) == 0:
             return signal
 
@@ -130,17 +130,50 @@ class HumansModeService:
         freqs = fftfreq(len(signal), 1.0 / sample_rate)
         abs_freqs = np.abs(freqs)
 
-        # For each voice with potentially multiple frequency ranges
-        for voice_ranges, gain in zip(freq_ranges, gains):
-            # Clamp gain to valid range
-            safe_gain = float(np.clip(gain, 0, 2))
-            # Apply the same gain to all frequency ranges for this voice
-            for low, high in voice_ranges:
-                low_hz = float(low)
-                high_hz = float(high)
-                mask = (abs_freqs >= low_hz) & (abs_freqs <= high_hz)
-                fft_data[mask] *= safe_gain
+        # Create a gain curve that varies smoothly across frequency
+        gain_curve = np.ones(len(abs_freqs))
 
+        # For each voice frequency band
+        for voice_idx, (voice_ranges, gain) in enumerate(zip(freq_ranges, gains)):
+            safe_gain = float(np.clip(gain, 0, 2))
+
+            for low_hz, high_hz in voice_ranges:
+                low_hz = float(low_hz)
+                high_hz = float(high_hz)
+
+                # Create smooth transition window using raised cosine
+                bandwidth = high_hz - low_hz
+                transition_width = bandwidth * 0.15  # 15% transition zone
+
+                # Smooth rise at low end
+                low_start = max(0, low_hz - transition_width)
+                low_end = low_hz
+
+                # Smooth fall at high end
+                high_start = high_hz
+                high_end = high_hz + transition_width
+
+                for i, f in enumerate(abs_freqs):
+                    if f < low_start:
+                        continue
+                    elif f < low_end:
+                        # Smooth rise: raised cosine from 0 to 1
+                        t = (f - low_start) / max(1e-6, low_end - low_start)
+                        t = np.clip(t, 0, 1)
+                        window = 0.5 * (1 - np.cos(np.pi * t))
+                        gain_curve[i] *= (1 + (safe_gain - 1) * window)
+                    elif f <= high_start:
+                        # Passband: full gain
+                        gain_curve[i] *= safe_gain
+                    elif f < high_end:
+                        # Smooth fall: raised cosine from 1 to 0
+                        t = (f - high_start) / max(1e-6, high_end - high_start)
+                        t = np.clip(t, 0, 1)
+                        window = 0.5 * (1 + np.cos(np.pi * t))
+                        gain_curve[i] *= (1 + (safe_gain - 1) * window)
+
+        # Apply the smooth gain curve
+        fft_data = fft_data * gain_curve
         equalized = np.real(np.fft.ifft(fft_data))
         return equalized
     

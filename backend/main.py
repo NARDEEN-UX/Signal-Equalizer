@@ -73,13 +73,24 @@ def _safe_json_filename(filename: str) -> str:
 
 
 def _build_human_sample(sample_rate: int = 44100, seconds: float = 4.0) -> np.ndarray:
+    """Build a sample with 4 distinct human voice characteristics (non-overlapping)"""
     n = int(sample_rate * seconds)
     t = np.linspace(0, seconds, n, endpoint=False)
-    voice_1 = 0.22 * np.sin(2 * np.pi * 110 * t) + 0.08 * np.sin(2 * np.pi * 220 * t)
-    voice_2 = 0.18 * np.sin(2 * np.pi * 220 * t) + 0.06 * np.sin(2 * np.pi * 440 * t)
-    voice_3 = 0.10 * np.sin(2 * np.pi * 350 * t) + 0.10 * np.sin(2 * np.pi * 700 * t)
-    voice_4 = 0.06 * np.sin(2 * np.pi * 120 * t) + 0.07 * np.sin(2 * np.pi * 4000 * t)
-    mix = voice_1 + voice_2 + voice_3 + voice_4
+
+    # Elderly: 50-350 Hz (fundamentals around 100 Hz)
+    elderly = 0.12 * np.sin(2 * np.pi * 100 * t) + 0.06 * np.sin(2 * np.pi * 200 * t) + 0.02 * np.sin(2 * np.pi * 300 * t)
+
+    # Adult Male: 350-900 Hz (fundamentals around 120-180 Hz with harmonics)
+    adult_male = 0.25 * np.sin(2 * np.pi * 120 * t) + 0.10 * np.sin(2 * np.pi * 240 * t) + 0.05 * np.sin(2 * np.pi * 360 * t) + 0.03 * np.sin(2 * np.pi * 480 * t)
+
+    # Child: 900-1500 Hz (fundamentals around 300-400 Hz with harmonics)
+    child = 0.15 * np.sin(2 * np.pi * 300 * t) + 0.10 * np.sin(2 * np.pi * 600 * t) + 0.08 * np.sin(2 * np.pi * 1200 * t)
+
+    # Adult Female: 1500-4000 Hz (fundamentals around 200-250 Hz with strong harmonics)
+    adult_female = 0.20 * np.sin(2 * np.pi * 200 * t) + 0.08 * np.sin(2 * np.pi * 400 * t) + 0.06 * np.sin(2 * np.pi * 800 * t) + 0.04 * np.sin(2 * np.pi * 1600 * t) + 0.03 * np.sin(2 * np.pi * 3200 * t)
+
+    # Mix: Simple addition of all 4 voices
+    mix = adult_male + adult_female + child + elderly
     peak = float(np.max(np.abs(mix))) if len(mix) else 1.0
     return (mix / peak * 0.9).astype(np.float32) if peak > 0 else mix.astype(np.float32)
 

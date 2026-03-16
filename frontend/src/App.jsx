@@ -53,12 +53,12 @@ const MODES = [
     id: 'human',
     name: 'Human Voices',
     tag: '4-speaker mix',
-    description: 'Manage multiple human voices in a single recording.',
+    description: 'Distinguish Adult Male, Adult Female, Child, and Elderly voices in recordings.',
     accentClass: 'mode-human',
     icon: '⌁',
-    sliderLabels: ['Male Voice', 'Female Voice', 'Young Speaker', 'Old Speaker'],
+    sliderLabels: ['Adult Male', 'Adult Female', 'Child', 'Elderly'],
     allowAddSubdivision: false,
-    requirements: ['Male voice', 'Female voice', 'Young speaker', 'Old speaker']
+    requirements: ['Adult male voice', 'Adult female voice', 'Child voice', 'Elderly voice']
   },
   {
     id: 'ecg',
@@ -141,10 +141,10 @@ function App() {
       { id: 'animal-3', name: 'Others', low: 100, high: 16000, gain: 1 }
     ],
     human: [
-      { id: 'human-0', name: 'Voice 1', low: 80, high: 8000, gain: 1 },
-      { id: 'human-1', name: 'Voice 2', low: 80, high: 8000, gain: 1 },
-      { id: 'human-2', name: 'Voice 3', low: 80, high: 8000, gain: 1 },
-      { id: 'human-3', name: 'Voice 4', low: 80, high: 8000, gain: 1 }
+      { id: 'human-0', name: 'Adult Male', low: 350, high: 900, gain: 1 },
+      { id: 'human-1', name: 'Adult Female', low: 1500, high: 4000, gain: 1 },
+      { id: 'human-2', name: 'Child', low: 900, high: 1500, gain: 1 },
+      { id: 'human-3', name: 'Elderly', low: 50, high: 350, gain: 1 }
     ],
     ecg: [
       { id: 'ecg-0', name: 'Normal', low: 0.5, high: 45, gain: 1 },
@@ -169,12 +169,15 @@ function App() {
   const activeMode = MODES.find((m) => m.id === activeModeId) || MODES[0];
 
   // Convert preset mode sliders to band format for unified BandBuilder
-  const modeFreqBands = activeModeId === 'generic' 
-    ? genericBands 
-    : (modeFreqConfig[activeModeId] || []).map((b, i) => ({
-        ...b,
-        gain: freqSliders[i] ?? 1
-      }));
+  const modeFreqBands = useMemo(() => {
+    if (activeModeId === 'generic') {
+      return genericBands;
+    }
+    return (modeFreqConfig[activeModeId] || []).map((b, i) => ({
+      ...b,
+      gain: freqSliders[i] ?? 1
+    }));
+  }, [activeModeId, genericBands, modeFreqConfig, freqSliders]);
 
   const setModeFreqBands = (bands) => {
     if (activeModeId === 'generic') {
@@ -948,51 +951,36 @@ function App() {
               </div>
               <div className="equalizer-scroll-container">
                 {/* Equalizer Curve - Works for all modes */}
-                <EqualizerCurve 
-                  labels={modeFreqBands && modeFreqBands.length > 0 ? modeFreqBands.map((b) => b.name) : []} 
-                  values={modeFreqBands && modeFreqBands.length > 0 ? modeFreqBands.map((b) => Number(b.gain)) : []} 
+                <EqualizerCurve
+                  labels={modeFreqBands && modeFreqBands.length > 0 ? modeFreqBands.map((b) => b.name) : []}
+                  values={modeFreqBands && modeFreqBands.length > 0 ? modeFreqBands.map((b) => Number(b.gain)) : []}
                   onChange={(gains) => {
                     setModeFreqBands(
                       modeFreqBands.map((b, i) => ({ ...b, gain: gains[i] }))
                     );
-                  }} 
+                  }}
                 />
 
-                {/* Band Builder - Works for all modes */}
-                <GenericBandBuilder 
-                  bands={modeFreqBands} 
-                  setBands={setModeFreqBands}
-                  isEditable={activeModeId === 'generic'}
-                />
-
-                {/* Requirements for Customized Modes */}
-                {activeModeId !== 'generic' && activeMode.requirements && activeMode.requirements.length > 0 && (
-                  <div className="requirements-box">
-                    <div className="requirements-title">
-                      <span>Requirements</span>
-                    </div>
-                    <div className="requirements-list">
-                      {activeMode.requirements.map((req, idx) => (
-                        <div key={idx} className="requirement-item">
-                          <span className="requirement-badge">{idx + 1}</span>
-                          <span className="requirement-text">{req}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
+                {/* Band Builder - Works for Generic and Human modes */}
+                {(activeModeId === 'generic' || activeModeId === 'human') && (
+                  <GenericBandBuilder
+                    bands={modeFreqBands}
+                    setBands={setModeFreqBands}
+                    isEditable={true}
+                  />
                 )}
 
-                {/* Sliders - Works for all modes */}
-                {modeFreqBands.length > 0 && (
-                  <SliderGroup 
-                    count={modeFreqBands.length} 
-                    labels={modeFreqBands.map((b) => b.name)} 
-                    values={modeFreqBands.map((b) => Number(b.gain))} 
+                {/* Standard Sliders for Music/Animals/ECG modes */}
+                {activeModeId !== 'generic' && activeModeId !== 'human' && modeFreqBands.length > 0 && (
+                  <SliderGroup
+                    count={modeFreqBands.length}
+                    labels={modeFreqBands.map((b) => b.name)}
+                    values={modeFreqBands.map((b) => Number(b.gain))}
                     onChange={(gains) => {
                       setModeFreqBands(
                         modeFreqBands.map((b, i) => ({ ...b, gain: gains[i] }))
                       );
-                    }} 
+                    }}
                   />
                 )}
               </div>

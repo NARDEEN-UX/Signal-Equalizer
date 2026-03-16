@@ -19,18 +19,18 @@ function makeSyntheticMix(fs, seconds) {
   const n = Math.floor(fs * seconds);
   const t = linspace(n, 0, seconds);
 
-  // 4 synthetic "voices" matching human voice characteristics:
-  // Adult Male: Low fundamental around 85-180 Hz
-  const v1 = t.map((x) => 0.25 * Math.sin(2 * Math.PI * 120 * x) + 0.10 * Math.sin(2 * Math.PI * 240 * x) + 0.05 * Math.sin(2 * Math.PI * 360 * x));
-
-  // Adult Female: Higher fundamental around 165-255 Hz
-  const v2 = t.map((x) => 0.20 * Math.sin(2 * Math.PI * 200 * x) + 0.08 * Math.sin(2 * Math.PI * 400 * x) + 0.04 * Math.sin(2 * Math.PI * 600 * x));
-
-  // Child: Very high pitch around 250-400+ Hz
-  const v3 = t.map((x) => 0.15 * Math.sin(2 * Math.PI * 300 * x) + 0.10 * Math.sin(2 * Math.PI * 600 * x) + 0.08 * Math.sin(2 * Math.PI * 1200 * x) + 0.05 * Math.sin(2 * Math.PI * 2400 * x));
-
-  // Elderly: Low frequency with less harmonic content
+  // 4 synthetic "voices" matching human voice characteristics (non-overlapping):
+  // Elderly: 50-350 Hz (fundamentals around 100 Hz)
   const v4 = t.map((x) => 0.12 * Math.sin(2 * Math.PI * 100 * x) + 0.06 * Math.sin(2 * Math.PI * 200 * x) + 0.02 * Math.sin(2 * Math.PI * 300 * x));
+
+  // Adult Male: 350-900 Hz (fundamentals around 120-180 Hz, with harmonics)
+  const v1 = t.map((x) => 0.25 * Math.sin(2 * Math.PI * 120 * x) + 0.10 * Math.sin(2 * Math.PI * 240 * x) + 0.05 * Math.sin(2 * Math.PI * 360 * x) + 0.03 * Math.sin(2 * Math.PI * 480 * x));
+
+  // Child: 900-1500 Hz (fundamentals around 300-400 Hz with harmonics)
+  const v3 = t.map((x) => 0.15 * Math.sin(2 * Math.PI * 300 * x) + 0.10 * Math.sin(2 * Math.PI * 600 * x) + 0.08 * Math.sin(2 * Math.PI * 1200 * x));
+
+  // Adult Female: 1500-4000 Hz (fundamentals around 200-250 Hz with strong harmonics)
+  const v2 = t.map((x) => 0.20 * Math.sin(2 * Math.PI * 200 * x) + 0.08 * Math.sin(2 * Math.PI * 400 * x) + 0.06 * Math.sin(2 * Math.PI * 800 * x) + 0.04 * Math.sin(2 * Math.PI * 1600 * x) + 0.03 * Math.sin(2 * Math.PI * 3200 * x));
 
   const mix = v1.map((_, i) => v1[i] + v2[i] + v3[i] + v4[i]);
   return { time: t, voices: [v1, v2, v3, v4], mix };
