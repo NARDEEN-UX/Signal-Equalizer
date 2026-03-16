@@ -51,12 +51,14 @@ async def process_animals(request: AnimalsModeRequest):
         
         return {
             "status": "success",
-            "output_signal": result["signal"],
-            "input_fft": result.get("input_fft"),
-            "output_fft": result["fft"],
-            "input_spectrogram": result.get("input_spectrogram"),
-            "output_spectrogram": result["spectrogram"],
-            "processing_time": result["processing_time"]
+            "data": {
+                "output_signal": result["signal"],
+                "input_fft": result.get("input_fft"),
+                "output_fft": result["fft"],
+                "input_spectrogram": result.get("input_spectrogram"),
+                "output_spectrogram": result["spectrogram"],
+                "processing_time": result["processing_time"]
+            }
         }
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))

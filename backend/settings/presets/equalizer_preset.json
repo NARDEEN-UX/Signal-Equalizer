@@ -25,14 +25,14 @@
       "name": "Band 2",
       "low": 180,
       "high": 300,
-      "gain": 2
+      "gain": 1
     },
     {
       "id": "b3",
       "name": "Band 3",
       "low": 300,
       "high": 3000,
-      "gain": 0
+      "gain": 1
     },
     {
       "id": "b4",
