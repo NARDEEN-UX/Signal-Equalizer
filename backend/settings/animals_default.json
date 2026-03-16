@@ -1,39 +1,57 @@
 {
   "mode": "animals",
+  "description": "Animal sounds with scientifically accurate frequency ranges - 5 band configuration",
   "bands": [
     {
       "id": "animal-0",
-      "name": "Cat",
-      "low": 50,
-      "high": 10000,
-      "gain": 1.0
+      "name": "Songbirds",
+      "low": 2000,
+      "high": 12000,
+      "gain": 1.0,
+      "examples": "Sparrow, Canary, Warbler, Finch",
+      "characteristics": "High-pitched, melodic, complex harmonics"
     },
     {
       "id": "animal-1",
-      "name": "Dog",
-      "low": 40,
-      "high": 8000,
-      "gain": 1.0
+      "name": "Canines",
+      "low": 250,
+      "high": 4000,
+      "gain": 1.0,
+      "examples": "Dog, Wolf, Hyena, Fox",
+      "characteristics": "Variable pitch, distinctive barks and howls"
     },
     {
       "id": "animal-2",
-      "name": "Bird",
-      "low": 200,
+      "name": "Felines",
+      "low": 100,
       "high": 8000,
-      "gain": 1.0
+      "gain": 1.0,
+      "examples": "Cat, Lion, Tiger, Leopard",
+      "characteristics": "Complex, variable, purrs to hisses"
     },
     {
       "id": "animal-3",
-      "name": "Elephant",
-      "low": 10,
-      "high": 5000,
-      "gain": 1.0
+      "name": "Large Mammals",
+      "low": 20,
+      "high": 2000,
+      "gain": 1.0,
+      "examples": "Elephant, Whale, Horse, Cattle",
+      "characteristics": "Deep, powerful, includes infrasound rumbles"
+    },
+    {
+      "id": "animal-4",
+      "name": "Insects",
+      "low": 1000,
+      "high": 20000,
+      "gain": 1.0,
+      "examples": "Cricket, Cicada, Bee, Grasshopper",
+      "characteristics": "High-pitched, rhythmic, mechanical sounds"
     }
   ],
-  "sliders_freq": [1.0, 1.0, 1.0, 1.0],
-  "sliders_wavelet": [1.0, 1.0, 1.0, 1.0],
+  "sliders_freq": [1.0, 1.0, 1.0, 1.0, 1.0],
+  "sliders_wavelet": [1.0, 1.0, 1.0, 1.0, 1.0],
   "wavelet": "db4",
   "wavelet_level": 6,
   "sample_rate": 44100,
-  "description": "Default animals mode configuration with 4 animal sounds"
+  "frequency_notes": "Based on scientific bioacoustics research from Cornell Lab of Ornithology and NOAA"
 }

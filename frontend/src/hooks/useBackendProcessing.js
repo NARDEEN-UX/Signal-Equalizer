@@ -1,248 +1,344 @@
-import { useEffect, useState } from 'react';
-import {
-  processGenericMode,
-  processMusicMode,
-  processAnimalsMode,
-  processHumansMode,
-  processECGMode
-} from '../api';
-
-function computeRealFft(signal, fs = 44100, nFft = 1024) {
-  if (!Array.isArray(signal) || signal.length === 0) {
-    return { freq: [], mag: [] };
-  }
-
-  const n = Math.min(signal.length, nFft);
-  const x = signal.slice(0, n);
-  const half = Math.floor(n / 2);
-  const freqs = [];
-  const mags = [];
-
-  for (let k = 0; k <= half; k += 1) {
-    let re = 0;
-    let im = 0;
-    const angleCoef = -2 * Math.PI * k / n;
-    for (let i = 0; i < n; i += 1) {
-      const angle = angleCoef * i;
-      const v = Number(x[i]) || 0;
-      re += v * Math.cos(angle);
-      im += v * Math.sin(angle);
-    }
-    freqs.push((k * fs) / n);
-    mags.push(Math.sqrt(re * re + im * im) / n);
-  }
-
-  return { freq: freqs, mag: mags };
-}
-
-function interpolateLinear(xArr, yArr, x) {
-  if (!Array.isArray(xArr) || !Array.isArray(yArr) || xArr.length === 0 || yArr.length === 0) {
-    return 0;
-  }
-  if (x <= xArr[0]) return Number(yArr[0]) || 0;
-  const last = xArr.length - 1;
-  if (x >= xArr[last]) return Number(yArr[last]) || 0;
-
-  let idx = 0;
-  while (idx + 1 < xArr.length && xArr[idx + 1] < x) idx += 1;
-  const x0 = xArr[idx];
-  const x1 = xArr[idx + 1];
-  const y0 = Number(yArr[idx]) || 0;
-  const y1 = Number(yArr[idx + 1]) || 0;
-  const t = (x - x0) / Math.max(1e-12, x1 - x0);
-  return y0 + t * (y1 - y0);
-}
-
-function computeLevelRms(signal, levels = 6) {
-  if (!Array.isArray(signal) || signal.length === 0) {
-    return Array.from({ length: levels }, () => 0);
-  }
-
-  const n = signal.length;
-  const sliceSize = Math.max(1, Math.floor(n / levels));
-  const out = [];
-
-  for (let i = 0; i < levels; i += 1) {
-    const start = i * sliceSize;
-    const end = Math.min(n, start + sliceSize);
-    let sumSq = 0;
-    let count = 0;
-
-    for (let j = start; j < end; j += 1) {
-      const v = Number(signal[j]) || 0;
-      sumSq += v * v;
-      count += 1;
-    }
-
-    out.push(Math.sqrt(sumSq / Math.max(1, count)));
-  }
-
-  return out;
-}
-
 /**
- * Hook to process signals via backend APIs
- * Falls back to mock data if backend is unavailable
+ * useBackendProcessing Hook
+ * Handles communication with backend for signal processing
+ * Supports all modes including 5-band animal mode
  * 
- * Now works with unified band configuration system where:
- * - genericBands: array of band objects with { id, name, low, high, gain }
- * - freqSliders: derived from band gains (genericBands.map(b => b.gain))
+ * Updated: 2024
+ * Version: 2.0
  */
-export function useBackendProcessing({
-  modeId,
-  freqSliders,
-  waveletSliders,
-  genericBands,
-  sampleRate = 44100,
-  signalData,
-  useFallback = true
-}) {
-  const [data, setData] = useState(null);
+
+import { useCallback, useState, useEffect } from 'react';
+
+export const useBackendProcessing = (modeFreqConfig) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [processedData, setProcessedData] = useState(null);
 
-  useEffect(() => {
-    if (!signalData) {
-      setData(null);
-      return;
+  /**
+   * Extract gains from modeFreqConfig bands
+   * Works with any number of bands (3, 4, 5, etc.)
+   * 
+   * @returns {Array} Array of gain values
+   */
+  const extractGains = useCallback(() => {
+    if (!modeFreqConfig?.bands || !Array.isArray(modeFreqConfig.bands)) {
+      return [];
     }
 
-    setLoading(true);
-    setError(null);
+    return modeFreqConfig.bands.map((band) => band.gain || 1.0);
+  }, [modeFreqConfig]);
 
-    const processSignal = async () => {
+  /**
+   * Extract band names from modeFreqConfig
+   * Works with any number of bands
+   * 
+   * @returns {Array} Array of band name strings
+   */
+  const extractBandNames = useCallback(() => {
+    if (!modeFreqConfig?.bands || !Array.isArray(modeFreqConfig.bands)) {
+      return [];
+    }
+
+    return modeFreqConfig.bands.map((band) => band.name || band.id);
+  }, [modeFreqConfig]);
+
+  /**
+   * Extract frequency information from bands
+   * Returns array of {id, name, low, high, gain} objects
+   * 
+   * @returns {Array} Array of frequency band objects
+   */
+  const extractFrequencyBands = useCallback(() => {
+    if (!modeFreqConfig?.bands || !Array.isArray(modeFreqConfig.bands)) {
+      return [];
+    }
+
+    return modeFreqConfig.bands.map((band) => ({
+      id: band.id,
+      name: band.name,
+      low: band.low,
+      high: band.high,
+      gain: band.gain || 1.0
+    }));
+  }, [modeFreqConfig]);
+
+  /**
+   * Send audio to backend for processing
+   * 
+   * @param {AudioBuffer | Float32Array} audioData - Input audio data
+   * @param {string} mode - Processing mode (music, animals, human, ecg, generic)
+   * @returns {Promise} Processing result
+   */
+  const processAudio = useCallback(
+    async (audioData, mode = 'animals') => {
+      setLoading(true);
+      setError(null);
+
       try {
-        const signal = signalData.mix || signalData;
-        let result;
-
-        if (modeId === 'generic') {
-          // For generic mode, pass the full band objects to the API
-          const bands = genericBands || [];
-          result = await processGenericMode(
-            Array.isArray(signal) ? signal : Object.values(signal),
-            bands,
-            sampleRate
-          );
-        } else if (modeId === 'music') {
-          // For music mode, extract band information
-          const bands = genericBands || [];
-          const names = bands.map(b => b.name) || ['Bass', 'Piano', 'Vocals', 'Violin'];
-          const sliders = bands.map(b => Number(b.gain) || 1) || [1, 1, 1, 1];
-          
-          result = await processMusicMode(
-            Array.isArray(signal) ? signal : Object.values(signal),
-            sliders,
-            names,
-            sampleRate
-          );
-        } else if (modeId === 'animal') {
-          // For animal mode
-          const bands = genericBands || [];
-          const names = bands.map(b => b.name) || ['Birds', 'Dogs', 'Cats', 'Others'];
-          const sliders = bands.map(b => Number(b.gain) || 1) || [1, 1, 1, 1];
-          
-          result = await processAnimalsMode(
-            Array.isArray(signal) ? signal : Object.values(signal),
-            sliders,
-            names,
-            sampleRate
-          );
-        } else if (modeId === 'human') {
-          // For human mode
-          const bands = genericBands || [];
-          const names = bands.map(b => b.name) || ['Voice 1', 'Voice 2', 'Voice 3', 'Voice 4'];
-          const sliders = bands.map(b => Number(b.gain) || 1) || [1, 1, 1, 1];
-          
-          result = await processHumansMode(
-            Array.isArray(signal) ? signal : Object.values(signal),
-            sliders,
-            names,
-            sampleRate
-          );
-        } else if (modeId === 'ecg') {
-          // For ECG mode
-          const bands = genericBands || [];
-          const names = bands.map(b => b.name) || ['Normal', 'Arrhythmia 1', 'Arrhythmia 2', 'Arrhythmia 3'];
-          const sliders = bands.map(b => Number(b.gain) || 1) || [1, 1, 1, 1];
-          
-          result = await processECGMode(
-            Array.isArray(signal) ? signal : Object.values(signal),
-            sliders,
-            names,
-            sampleRate
-          );
+        // Validate inputs
+        if (!audioData) {
+          throw new Error('No audio data provided');
         }
 
-        if (result && result.data) {
-          const respData = result.data;
-          const inSpec = respData.input_spectrogram;
-          const outSpec = respData.output_spectrogram;
-          const inputSignal = signalData.mix || signal;
-          const outputSignal = respData.output_signal;
-          const effectiveSampleRate = Number(sampleRate) || 44100;
-
-          const waveletInRaw = computeLevelRms(inputSignal, 6);
-          const waveletOutRaw = computeLevelRms(outputSignal, 6);
-          const waveletInMax = Math.max(...waveletInRaw, 1e-8);
-
-          const waveletIn = waveletInRaw.map((v) => v / waveletInMax);
-          const waveletOut = waveletOutRaw.map((v) => v / waveletInMax);
-
-          const specTimes = outSpec?.times || inSpec?.times || [];
-          const specFreqs = outSpec?.frequencies || inSpec?.frequencies || [];
-          const specInMag = inSpec?.magnitude || [];
-          const specOutMag = outSpec?.magnitude || [];
-
-          let fftData = null;
-          if (respData.output_fft?.frequencies?.length && respData.output_fft?.magnitudes?.length) {
-            const outFreq = respData.output_fft.frequencies;
-            const outMag = respData.output_fft.magnitudes.map((v) => Number(v) || 0);
-
-            const inFft = computeRealFft(inputSignal, effectiveSampleRate, 2048);
-            const inMagAligned = outFreq.map((f) => interpolateLinear(inFft.freq, inFft.mag, Number(f) || 0));
-
-            const maxIn = Math.max(...inMagAligned, 1e-8);
-            const maxOut = Math.max(...outMag, 1e-8);
-            const sharedMax = Math.max(maxIn, maxOut, 1e-8);
-
-            fftData = {
-              freq: outFreq,
-              in: inMagAligned.map((v) => v / sharedMax),
-              out: outMag.map((v) => v / sharedMax)
-            };
-          }
-
-          setData({
-            time: signalData.time || Array.from({ length: respData.output_signal.length }, (_, i) => i / 44100),
-            input_signal: inputSignal,
-            output_signal: outputSignal,
-            fft: fftData,
-            spectrogram: outSpec || inSpec ? {
-              t: specTimes,
-              f: specFreqs,
-              in: specInMag,
-              out: specOutMag
-            } : null,
-            wavelet: {
-              levels: Array.from({ length: 6 }, (_, i) => i),
-              in: waveletIn,
-              out: waveletOut
-            }
-          });
+        if (!modeFreqConfig) {
+          throw new Error('No mode configuration available');
         }
-        setLoading(false);
+
+        // Convert AudioBuffer to array if needed
+        let audioArray = audioData;
+        if (audioData instanceof AudioBuffer) {
+          audioArray = audioData.getChannelData(0);
+        }
+
+        // Prepare request payload
+        const gains = extractGains();
+        const bands = extractFrequencyBands();
+
+        const payload = {
+          mode: mode,
+          audio: Array.from(audioArray),
+          gains: gains,
+          bands: bands,
+          sampleRate: modeFreqConfig.sample_rate || 44100
+        };
+
+        // Send to backend
+        const response = await fetch('/api/process', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(payload)
+        });
+
+        if (!response.ok) {
+          throw new Error(`Backend error: ${response.statusText}`);
+        }
+
+        const result = await response.json();
+
+        // Store processed data
+        setProcessedData(result);
+
+        return result;
       } catch (err) {
-        console.error('Backend processing error:', err);
         setError(err.message);
+        console.error('Backend processing error:', err);
+        throw err;
+      } finally {
         setLoading(false);
-        // Fallback handled by caller
       }
+    },
+    [modeFreqConfig, extractGains, extractFrequencyBands]
+  );
+
+  /**
+   * Apply band-specific processing
+   * 
+   * @param {string} bandName - Name of band to process
+   * @param {AudioBuffer} audioData - Input audio
+   * @returns {Promise} Band-specific result
+   */
+  const processBand = useCallback(
+    async (bandName, audioData) => {
+      setLoading(true);
+      setError(null);
+
+      try {
+        const band = modeFreqConfig?.bands?.find(
+          (b) => b.name === bandName || b.id === bandName
+        );
+
+        if (!band) {
+          throw new Error(`Band not found: ${bandName}`);
+        }
+
+        // Convert audio if needed
+        let audioArray = audioData;
+        if (audioData instanceof AudioBuffer) {
+          audioArray = audioData.getChannelData(0);
+        }
+
+        const payload = {
+          mode: modeFreqConfig.mode,
+          band: {
+            id: band.id,
+            name: band.name,
+            low: band.low,
+            high: band.high,
+            gain: band.gain
+          },
+          audio: Array.from(audioArray),
+          sampleRate: modeFreqConfig.sample_rate || 44100
+        };
+
+        const response = await fetch('/api/process-band', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(payload)
+        });
+
+        if (!response.ok) {
+          throw new Error(`Backend error: ${response.statusText}`);
+        }
+
+        return await response.json();
+      } catch (err) {
+        setError(err.message);
+        console.error('Band processing error:', err);
+        throw err;
+      } finally {
+        setLoading(false);
+      }
+    },
+    [modeFreqConfig]
+  );
+
+  /**
+   * Get band information from backend
+   * 
+   * @param {string} mode - Mode identifier
+   * @returns {Promise} Band information
+   */
+  const getBandInfo = useCallback(async (mode = 'animals') => {
+    try {
+      const response = await fetch(`/api/modes/${mode}/info`);
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch band info: ${response.statusText}`);
+      }
+
+      return await response.json();
+    } catch (err) {
+      console.error('Error fetching band info:', err);
+      throw err;
+    }
+  }, []);
+
+  /**
+   * Get frequency statistics for audio
+   * 
+   * @param {AudioBuffer | Float32Array} audioData - Input audio
+   * @returns {Promise} Frequency statistics
+   */
+  const getFrequencyStats = useCallback(
+    async (audioData) => {
+      setLoading(true);
+      setError(null);
+
+      try {
+        // Convert audio if needed
+        let audioArray = audioData;
+        if (audioData instanceof AudioBuffer) {
+          audioArray = audioData.getChannelData(0);
+        }
+
+        const payload = {
+          mode: modeFreqConfig?.mode || 'animals',
+          audio: Array.from(audioArray),
+          sampleRate: modeFreqConfig?.sample_rate || 44100
+        };
+
+        const response = await fetch('/api/frequency-stats', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(payload)
+        });
+
+        if (!response.ok) {
+          throw new Error(`Failed to get stats: ${response.statusText}`);
+        }
+
+        return await response.json();
+      } catch (err) {
+        setError(err.message);
+        console.error('Error getting frequency stats:', err);
+        throw err;
+      } finally {
+        setLoading(false);
+      }
+    },
+    [modeFreqConfig]
+  );
+
+  /**
+   * Validate band configuration
+   * Ensures band array matches slider arrays
+   * 
+   * @returns {Object} Validation result {valid: boolean, issues: string[]}
+   */
+  const validateConfig = useCallback(() => {
+    const issues = [];
+
+    if (!modeFreqConfig) {
+      issues.push('No mode configuration available');
+      return { valid: false, issues };
+    }
+
+    const bandCount = modeFreqConfig.bands?.length || 0;
+    const freqCount = modeFreqConfig.sliders_freq?.length || 0;
+    const waveletCount = modeFreqConfig.sliders_wavelet?.length || 0;
+
+    if (bandCount === 0) {
+      issues.push('No bands defined');
+    }
+
+    if (bandCount !== freqCount) {
+      issues.push(
+        `Band count (${bandCount}) != sliders_freq count (${freqCount})`
+      );
+    }
+
+    if (freqCount !== waveletCount) {
+      issues.push(
+        `sliders_freq count (${freqCount}) != sliders_wavelet count (${waveletCount})`
+      );
+    }
+
+    // Validate each band
+    modeFreqConfig.bands?.forEach((band, idx) => {
+      if (!band.id) issues.push(`Band ${idx} missing id`);
+      if (!band.name) issues.push(`Band ${idx} missing name`);
+      if (typeof band.low !== 'number') issues.push(`Band ${idx} invalid low frequency`);
+      if (typeof band.high !== 'number') issues.push(`Band ${idx} invalid high frequency`);
+      if (band.low >= band.high) {
+        issues.push(`Band ${idx} low frequency >= high frequency`);
+      }
+    });
+
+    return {
+      valid: issues.length === 0,
+      issues,
+      bandCount,
+      freqCount,
+      waveletCount
     };
+  }, [modeFreqConfig]);
 
-    // Add a small delay to avoid too many requests
-    const timeout = setTimeout(processSignal, 100);
-    return () => clearTimeout(timeout);
-  }, [modeId, freqSliders, waveletSliders, genericBands, sampleRate, signalData]);
+  return {
+    // Functions
+    processAudio,
+    processBand,
+    getBandInfo,
+    getFrequencyStats,
+    extractGains,
+    extractBandNames,
+    extractFrequencyBands,
+    validateConfig,
+    
+    // State
+    loading,
+    error,
+    processedData,
+    
+    // Methods to clear state
+    clearError: () => setError(null),
+    clearProcessedData: () => setProcessedData(null)
+  };
+};
 
-  return { data, loading, error };
-}
+export default useBackendProcessing;

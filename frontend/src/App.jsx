@@ -34,20 +34,20 @@ const MODES = [
     description: 'Control individual instruments inside a musical mix.',
     accentClass: 'mode-music',
     icon: '♫',
-    sliderLabels: ['Bass', 'Piano', 'Vocals', 'Violin'],
+    sliderLabels: ['Bass', 'Piano', 'Vocals', 'Violin', 'Others'],
     allowAddSubdivision: false,
-    requirements: ['Bass instrument', 'Piano', 'Vocal tracks', 'Violin']
+    requirements: ['Bass instrument', 'Piano', 'Vocal tracks', 'Violin', 'Other sounds']
   },
   {
     id: 'animal',
     name: 'Animal Sounds',
     tag: 'Animal mixture',
-    description: 'Adjust different animal sounds in a complex mixture.',
+    description: 'Adjust different animal sounds with scientifically accurate frequency ranges.',
     accentClass: 'mode-animal',
     icon: '❖',
-    sliderLabels: ['Birds', 'Dogs', 'Cats', 'Others'],
+    sliderLabels: ['Songbirds', 'Canines', 'Felines', 'Large Mammals', 'Insects'],
     allowAddSubdivision: false,
-    requirements: ['Bird sounds', 'Dog barks', 'Cat meows', 'Other animal sounds']
+    requirements: ['Songbird sounds (2,000-12,000 Hz)', 'Dog/Wolf barks (250-4,000 Hz)', 'Cat meows/hisses (100-8,000 Hz)', 'Elephant/Whale calls (20-2,000 Hz)', 'Cricket/Bee sounds (1,000-20,000 Hz)']
   },
   {
     id: 'human',
@@ -107,10 +107,11 @@ const DEFAULT_MODE_BANDS = {
     { id: 'music-4', name: 'Others', low: 20, high: 20000, gain: 1.0 }
   ],
   animal: [
-    { id: 'animal-0', name: 'Birds', low: 2000, high: 8000, gain: 1 },
-    { id: 'animal-1', name: 'Dogs', low: 500, high: 2000, gain: 1 },
-    { id: 'animal-2', name: 'Cats', low: 1000, high: 4000, gain: 1 },
-    { id: 'animal-3', name: 'Others', low: 100, high: 16000, gain: 1 }
+    { id: 'animal-0', name: 'Songbirds', low: 2000, high: 12000, gain: 1.0, examples: 'Sparrow, Canary, Warbler, Finch' },
+    { id: 'animal-1', name: 'Canines', low: 250, high: 4000, gain: 1.0, examples: 'Dog, Wolf, Hyena, Fox' },
+    { id: 'animal-2', name: 'Felines', low: 100, high: 8000, gain: 1.0, examples: 'Cat, Lion, Tiger, Leopard' },
+    { id: 'animal-3', name: 'Large Mammals', low: 20, high: 2000, gain: 1.0, examples: 'Elephant, Whale, Horse, Cattle' },
+    { id: 'animal-4', name: 'Insects', low: 1000, high: 20000, gain: 1.0, examples: 'Cricket, Cicada, Bee, Grasshopper' }
   ],
   human: [
     { id: 'human-0', name: 'Voice 1', low: 80, high: 8000, gain: 1 },
@@ -976,6 +977,7 @@ function App() {
                     {modeFreqBands.map((b) => (
                       <div key={b.id} className="band-info-item">
                         <span className="band-info-label">{b.name}</span>
+                        <span className="band-info-examples">{b.examples && `(${b.examples})`}</span>
                         <span className="band-info-gain">{Number(b.gain).toFixed(2)}×</span>
                       </div>
                     ))}
