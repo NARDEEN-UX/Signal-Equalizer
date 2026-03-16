@@ -28,7 +28,12 @@ class HumansModeRequest(BaseModel):
 class HumansModeResponse(BaseModel):
     """Response from humans mode processing"""
     status: str
-    data: dict = Field(description="Processing results with output_signal, fft, spectrograms, etc.")
+    output_signal: List[float]
+    input_fft: Optional[dict] = None
+    output_fft: Optional[dict] = None
+    input_spectrogram: Optional[dict] = None
+    output_spectrogram: Optional[dict] = None
+    processing_time: float
 
 
 class HumansSettingsSchema(BaseModel):
