@@ -739,7 +739,7 @@ function App() {
 
   const handleExport = () => {
     // Frontend-only UI for now
-    window.alert('Export سيتم ربطها لاحقًا بالباك إند (تحميل WAV).');
+    window.alert('Export feature coming soon - WAV download will be available in a future release.');
   };
 
   const handleAudioFileSelect = async (file) => {
