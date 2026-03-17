@@ -210,7 +210,6 @@ function App() {
   const [homeMode, setHomeMode] = useState('Home');
   const [activeModeId, setActiveModeId] = useState('generic');
   const [freqSliders, setFreqSliders] = useState([1, 1, 1, 1]);
-  const [waveletSliders, setWaveletSliders] = useState(buildWaveletDefaults(getModeWaveletDefault('generic')));
   const [audiogram, setAudiogram] = useState(false);
   const [showSpec, setShowSpec] = useState(false);
   const [inputSpecColorScale, setInputSpecColorScale] = useState('inferno');
@@ -235,7 +234,46 @@ function App() {
   // Unified band configuration for all modes
   const [modeFreqConfig, setModeFreqConfig] = useState(DEFAULT_MODE_BANDS);
 
-  const [waveletType, setWaveletType] = useState(getModeWaveletDefault('generic'));
+  // Per-mode wavelet settings - ensure each mode has independent state
+  const [modeWaveletTypes, setModeWaveletTypes] = useState(() => {
+    const initial = {};
+    MODES.forEach(mode => {
+      initial[mode.id] = getModeWaveletDefault(mode.id);
+    });
+    return initial;
+  });
+  
+  const [modeWaveletSliders, setModeWaveletSliders] = useState(() => {
+    const initial = {};
+    MODES.forEach(mode => {
+      initial[mode.id] = buildWaveletDefaults(getModeWaveletDefault(mode.id));
+    });
+    return initial;
+  });
+
+  // Derived values for current mode
+  const waveletType = modeWaveletTypes[activeModeId] || getModeWaveletDefault(activeModeId);
+  const waveletSliders = modeWaveletSliders[activeModeId] || buildWaveletDefaults(getModeWaveletDefault(activeModeId));
+
+  // Functions to update mode-specific wavelet state - stable references
+  const updateWaveletType = (modeId, newType) => {
+    setModeWaveletTypes(prev => ({
+      ...prev,
+      [modeId]: newType
+    }));
+  };
+
+  const updateWaveletSliders = (modeId, newSliders) => {
+    setModeWaveletSliders(prev => ({
+      ...prev,
+      [modeId]: newSliders
+    }));
+  };
+
+  // Convenience functions for current mode
+  const setWaveletType = (newType) => updateWaveletType(activeModeId, newType);
+  const setWaveletSliders = (newSliders) => updateWaveletSliders(activeModeId, newSliders);
+
   const [processingMethod, setProcessingMethod] = useState('fft');
   const [equalizerTab, setEqualizerTab] = useState('equalizer'); // 'equalizer' | 'ai'
   const [aiComponents, setAiComponents] = useState([]);
@@ -467,6 +505,16 @@ function App() {
   }, [activeModeId]);
 
   // Load default settings when mode changes
+  // Ensure graphs are clear when switching to a mode without an uploaded signal
+  useEffect(() => {
+    // When switching modes, if the new mode has no uploaded signal, ensure clean state
+    if (!uploadedSignal) {
+      // Signal will be null, graphs will show empty from useMockProcessing
+    }
+    // Also reset playback when switching modes
+    handleStop();
+  }, [activeModeId]);
+
   useEffect(() => {
     const loadDefaults = async () => {
       try {

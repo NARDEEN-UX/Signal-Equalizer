@@ -355,36 +355,55 @@ export function useMockProcessing({
   const fs = sampleRate;
   const seconds = inputSignal ? (inputSignal.length / fs) : 4;
 
-  // Use uploaded signal if provided, otherwise generate synthetic
+  // Use uploaded signal if provided, otherwise return null to show empty graphs
   const input = useMemo(() => {
-    if (inputSignal && inputSignal.length > 0) {
-      // Use the uploaded signal
-      const time = linspace(inputSignal.length, 0, seconds);
-      return {
-        time,
-        voices: [inputSignal, [], [], []],  // Put uploaded signal as first "voice"
-        mix: inputSignal
-      };
-    } else {
-      // Generate synthetic
-      return makeSyntheticMix(fs, seconds);
+    if (!inputSignal || inputSignal.length === 0) {
+      return null;
     }
+    // Use the uploaded signal
+    const time = linspace(inputSignal.length, 0, seconds);
+    return {
+      time,
+      voices: [inputSignal, [], [], []],  // Put uploaded signal as first "voice"
+      mix: inputSignal
+    };
   }, [inputSignal, fs, seconds]);
 
   // Heavy transforms (FFT + spectrogram) depend only on the signal itself,
   // not on slider changes. Precompute them once per uploaded/synthetic signal.
   const baseFft = useMemo(
-    () => computeRealFft(input.mix, fs),
-    [input.mix, fs]
+    () => input?.mix ? computeRealFft(input.mix, fs) : null,
+    [input?.mix, fs]
   );
 
   const baseSpec = useMemo(
-    () => computeSpectrogram(input.mix, fs),
-    [input.mix, fs]
+    () => input?.mix ? computeSpectrogram(input.mix, fs) : null,
+    [input?.mix, fs]
   );
   const [data, setData] = useState(null);
-  // Serialize slider/band arrays to stable strings so useEffect doesn't
-  // fire on every render due to new array/object references.
+
+  // Pre-compute wavelet coefficients only when input signal changes (expensive)
+  const inputCoeffsMemo = useMemo(() => {
+    if (!input?.mix) return null;
+    return computePseudoDetailCoeffs(input.mix, 6);
+  }, [input?.mix]);
+
+  // Pre-compute and normalize spectrogram only when input signal changes (expensive)
+  const normalizedSpecMemo = useMemo(() => {
+    if (!input?.mix || !baseSpec?.f?.length || !baseSpec?.t?.length) return null;
+    const flat = baseSpec.mag.flat();
+    const maxMag = flat.reduce((m, v) => (v > m ? v : m), 1e-6);
+    return baseSpec.mag.map((row) => row.map((v) => v / maxMag));
+  }, [input?.mix, baseSpec]);
+
+  // Pre-compute FFT normalization only when input signal changes (expensive)
+  const normalizedFFTMemo = useMemo(() => {
+    if (!baseFft?.mag?.length) return null;
+    const maxMag = baseFft.mag.reduce((m, v) => (v > m ? v : m), 1e-6);
+    return baseFft.mag.map((v) => v / maxMag);
+  }, [baseFft?.mag]);
+
+  // Serialize slider/band arrays to stable strings so effect doesn't fire on every render
   const freqKey = JSON.stringify(freqSliders);
   const waveletKey = JSON.stringify(waveletSliders);
   const bandsKey = JSON.stringify(
@@ -394,9 +413,11 @@ export function useMockProcessing({
   );
 
   useEffect(() => {
+    if (!input) {
+      setData(null);
+      return;
+    }
     // Use the per-mode band configuration passed from App for *all* modes.
-    // For generic mode this is the custom bands; for the others it is the
-    // preset bands. Fall back to a sensible default if missing.
     const bands = (genericBands?.length
       ? genericBands.map((b) => [Number(b.low) || 0, Number(b.high) || 0])
       : [[80, 180], [180, 300], [300, 3000], [3000, 8000]]);
@@ -408,9 +429,7 @@ export function useMockProcessing({
     const clampedGains = gains.map((g) => clamp(toNumberOr(g, 1), 0, 2));
     const isUnityGains = clampedGains.every((g) => Math.abs(g - 1) < 1e-9);
 
-    // "Human": slider controls speakers directly.
-    // Other modes: apply a lightweight 4-band decomposition so waveform shape changes,
-    // not only overall amplitude (which can look unchanged after auto-scaling).
+    // Build output signal (fast when isUnityGains, or use cached signal)
     const outputSignal =
       isUnityGains
         ? [...input.mix]
@@ -418,75 +437,58 @@ export function useMockProcessing({
         ? applyVoiceGains(input.voices, clampedGains)
         : buildEqualizedSignal(input.mix, bands, clampedGains, fs);
 
-    // FFT: if we have an uploaded / processed signal, compute a tiny real FFT
-    // so that the spectrum actually reflects the current signal.
+    // Fast FFT gain application using pre-computed normalized values
     let fftFreq;
     let fftIn;
     let fftOut;
-    if (input.mix && input.mix.length > 0 && baseFft.freq.length) {
+    if (input.mix && input.mix.length > 0 && baseFft?.freq?.length && normalizedFFTMemo) {
       fftFreq = baseFft.freq;
-      const baseMag = baseFft.mag;
-      // Normalise a bit for stable plotting
-      const maxMag = baseMag.reduce((m, v) => (v > m ? v : m), 1e-6);
-      const normMag = baseMag.map((v) => v / maxMag);
-      fftIn = normMag;
-      // Apply per-band gains to build an approximate "output" spectrum
-      const banded = [];
-      for (let i = 0; i < fftFreq.length; i += 1) {
+      fftIn = normalizedFFTMemo;
+      // Fast: just multiply by per-frequency gains
+      fftOut = fftIn.map((mag, i) => {
         const f = fftFreq[i];
         let g = 1;
-        let matched = false;
         for (let b = 0; b < bands.length; b += 1) {
           const [lo, hi] = bands[b];
           if (f >= lo && f <= hi) {
             g *= toNumberOr(clampedGains[b], 1);
-            matched = true;
           }
         }
-        banded.push(normMag[i] * clamp(matched ? g : 1, 0, 4));
-      }
-      // Keep output on the same baseline as input to preserve absolute gain effect.
-      fftOut = banded;
+        return mag * clamp(g, 0, 4);
+      });
     } else {
-      // Fallback to the previous pseudo-FFT if no signal is present
+      // Fallback to pseudo-FFT
       fftFreq = linspace(512, 0, 8000);
       fftIn = pseudoFft(fftFreq, bands, [1, 1, 1, 1]);
       fftOut = pseudoFft(fftFreq, bands, clampedGains);
     }
 
-    // Spectrogram: use precomputed input STFT and apply frequency-band gains.
-    // Re-running STFT on every slider change causes visible UI latency.
+    // Fast spectrogram gain application using pre-computed normalized values
     let specT;
     let specF;
     let specIn;
     let specOut;
-    if (input.mix && input.mix.length > 0 && baseSpec.f.length && baseSpec.t.length) {
+    if (input.mix && input.mix.length > 0 && baseSpec?.f?.length && baseSpec?.t?.length && normalizedSpecMemo) {
       specT = baseSpec.t;
       specF = baseSpec.f;
-      const flat = baseSpec.mag.flat();
-      const maxMag = flat.reduce((m, v) => (v > m ? v : m), 1e-6);
-      const norm = baseSpec.mag.map((row) => row.map((v) => v / maxMag));
-      specIn = norm;
-
-      specOut = applyBandGainsToSpectrogram(norm, specF, bands, clampedGains);
+      specIn = normalizedSpecMemo;
+      specOut = applyBandGainsToSpectrogram(specIn, specF, bands, clampedGains);
     } else {
       const energyScale = 0.55;
       specT = linspace(120, 0, seconds);
       specF = linspace(96, 0, 8000);
       specIn = pseudoSpectrogram(specF.length, specT.length, energyScale);
-      const tone =
-        0.35 + 0.25 * clamp(toNumberOr(clampedGains[0], 1) / 2, 0, 1);
+      const tone = 0.35 + 0.25 * clamp(toNumberOr(clampedGains[0], 1) / 2, 0, 1);
       specOut = pseudoSpectrogram(specF.length, specT.length, tone);
     }
 
-    // Wavelet coefficient arrays for L1..L6. Music mode applies instrument-to-level mapping.
+    // Fast wavelet gain application using pre-computed coefficients
     const levelCount = 6;
-    const inputCoeffs = computePseudoDetailCoeffs(input.mix || [], levelCount);
-    let outputCoeffs = inputCoeffs.map((arr) => arr.map((v) => v));
+    let outputCoeffs = inputCoeffsMemo ? inputCoeffsMemo.map((arr) => arr.map((v) => v)) : [];
 
-    if (modeId === 'music') {
+    if (modeId === 'music' && inputCoeffsMemo) {
       const levelGains = computeMusicLevelGains(levelCount, genericBands || [], clampedGains);
-      outputCoeffs = inputCoeffs.map((arr, i) => arr.map((v) => v * levelGains[i]));
+      outputCoeffs = inputCoeffsMemo.map((arr, i) => arr.map((v) => v * levelGains[i]));
     }
 
     const explicitLevelGains = Array.from({ length: levelCount }, (_, i) => {
@@ -504,12 +506,12 @@ export function useMockProcessing({
       wavelet: {
         wavelet: waveletType,
         levels: makeLevelLabels(levelCount),
-        input_coeffs: inputCoeffs,
+        input_coeffs: inputCoeffsMemo || [],
         output_coeffs: outputCoeffs
       }
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [freqKey, waveletKey, modeId, bandsKey, waveletType, input, baseFft, baseSpec]);
+  }, [freqKey, waveletKey, modeId, bandsKey, waveletType, input, normalizedFFTMemo, normalizedSpecMemo, inputCoeffsMemo]);
 
   return data;
 }
