@@ -27,7 +27,7 @@ export const MUSIC_MODE_CONFIG = {
 
 // Animal Mode Configuration - 5 BANDS (UPDATED - Scientifically Accurate)
 export const ANIMAL_MODE_CONFIG = {
-  id: 'animals',
+  id: 'animal',
   name: 'Animal Sounds',
   description: 'Adjust different animal sounds with scientifically accurate frequency ranges',
   sliderLabels: ['Songbirds', 'Canines', 'Felines', 'Large Mammals', 'Insects'],
@@ -44,11 +44,11 @@ export const ANIMAL_MODE_CONFIG = {
     'Cricket', 'Cicada', 'Bee', 'Grasshopper', 'Mosquito'
   ],
   bands: [
-    { id: 'animal-0', name: 'Songbirds', low: 3000, high: 8000, gain: 1.0, examples: 'Sparrow, Canary, Warbler, Finch', peak: 5000 },
-    { id: 'animal-1', name: 'Canines', low: 250, high: 1000, gain: 1.0, examples: 'Dog, Wolf, Hyena, Fox', peak: 500 },
-    { id: 'animal-2', name: 'Felines', low: 1000, high: 3000, gain: 1.0, examples: 'Cat, Lion, Tiger, Leopard', peak: 1500 },
-    { id: 'animal-3', name: 'Large Mammals', low: 10, high: 250, gain: 1.0, examples: 'Elephant, Whale, Horse, Cattle', peak: 100 },
-    { id: 'animal-4', name: 'Insects', low: 8000, high: 20000, gain: 1.0, examples: 'Cricket, Cicada, Bee, Grasshopper', peak: 12000 }
+    { id: 'animal-0', name: 'Songbirds', low: 1000, high: 8000, gain: 1.0, examples: 'Sparrow, Canary, Warbler, Finch', peak: 5000 },
+    { id: 'animal-1', name: 'Canines', low: 150, high: 2000, gain: 1.0, examples: 'Dog, Wolf, Hyena, Fox', peak: 500 },
+    { id: 'animal-2', name: 'Felines', low: 48, high: 10000, gain: 1.0, examples: 'Cat, Lion, Tiger, Leopard', peak: 1500 },
+    { id: 'animal-3', name: 'Large Mammals', low: 5, high: 500, gain: 1.0, examples: 'Elephant, Whale, Horse, Cattle', peak: 100 },
+    { id: 'animal-4', name: 'Insects', low: 600, high: 20000, gain: 1.0, examples: 'Cricket, Cicada, Bee, Grasshopper', peak: 12000 }
   ],
   wavelet: 'db4',
   waveletLevels: 6,

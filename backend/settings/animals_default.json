@@ -5,8 +5,8 @@
     {
       "id": "animal-0",
       "name": "Songbirds",
-      "low": 2000,
-      "high": 12000,
+      "low": 1000,
+      "high": 8000,
       "gain": 1.0,
       "examples": "Sparrow, Canary, Warbler, Finch",
       "characteristics": "High-pitched, melodic, complex harmonics"
@@ -14,8 +14,8 @@
     {
       "id": "animal-1",
       "name": "Canines",
-      "low": 250,
-      "high": 4000,
+      "low": 150,
+      "high": 2000,
       "gain": 1.0,
       "examples": "Dog, Wolf, Hyena, Fox",
       "characteristics": "Variable pitch, distinctive barks and howls"
@@ -23,8 +23,8 @@
     {
       "id": "animal-2",
       "name": "Felines",
-      "low": 100,
-      "high": 8000,
+      "low": 48,
+      "high": 10000,
       "gain": 1.0,
       "examples": "Cat, Lion, Tiger, Leopard",
       "characteristics": "Complex, variable, purrs to hisses"
@@ -32,8 +32,8 @@
     {
       "id": "animal-3",
       "name": "Large Mammals",
-      "low": 20,
-      "high": 2000,
+      "low": 5,
+      "high": 500,
       "gain": 1.0,
       "examples": "Elephant, Whale, Horse, Cattle",
       "characteristics": "Deep, powerful, includes infrasound rumbles"
@@ -41,7 +41,7 @@
     {
       "id": "animal-4",
       "name": "Insects",
-      "low": 1000,
+      "low": 600,
       "high": 20000,
       "gain": 1.0,
       "examples": "Cricket, Cicada, Bee, Grasshopper",

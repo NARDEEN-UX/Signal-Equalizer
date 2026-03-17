@@ -14,40 +14,41 @@ class AnimalModeSeparator:
     """
     
     # 5-Band Animal Configuration
-    # 5-Band Animal Configuration (Acoustic ranges)
+    # 5-Band Animal Configuration (Vocalization/sound production ranges from bioacoustics research)
+    # These ranges naturally overlap because real animal sounds overlap in frequency.
     ANIMAL_RANGES = {
         'large_mammals': {
             'id': 'animal-3',
             'name': 'Large Mammals',
-            'low': 10,
-            'high': 250,
+            'low': 5,
+            'high': 500,
             'examples': 'Elephant, Whale, Horse, Cattle'
         },
         'canines': {
             'id': 'animal-1',
             'name': 'Canines',
-            'low': 250,
-            'high': 1000,
+            'low': 150,
+            'high': 2000,
             'examples': 'Dog, Wolf, Hyena, Fox'
         },
         'felines': {
             'id': 'animal-2',
             'name': 'Felines',
-            'low': 1000,
-            'high': 3000,
+            'low': 48,
+            'high': 10000,
             'examples': 'Cat, Lion, Tiger, Leopard'
         },
         'songbirds': {
             'id': 'animal-0',
             'name': 'Songbirds',
-            'low': 3000,
+            'low': 1000,
             'high': 8000,
             'examples': 'Sparrow, Canary, Warbler, Finch'
         },
         'insects': {
             'id': 'animal-4',
             'name': 'Insects',
-            'low': 8000,
+            'low': 600,
             'high': 20000,
             'examples': 'Cricket, Cicada, Bee, Grasshopper'
         }
@@ -148,20 +149,19 @@ class AnimalModeSeparator:
                 processed_gains.append(1.0)
             processed_gains = processed_gains[:len(self.ANIMAL_RANGES)]
 
-            output_signal = np.zeros_like(signal_data)
-            bands_list = ['songbirds', 'canines', 'felines', 'large_mammals', 'insects']
+            # Apply gains directly in the frequency domain (same approach as music/human modes).
+            # This is lossless: gain=1.0 leaves FFT bins unchanged ⟹ output ≡ input.
+            fft_data = fft(signal_data)
+            freqs = fftfreq(len(signal_data), 1.0 / sr)
+            abs_freqs = np.abs(freqs)
 
+            bands_list = ['songbirds', 'canines', 'felines', 'large_mammals', 'insects']
             for i, band_name in enumerate(bands_list):
                 band_info = self.ANIMAL_RANGES[band_name]
-                filtered = self.apply_bandpass_filter(signal_data, band_info['low'], band_info['high'])
-                output_signal += filtered * processed_gains[i]
-            
-            # Normalize
-            max_val = np.max(np.abs(output_signal))
-            if max_val > 1.0:
-                output_signal = output_signal / max_val * 0.95
-            
-            equalized_signal = output_signal
+                mask = (abs_freqs >= band_info['low']) & (abs_freqs < band_info['high'])
+                fft_data[mask] *= processed_gains[i]
+
+            equalized_signal = np.real(np.fft.ifft(fft_data))
         else:
             wavelet_name = wavelet if wavelet in pywt.wavelist(kind='discrete') else "db4"
             actual_level = 10 if not sliders_wavelet else max(1, min(int(wavelet_level or 6), 10))

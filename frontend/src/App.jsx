@@ -120,11 +120,11 @@ const DEFAULT_MODE_BANDS = {
     { id: 'music-4', name: 'Others', low: 20, high: 20000, gain: 1.0 }
   ],
   animal: [
-    { id: 'animal-0', name: 'Songbirds', low: 3000, high: 8000, gain: 1.0, examples: 'Sparrow, Canary, Warbler, Finch' },
-    { id: 'animal-1', name: 'Canines', low: 250, high: 1000, gain: 1.0, examples: 'Dog, Wolf, Hyena, Fox' },
-    { id: 'animal-2', name: 'Felines', low: 1000, high: 3000, gain: 1.0, examples: 'Cat, Lion, Tiger, Leopard' },
-    { id: 'animal-3', name: 'Large Mammals', low: 10, high: 250, gain: 1.0, examples: 'Elephant, Whale, Horse, Cattle' },
-    { id: 'animal-4', name: 'Insects', low: 8000, high: 20000, gain: 1.0, examples: 'Cricket, Cicada, Bee, Grasshopper' }
+    { id: 'animal-0', name: 'Songbirds', low: 1000, high: 8000, gain: 1.0, examples: 'Sparrow, Canary, Warbler, Finch' },
+    { id: 'animal-1', name: 'Canines', low: 150, high: 2000, gain: 1.0, examples: 'Dog, Wolf, Hyena, Fox' },
+    { id: 'animal-2', name: 'Felines', low: 48, high: 10000, gain: 1.0, examples: 'Cat, Lion, Tiger, Leopard' },
+    { id: 'animal-3', name: 'Large Mammals', low: 5, high: 500, gain: 1.0, examples: 'Elephant, Whale, Horse, Cattle' },
+    { id: 'animal-4', name: 'Insects', low: 600, high: 20000, gain: 1.0, examples: 'Cricket, Cicada, Bee, Grasshopper' }
   ],
   human: [
     { id: 'human-0', name: 'Voice 1', low: 80, high: 8000, gain: 1 },

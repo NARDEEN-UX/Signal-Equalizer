@@ -6,7 +6,7 @@
  * Example: sound classification, species identification, etc.
  */
 
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
 
 export const animalModeService = {
   /**
@@ -17,7 +17,7 @@ export const animalModeService = {
    */
   processAudio: async (audioData, sliderValues) => {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/modes/animal/process`, {
+      const response = await fetch(`${API_BASE_URL}/api/modes/animals/process`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ audio: audioData, sliders: sliderValues })

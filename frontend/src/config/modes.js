@@ -24,15 +24,15 @@ export const MODES = [
     id: 'animal',
     name: 'Animal Sounds',
     tag: 'Animal mixture',
-    description: 'Adjust different animal sounds in a complex mixture.',
+    description: 'Adjust different animal sounds with scientifically accurate frequency ranges.',
     accentClass: 'mode-animal',
     icon: '❖',
-    sliderLabels: ['Birds', 'Dogs', 'Cats', 'Others'],
-    freqBands: [(20, 500), (500, 2000), (2000, 8000), (8000, 16000)],
+    sliderLabels: ['Songbirds', 'Canines', 'Felines', 'Large Mammals', 'Insects'],
+    freqBands: [(1000, 8000), (150, 2000), (48, 10000), (5, 500), (600, 20000)],
     wavelet: 'db4',
     waveletLevels: 6,
     allowAddSubdivision: false,
-    requirements: ['Bird sounds', 'Dog barks', 'Cat meows', 'Other animal sounds']
+    requirements: ['Songbird sounds (1,000-8,000 Hz)', 'Dog/Wolf barks (150-2,000 Hz)', 'Cat meows/hisses (48-10,000 Hz)', 'Elephant/Whale calls (5-500 Hz)', 'Cricket/Bee sounds (600-20,000 Hz)']
   },
   {
     id: 'music',
