@@ -84,6 +84,80 @@ def _build_human_sample(sample_rate: int = 44100, seconds: float = 4.0) -> np.nd
     return (mix / peak * 0.9).astype(np.float32) if peak > 0 else mix.astype(np.float32)
 
 
+def _build_generic_sample(sample_rate: int = 44100, seconds: float = 4.0) -> np.ndarray:
+    """Synthetic signal: summation of pure single frequencies spread across the frequency range."""
+    n = int(sample_rate * seconds)
+    t = np.linspace(0, seconds, n, endpoint=False)
+    # Frequencies spanning the audible range
+    freqs = [100, 250, 500, 1000, 2000, 4000, 8000, 12000, 16000]
+    amplitudes = [0.20, 0.18, 0.16, 0.14, 0.12, 0.10, 0.08, 0.06, 0.04]
+    mix = np.zeros(n, dtype=np.float64)
+    for freq, amp in zip(freqs, amplitudes):
+        mix += amp * np.sin(2 * np.pi * freq * t)
+    peak = float(np.max(np.abs(mix))) or 1.0
+    return (mix / peak * 0.9).astype(np.float32)
+
+
+def _build_music_sample(sample_rate: int = 44100, seconds: float = 4.0) -> np.ndarray:
+    """Synthetic mixture of 4 musical instruments using characteristic frequency ranges."""
+    n = int(sample_rate * seconds)
+    t = np.linspace(0, seconds, n, endpoint=False)
+    # Bass (20-250 Hz)
+    bass = 0.25 * np.sin(2 * np.pi * 60 * t) + 0.15 * np.sin(2 * np.pi * 120 * t)
+    # Piano (27-4186 Hz) — a chord
+    piano = 0.12 * np.sin(2 * np.pi * 262 * t) + 0.10 * np.sin(2 * np.pi * 330 * t) + 0.08 * np.sin(2 * np.pi * 392 * t)
+    # Vocals (80-8000 Hz) — fundamental + harmonics
+    vocals = 0.15 * np.sin(2 * np.pi * 440 * t) + 0.08 * np.sin(2 * np.pi * 880 * t) + 0.04 * np.sin(2 * np.pi * 1760 * t)
+    # Violin (196-3520 Hz)
+    violin = 0.12 * np.sin(2 * np.pi * 659 * t) + 0.06 * np.sin(2 * np.pi * 1318 * t) + 0.03 * np.sin(2 * np.pi * 2637 * t)
+    mix = bass + piano + vocals + violin
+    peak = float(np.max(np.abs(mix))) or 1.0
+    return (mix / peak * 0.9).astype(np.float32)
+
+
+def _build_animals_sample(sample_rate: int = 44100, seconds: float = 4.0) -> np.ndarray:
+    """Synthetic mixture of 4+ animal frequency bands."""
+    n = int(sample_rate * seconds)
+    t = np.linspace(0, seconds, n, endpoint=False)
+    # Songbirds (2000-12000 Hz)
+    birds = 0.12 * np.sin(2 * np.pi * 3000 * t) + 0.08 * np.sin(2 * np.pi * 6000 * t) + 0.05 * np.sin(2 * np.pi * 10000 * t)
+    # Canines (250-4000 Hz)
+    canines = 0.15 * np.sin(2 * np.pi * 500 * t) + 0.10 * np.sin(2 * np.pi * 1500 * t)
+    # Felines (100-8000 Hz)
+    felines = 0.12 * np.sin(2 * np.pi * 700 * t) + 0.08 * np.sin(2 * np.pi * 2000 * t)
+    # Large Mammals (20-2000 Hz)
+    mammals = 0.20 * np.sin(2 * np.pi * 50 * t) + 0.12 * np.sin(2 * np.pi * 200 * t)
+    # Insects (1000-20000 Hz)
+    insects = 0.06 * np.sin(2 * np.pi * 4000 * t) + 0.04 * np.sin(2 * np.pi * 14000 * t)
+    mix = birds + canines + felines + mammals + insects
+    peak = float(np.max(np.abs(mix))) or 1.0
+    return (mix / peak * 0.9).astype(np.float32)
+
+
+def _build_ecg_sample(sample_rate: int = 500, seconds: float = 10.0) -> np.ndarray:
+    """Synthetic ECG signal with components in non-overlapping frequency bands.
+
+    Band layout (must match ecg_service.COMPONENT_RANGES):
+      Normal Sinus:             0.5 – 3 Hz
+      Atrial Fibrillation:      5 – 50 Hz
+      Ventricular Tachycardia:  3 – 5 Hz
+      Heart Block:              0.05 – 0.5 Hz
+    """
+    n = int(sample_rate * seconds)
+    t = np.linspace(0, seconds, n, endpoint=False)
+    # Normal sinus rhythm, 1.2 Hz (72 bpm) + 2.4 Hz harmonic — inside [0.5, 3)
+    normal = 0.35 * np.sin(2 * np.pi * 1.2 * t) + 0.15 * np.sin(2 * np.pi * 2.4 * t)
+    # Atrial Fibrillation — rapid irregular activity inside [5, 50)
+    af = 0.10 * np.sin(2 * np.pi * 7 * t) + 0.06 * np.sin(2 * np.pi * 15 * t) + 0.03 * np.sin(2 * np.pi * 35 * t)
+    # Ventricular Tachycardia — inside [3, 5)
+    vt = 0.12 * np.sin(2 * np.pi * 3.5 * t) + 0.08 * np.sin(2 * np.pi * 4.5 * t)
+    # Heart Block — very slow inside [0.05, 0.5)
+    hb = 0.14 * np.sin(2 * np.pi * 0.15 * t) + 0.08 * np.sin(2 * np.pi * 0.35 * t)
+    mix = normal + af + vt + hb
+    peak = float(np.max(np.abs(mix))) or 1.0
+    return (mix / peak * 0.9).astype(np.float32)
+
+
 # ==================== Core Endpoints ====================
 
 @app.get("/")
@@ -158,6 +232,74 @@ async def sample_human():
             content=buffer.getvalue(),
             media_type="audio/wav",
             headers={"Content-Disposition": 'attachment; filename="human_sample.wav"'}
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error generating sample: {str(e)}")
+
+
+@app.get("/sample/generic")
+async def sample_generic():
+    """Generate a synthetic multi-frequency signal for generic mode validation."""
+    try:
+        sample_rate = 44100
+        signal = _build_generic_sample(sample_rate=sample_rate)
+        buffer = io.BytesIO()
+        sf.write(buffer, signal, sample_rate, format='WAV')
+        return Response(
+            content=buffer.getvalue(),
+            media_type="audio/wav",
+            headers={"Content-Disposition": 'attachment; filename="generic_sample.wav"'}
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error generating sample: {str(e)}")
+
+
+@app.get("/sample/music")
+async def sample_music():
+    """Generate a synthetic 4-instrument mixture for music mode."""
+    try:
+        sample_rate = 44100
+        signal = _build_music_sample(sample_rate=sample_rate)
+        buffer = io.BytesIO()
+        sf.write(buffer, signal, sample_rate, format='WAV')
+        return Response(
+            content=buffer.getvalue(),
+            media_type="audio/wav",
+            headers={"Content-Disposition": 'attachment; filename="music_sample.wav"'}
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error generating sample: {str(e)}")
+
+
+@app.get("/sample/animals")
+async def sample_animals():
+    """Generate a synthetic animal sounds mixture."""
+    try:
+        sample_rate = 44100
+        signal = _build_animals_sample(sample_rate=sample_rate)
+        buffer = io.BytesIO()
+        sf.write(buffer, signal, sample_rate, format='WAV')
+        return Response(
+            content=buffer.getvalue(),
+            media_type="audio/wav",
+            headers={"Content-Disposition": 'attachment; filename="animals_sample.wav"'}
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error generating sample: {str(e)}")
+
+
+@app.get("/sample/ecg")
+async def sample_ecg():
+    """Generate a synthetic ECG signal with arrhythmia components."""
+    try:
+        sample_rate = 500
+        signal = _build_ecg_sample(sample_rate=sample_rate)
+        buffer = io.BytesIO()
+        sf.write(buffer, signal, sample_rate, format='WAV')
+        return Response(
+            content=buffer.getvalue(),
+            media_type="audio/wav",
+            headers={"Content-Disposition": 'attachment; filename="ecg_sample.wav"'}
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error generating sample: {str(e)}")

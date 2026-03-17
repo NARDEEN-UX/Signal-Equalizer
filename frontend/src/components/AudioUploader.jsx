@@ -1,12 +1,29 @@
 import React, { useRef } from 'react';
 import { loadSampleHuman } from '../api';
 
+import { audioBufferToWav } from '../utils/audioUtils';
+
 const AudioUploader = ({ onFileSelect, onSettingsSelect, currentFileName }) => {
   const inputRef = useRef(null);
   const settingsRef = useRef(null);
 
-  const handleFile = (file) => {
-    if (file) onFileSelect(file);
+  const handleFile = async (file) => {
+    if (!file) return;
+    let finalFile = file;
+    if (file.name.toLowerCase().match(/\.(m4a|mp4|aac)$/)) {
+      try {
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const arrayBuffer = await file.arrayBuffer();
+        const decoded = await audioCtx.decodeAudioData(arrayBuffer);
+        const wavBlob = audioBufferToWav(decoded);
+        finalFile = new File([wavBlob], file.name.replace(/\.[^/.]+$/, '') + '.wav', { type: 'audio/wav' });
+        await audioCtx.close();
+      } catch (err) {
+        alert('Failed to convert M4A to WAV: ' + err.message);
+        return;
+      }
+    }
+    onFileSelect(finalFile);
   };
 
   const handleSettingsFile = (file) => {
@@ -41,7 +58,7 @@ const AudioUploader = ({ onFileSelect, onSettingsSelect, currentFileName }) => {
       <input 
         ref={inputRef} 
         type="file" 
-        accept="audio/*,.wav,.mp3" 
+        accept="audio/*,.wav,.mp3,.m4a,.aac,.mp4" 
         onChange={(e) => handleFile(e.target.files?.[0])} 
         style={{ display: 'none' }} 
       />

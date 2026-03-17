@@ -13,7 +13,21 @@ import BandPresetModal from './components/BandPresetModal';
 import './App.css';
 import { useBackendProcessing } from './hooks/useBackendProcessing';
 import { useMockProcessing } from './mock/useMockProcessing';
-import { saveSchema, loadSchema, getGenericDefault, getMusicDefault, getAnimalsDefault, getHumansDefault, getECGDefault, uploadAudio } from './api';
+import {
+  saveSchema,
+  loadSchema,
+  getGenericDefault,
+  getMusicDefault,
+  getAnimalsDefault,
+  getHumansDefault,
+  getECGDefault,
+  uploadAudio,
+  processGenericMode,
+  processMusicMode,
+  processAnimalsMode,
+  processHumansMode,
+  processECGMode
+} from './api';
 
 const MODES = [
   {
@@ -66,9 +80,9 @@ const MODES = [
     description: 'Control magnitude of arrhythmia components (normal + 3 types).',
     accentClass: 'mode-ecg',
     icon: '♡',
-    sliderLabels: ['Normal', 'Arrhythmia 1', 'Arrhythmia 2', 'Arrhythmia 3'],
+    sliderLabels: ['Normal Sinus', 'Atrial Fibrillation', 'Ventricular Tachycardia', 'Heart Block'],
     allowAddSubdivision: false,
-    requirements: ['Normal ECG', 'Atrial fibrillation', 'Ventricular tachycardia', 'Heart block']
+    requirements: ['Normal sinus rhythm (0.5–3 Hz)', 'Atrial fibrillation (5–50 Hz)', 'Ventricular tachycardia (3–5 Hz)', 'Heart block (0.05–0.5 Hz)']
   },
   {
     id: 'ai-music',
@@ -106,11 +120,11 @@ const DEFAULT_MODE_BANDS = {
     { id: 'music-4', name: 'Others', low: 20, high: 20000, gain: 1.0 }
   ],
   animal: [
-    { id: 'animal-0', name: 'Songbirds', low: 2000, high: 12000, gain: 1.0, examples: 'Sparrow, Canary, Warbler, Finch' },
-    { id: 'animal-1', name: 'Canines', low: 250, high: 4000, gain: 1.0, examples: 'Dog, Wolf, Hyena, Fox' },
-    { id: 'animal-2', name: 'Felines', low: 100, high: 8000, gain: 1.0, examples: 'Cat, Lion, Tiger, Leopard' },
-    { id: 'animal-3', name: 'Large Mammals', low: 20, high: 2000, gain: 1.0, examples: 'Elephant, Whale, Horse, Cattle' },
-    { id: 'animal-4', name: 'Insects', low: 1000, high: 20000, gain: 1.0, examples: 'Cricket, Cicada, Bee, Grasshopper' }
+    { id: 'animal-0', name: 'Songbirds', low: 3000, high: 8000, gain: 1.0, examples: 'Sparrow, Canary, Warbler, Finch' },
+    { id: 'animal-1', name: 'Canines', low: 250, high: 1000, gain: 1.0, examples: 'Dog, Wolf, Hyena, Fox' },
+    { id: 'animal-2', name: 'Felines', low: 1000, high: 3000, gain: 1.0, examples: 'Cat, Lion, Tiger, Leopard' },
+    { id: 'animal-3', name: 'Large Mammals', low: 10, high: 250, gain: 1.0, examples: 'Elephant, Whale, Horse, Cattle' },
+    { id: 'animal-4', name: 'Insects', low: 8000, high: 20000, gain: 1.0, examples: 'Cricket, Cicada, Bee, Grasshopper' }
   ],
   human: [
     { id: 'human-0', name: 'Voice 1', low: 80, high: 8000, gain: 1 },
@@ -119,10 +133,10 @@ const DEFAULT_MODE_BANDS = {
     { id: 'human-3', name: 'Voice 4', low: 80, high: 8000, gain: 1 }
   ],
   ecg: [
-    { id: 'ecg-0', name: 'Normal', low: 0.5, high: 45, gain: 1 },
-    { id: 'ecg-1', name: 'Arrhythmia 1', low: 0.5, high: 45, gain: 1 },
-    { id: 'ecg-2', name: 'Arrhythmia 2', low: 0.5, high: 45, gain: 1 },
-    { id: 'ecg-3', name: 'Arrhythmia 3', low: 0.5, high: 45, gain: 1 }
+    { id: 'ecg-0', name: 'Normal Sinus', low: 0.5, high: 3, gain: 1 },
+    { id: 'ecg-1', name: 'Atrial Fibrillation', low: 5, high: 50, gain: 1 },
+    { id: 'ecg-2', name: 'Ventricular Tachycardia', low: 3, high: 5, gain: 1 },
+    { id: 'ecg-3', name: 'Heart Block', low: 0.05, high: 0.5, gain: 1 }
   ]
 };
 
@@ -222,7 +236,11 @@ function App() {
   const [modeFreqConfig, setModeFreqConfig] = useState(DEFAULT_MODE_BANDS);
 
   const [waveletType, setWaveletType] = useState(getModeWaveletDefault('generic'));
+  const [processingMethod, setProcessingMethod] = useState('fft');
   const [equalizerTab, setEqualizerTab] = useState('equalizer'); // 'equalizer' | 'ai'
+  const [aiComponents, setAiComponents] = useState([]);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState('');
   // Linked viewer window (0-1 normalized signal range) shared by input and output.
   const [linkedViewWindow, setLinkedViewWindow] = useState({ start: 0, end: 1 });
   const [fftZoomWindow, setFftZoomWindow] = useState({ x: null, y: null });
@@ -269,11 +287,38 @@ function App() {
     waveletType,
     sampleRate: uploadedSampleRate,
     signalData: uploadedSignal || null,
-    useFallback: true
+    useFallback: true,
+    processingMethod,
+    waveletSliders
   });
 
   // Prefer backend processing when a real uploaded signal exists.
-  const signalData = uploadedSignal && backendSignalData ? backendSignalData : mockSignalData;
+  const signalData = useMemo(() => {
+    if (!uploadedSignal) return mockSignalData;
+    if (backendSignalData) return backendSignalData;
+
+    // During backend processing after upload, keep output equal to input
+    // so users do not see a temporary mock-processed mismatch.
+    if (!mockSignalData) return null;
+    return {
+      ...mockSignalData,
+      output_signal: Array.isArray(mockSignalData?.input_signal)
+        ? [...mockSignalData.input_signal]
+        : [],
+      fft: {
+        ...(mockSignalData?.fft || {}),
+        out: Array.isArray(mockSignalData?.fft?.in)
+          ? [...mockSignalData.fft.in]
+          : []
+      },
+      spectrogram: {
+        ...(mockSignalData?.spectrogram || {}),
+        out: Array.isArray(mockSignalData?.spectrogram?.in)
+          ? mockSignalData.spectrogram.in.map((row) => (Array.isArray(row) ? [...row] : row))
+          : []
+      }
+    };
+  }, [uploadedSignal, backendSignalData, mockSignalData]);
 
   const sharedSpectrogramMax = useMemo(() => {
     const specIn = signalData?.spectrogram?.in;
@@ -321,6 +366,86 @@ function App() {
     scan(inSignal);
     return maxVal;
   }, [signalData?.input_signal]);
+
+  const computeRms = (arr) => {
+    if (!Array.isArray(arr) || arr.length === 0) return 0;
+    let sumSq = 0;
+    let count = 0;
+    for (let i = 0; i < arr.length; i += 1) {
+      const v = Number(arr[i]);
+      if (Number.isFinite(v)) {
+        sumSq += v * v;
+        count += 1;
+      }
+    }
+    if (!count) return 0;
+    return Math.sqrt(sumSq / count);
+  };
+
+  const runAiSeparation = async () => {
+    const inputSignal = signalData?.input_signal;
+    if (!Array.isArray(inputSignal) || inputSignal.length === 0) {
+      setAiError('No input signal available. Upload or load a signal first.');
+      setAiComponents([]);
+      return;
+    }
+    if (!Array.isArray(modeFreqBands) || modeFreqBands.length === 0) {
+      setAiError('No bands/components are configured for this mode.');
+      setAiComponents([]);
+      return;
+    }
+
+    setAiLoading(true);
+    setAiError('');
+
+    try {
+      const names = modeFreqBands.map((b, i) => String(b?.name || `Component ${i + 1}`));
+      const sr = Number(uploadedSampleRate) || (activeModeId === 'ecg' ? 500 : 44100);
+
+      const componentRequests = modeFreqBands.map((_, idx) => {
+        const oneHot = modeFreqBands.map((__, i) => (i === idx ? 1 : 0));
+
+        if (activeModeId === 'music') {
+          return processMusicMode(inputSignal, oneHot, names, sr, 'fft', waveletType, 6, null, null);
+        }
+        if (activeModeId === 'animal') {
+          return processAnimalsMode(inputSignal, oneHot, names, sr, 'fft', waveletType, 6, null);
+        }
+        if (activeModeId === 'human') {
+          return processHumansMode(inputSignal, oneHot, names, sr, 'fft', waveletType, 6, null);
+        }
+        if (activeModeId === 'ecg') {
+          return processECGMode(inputSignal, oneHot, names, sr, 'fft', waveletType, 6, null);
+        }
+
+        const singleBandConfig = modeFreqBands.map((b, i) => ({ ...b, gain: i === idx ? 1 : 0 }));
+        return processGenericMode(inputSignal, singleBandConfig, sr, 'fft', waveletType, 6, null);
+      });
+
+      const responses = await Promise.all(componentRequests);
+      const extracted = responses.map((resp, idx) => {
+        const out = Array.isArray(resp?.data?.output_signal) ? resp.data.output_signal : [];
+        return {
+          id: modeFreqBands[idx]?.id || `ai-${idx}`,
+          name: names[idx],
+          signal: out,
+          rms: computeRms(out)
+        };
+      });
+
+      setAiComponents(extracted);
+    } catch (err) {
+      setAiComponents([]);
+      setAiError(err?.response?.data?.detail || err?.message || 'AI separation failed.');
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
+  const applyAiSoloToEqualizer = (componentIndex) => {
+    setModeFreqBands(modeFreqBands.map((b, i) => ({ ...b, gain: i === componentIndex ? 1 : 0 })));
+    setEqualizerTab('equalizer');
+  };
 
   useEffect(() => {
     if (signalData?.time?.length) {
@@ -780,10 +905,7 @@ function App() {
     if (step === 1) {
       return {
         signal: Array.from(signal),
-        sampleRate: Math.max(
-          MIN_PLAYBACK_SAMPLE_RATE,
-          Math.min(MAX_PLAYBACK_SAMPLE_RATE, Number(sampleRate) || 44100)
-        )
+        sampleRate: Number(sampleRate) || 44100
       };
     }
 
@@ -794,10 +916,7 @@ function App() {
 
     return {
       signal: reduced,
-      sampleRate: Math.max(
-        MIN_PLAYBACK_SAMPLE_RATE,
-        Math.min(MAX_PLAYBACK_SAMPLE_RATE, Math.round((Number(sampleRate) || 44100) / step))
-      )
+      sampleRate: Math.round((Number(sampleRate) || 44100) / step)
     };
   };
 
@@ -844,8 +963,56 @@ function App() {
   };
 
   const handleExport = () => {
-    // Frontend-only UI for now
-    window.alert('Export سيتم ربطها لاحقًا بالباك إند (تحميل WAV).');
+    if (!signalData?.output_signal || !signalData.output_signal.length) {
+      window.alert('No output signal to export. Load a signal and apply equalization first.');
+      return;
+    }
+
+    const samples = signalData.output_signal;
+    const sr = uploadedSampleRate || 44100;
+    const numChannels = 1;
+    const bitsPerSample = 16;
+    const bytesPerSample = bitsPerSample / 8;
+    const blockAlign = numChannels * bytesPerSample;
+    const byteRate = sr * blockAlign;
+    const dataSize = samples.length * blockAlign;
+    const bufferSize = 44 + dataSize;
+
+    const buffer = new ArrayBuffer(bufferSize);
+    const view = new DataView(buffer);
+
+    // RIFF header
+    const writeStr = (offset, str) => { for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i)); };
+    writeStr(0, 'RIFF');
+    view.setUint32(4, bufferSize - 8, true);
+    writeStr(8, 'WAVE');
+    // fmt sub-chunk
+    writeStr(12, 'fmt ');
+    view.setUint32(16, 16, true); // PCM
+    view.setUint16(20, 1, true);  // Audio format
+    view.setUint16(22, numChannels, true);
+    view.setUint32(24, sr, true);
+    view.setUint32(28, byteRate, true);
+    view.setUint16(32, blockAlign, true);
+    view.setUint16(34, bitsPerSample, true);
+    // data sub-chunk
+    writeStr(36, 'data');
+    view.setUint32(40, dataSize, true);
+
+    for (let i = 0; i < samples.length; i++) {
+      const clamped = Math.max(-1, Math.min(1, Number(samples[i]) || 0));
+      view.setInt16(44 + i * 2, clamped * 0x7FFF, true);
+    }
+
+    const blob = new Blob([buffer], { type: 'audio/wav' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${activeModeId}_equalized.wav`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   };
 
   const handleAudioFileSelect = async (file) => {
@@ -1034,13 +1201,33 @@ function App() {
               <div className="box-head">
                 <h2 className="box-title">Equalizer Controls</h2>
                 <div className="box-actions">
+                  <div className="method-toggle" style={{ marginRight: '1rem', display: 'flex', gap: '0.2rem', background: 'rgba(255,255,255,0.05)', padding: '2px', borderRadius: '4px' }}>
+                    <button 
+                      type="button" 
+                      className={`btn-xs ${processingMethod === 'fft' ? 'active' : ''}`}
+                      onClick={() => setProcessingMethod('fft')}
+                      style={{ fontSize: '10px', padding: '2px 6px', borderRadius: '3px', background: processingMethod === 'fft' ? '#6366f1' : 'transparent', color: 'white', border: 'none', cursor: 'pointer' }}
+                    >FFT</button>
+                    <button 
+                      type="button" 
+                      className={`btn-xs ${processingMethod === 'wavelet' ? 'active' : ''}`}
+                      onClick={() => {
+                        setProcessingMethod('wavelet');
+                        if (activeModeId === 'generic') {
+                          setWaveletSliders(buildWaveletDefaults(waveletType));
+                        }
+                      }}
+                      style={{ fontSize: '10px', padding: '2px 6px', borderRadius: '3px', background: processingMethod === 'wavelet' ? '#6366f1' : 'transparent', color: 'white', border: 'none', cursor: 'pointer' }}
+                    >Wavelet</button>
+                  </div>
                   <button 
                     type="button" 
                     className="icon-btn" 
                     onClick={() => {
-                      setModeFreqBands(
-                        modeFreqBands.map((b) => ({ ...b, gain: 1 }))
-                      );
+                      setModeFreqBands(modeFreqBands.map((b) => ({ ...b, gain: 1 })));
+                      if (processingMethod === 'wavelet' && activeModeId !== 'generic') {
+                         setWaveletSliders(buildWaveletDefaults(waveletType));
+                      }
                     }} 
                     title="Reset"
                   >↺</button>
@@ -1056,12 +1243,18 @@ function App() {
               <div className="equalizer-scroll-container">
                 {/* Equalizer Curve - Works for all modes */}
                 <EqualizerCurve 
-                  labels={modeFreqBands && modeFreqBands.length > 0 ? modeFreqBands.map((b) => b.name) : []} 
-                  values={modeFreqBands && modeFreqBands.length > 0 ? modeFreqBands.map((b) => Number(b.gain)) : []} 
-                  onChange={(gains) => {
-                    setModeFreqBands(
-                      modeFreqBands.map((b, i) => ({ ...b, gain: gains[i] }))
-                    );
+                  labels={
+                    (activeModeId === 'generic' || (modeFreqBands && modeFreqBands.length > 0))
+                      ? modeFreqBands.map((b) => b.name)
+                      : []
+                  } 
+                  values={
+                    (activeModeId === 'generic' || (modeFreqBands && modeFreqBands.length > 0))
+                      ? modeFreqBands.map((b) => Number(b.gain))
+                      : []
+                  } 
+                  onChange={(vals) => {
+                    setModeFreqBands(modeFreqBands.map((b, i) => ({ ...b, gain: vals[i] })));
                   }} 
                 />
 
@@ -1101,29 +1294,29 @@ function App() {
                         </div>
                       ))}
                     </div>
+                  </>
+                )}
 
-                    {activeModeId !== 'generic' && (
-                      <>
-                        <div className="field" style={{ marginTop: '0.5rem' }}>
-                          <span>Wavelet Basis</span>
-                          <select
-                            className="select"
-                            value={waveletType}
-                            onChange={(e) => {
-                              const nextType = normalizeWaveletName(e.target.value, getModeWaveletDefault(activeModeId));
-                              setWaveletType(nextType);
-                              setWaveletSliders((prev) => normalizeWaveletSliders(nextType, prev));
-                            }}
-                          >
-                            {WAVELET_BASIS_OPTIONS.map((option) => (
-                              <option key={option.value} value={option.value}>{option.label}</option>
-                            ))}
-                          </select>
-                        </div>
+                {processingMethod === 'wavelet' && (
+                  <>
+                    <div className="field" style={{ marginTop: '0.5rem' }}>
+                      <span>Wavelet Basis</span>
+                      <select
+                        className="select"
+                        value={waveletType}
+                        onChange={(e) => {
+                          const nextType = normalizeWaveletName(e.target.value, getModeWaveletDefault(activeModeId));
+                          setWaveletType(nextType);
+                          setWaveletSliders((prev) => normalizeWaveletSliders(nextType, prev));
+                        }}
+                      >
+                        {WAVELET_BASIS_OPTIONS.map((option) => (
+                          <option key={option.value} value={option.value}>{option.label}</option>
+                        ))}
+                      </select>
+                    </div>
 
-                        <p className="helper-text" style={{ marginTop: '0.2rem' }}>{recommendedWavelet}</p>
-                      </>
-                    )}
+                    <p className="helper-text" style={{ marginTop: '0.2rem' }}>{recommendedWavelet}</p>
                   </>
                 )}
 
@@ -1134,7 +1327,44 @@ function App() {
           {equalizerTab === 'ai' && (
             <div className="box ai-box">
               <h2 className="box-title">AI Model Comparison</h2>
-              <p className="helper-text">Connect a pretrained AI model per mode to compare with the equalizer.</p>
+              <p className="helper-text">Run component separation for the current mode and inspect each isolated track.</p>
+              <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.75rem', marginBottom: '0.75rem' }}>
+                <button type="button" className="btn btn-small" onClick={runAiSeparation} disabled={aiLoading}>
+                  {aiLoading ? 'Separating...' : 'Run AI Separation'}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-small"
+                  onClick={() => setModeFreqBands(modeFreqBands.map((b) => ({ ...b, gain: 1 })))}
+                >
+                  Reset EQ Gains
+                </button>
+              </div>
+
+              {aiError && <p className="helper-text" style={{ color: '#fda4af' }}>{aiError}</p>}
+
+              {!aiLoading && !aiError && aiComponents.length === 0 && (
+                <p className="helper-text">No separated components yet. Click Run AI Separation.</p>
+              )}
+
+              {!aiLoading && aiComponents.length > 0 && (
+                <div className="bands-info" style={{ marginTop: '0.25rem' }}>
+                  {aiComponents.map((comp, idx) => (
+                    <div key={comp.id} className="band-info-item" style={{ alignItems: 'center', gap: '0.5rem' }}>
+                      <span className="band-info-label">{comp.name}</span>
+                      <span className="band-info-gain">RMS {comp.rms.toFixed(4)}</span>
+                      <button
+                        type="button"
+                        className="btn btn-small"
+                        onClick={() => applyAiSoloToEqualizer(idx)}
+                        title="Apply this component as solo in Equalizer mode"
+                      >
+                        Solo In EQ
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </aside>

@@ -44,11 +44,11 @@ export const ANIMAL_MODE_CONFIG = {
     'Cricket', 'Cicada', 'Bee', 'Grasshopper', 'Mosquito'
   ],
   bands: [
-    { id: 'animal-0', name: 'Songbirds', low: 2000, high: 12000, gain: 1.0, examples: 'Sparrow, Canary, Warbler, Finch', peak: 5000 },
-    { id: 'animal-1', name: 'Canines', low: 250, high: 4000, gain: 1.0, examples: 'Dog, Wolf, Hyena, Fox', peak: 1000 },
-    { id: 'animal-2', name: 'Felines', low: 100, high: 8000, gain: 1.0, examples: 'Cat, Lion, Tiger, Leopard', peak: 1200 },
-    { id: 'animal-3', name: 'Large Mammals', low: 20, high: 2000, gain: 1.0, examples: 'Elephant, Whale, Horse, Cattle', peak: 300 },
-    { id: 'animal-4', name: 'Insects', low: 1000, high: 20000, gain: 1.0, examples: 'Cricket, Cicada, Bee, Grasshopper', peak: 5000 }
+    { id: 'animal-0', name: 'Songbirds', low: 3000, high: 8000, gain: 1.0, examples: 'Sparrow, Canary, Warbler, Finch', peak: 5000 },
+    { id: 'animal-1', name: 'Canines', low: 250, high: 1000, gain: 1.0, examples: 'Dog, Wolf, Hyena, Fox', peak: 500 },
+    { id: 'animal-2', name: 'Felines', low: 1000, high: 3000, gain: 1.0, examples: 'Cat, Lion, Tiger, Leopard', peak: 1500 },
+    { id: 'animal-3', name: 'Large Mammals', low: 10, high: 250, gain: 1.0, examples: 'Elephant, Whale, Horse, Cattle', peak: 100 },
+    { id: 'animal-4', name: 'Insects', low: 8000, high: 20000, gain: 1.0, examples: 'Cricket, Cicada, Bee, Grasshopper', peak: 12000 }
   ],
   wavelet: 'db4',
   waveletLevels: 6,

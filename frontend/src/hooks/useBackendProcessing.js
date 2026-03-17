@@ -17,31 +17,6 @@ const makeTime = (length, sampleRate) => {
   return Array.from({ length }, (_, i) => i / sr);
 };
 
-const MUSIC_LEVEL_MAP = {
-  bass: ['L5', 'L6'],
-  piano: ['L3', 'L4'],
-  vocals: ['L3', 'L4', 'L5'],
-  violin: ['L3', 'L4']
-};
-
-const buildMusicWaveletGains = (bands) => {
-  const gains = { L1: 1, L2: 1, L3: 1, L4: 1, L5: 1, L6: 1 };
-  if (!Array.isArray(bands)) return gains;
-
-  for (let i = 0; i < bands.length; i += 1) {
-    const name = String(bands[i]?.name || '').trim().toLowerCase();
-    if (name === 'others') continue;
-    const mapped = MUSIC_LEVEL_MAP[name] || [];
-    const g = Math.max(0, Math.min(2, toNum(bands[i]?.gain, 1)));
-    for (let j = 0; j < mapped.length; j += 1) {
-      const level = mapped[j];
-      gains[level] *= g;
-    }
-  }
-
-  return gains;
-};
-
 const normalizeResponse = (apiData, inputSignal, sampleRate) => {
   const outputSignal = Array.isArray(apiData?.output_signal) ? apiData.output_signal : inputSignal;
 
@@ -67,8 +42,8 @@ const normalizeResponse = (apiData, inputSignal, sampleRate) => {
     spectrogram: {
       t: Array.isArray(outSpec?.times) ? outSpec.times : [],
       f: Array.isArray(outSpec?.frequencies) ? outSpec.frequencies : [],
-      in: Array.isArray(inSpec?.magnitude) ? inSpec.magnitude : [],
-      out: Array.isArray(outSpec?.magnitude) ? outSpec.magnitude : []
+      in: Array.isArray(inSpec?.magnitude) ? inSpec.magnitude : (Array.isArray(apiData?.spectrogram?.in) ? apiData.spectrogram.in : []),
+      out: Array.isArray(outSpec?.magnitude) ? outSpec.magnitude : (Array.isArray(apiData?.spectrogram?.out) ? apiData.spectrogram.out : [])
     },
     wavelet: {
       levels: Array.from({ length: levelCount }, (_, i) => `L${i + 1}`),
@@ -84,11 +59,23 @@ export const useBackendProcessing = ({
   sampleRate,
   signalData,
   useFallback = true,
-  waveletType = 'db8'
+  waveletType = 'db8',
+  processingMethod = 'fft',
+  waveletSliders = null
 }) => {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+
+  // Serialize bands to a stable string so useEffect doesn't fire on
+  // every render due to a new array/object reference.
+  const bandsKey = JSON.stringify(
+    (Array.isArray(genericBands) ? genericBands : []).map(b => ({
+      id: b?.id, name: b?.name, low: b?.low, high: b?.high, gain: b?.gain
+    }))
+  );
+
+  const waveletSlidersKey = JSON.stringify(waveletSliders);
 
   useEffect(() => {
     if (!Array.isArray(signalData) || signalData.length === 0) {
@@ -106,36 +93,23 @@ export const useBackendProcessing = ({
         const bands = Array.isArray(genericBands) ? genericBands : [];
         const gains = bands.map((b) => toNum(b?.gain, 1));
         const names = bands.map((b, i) => String(b?.name || `Band ${i + 1}`));
-
+        
+        const method = processingMethod;
+        
         let response;
         if (modeId === 'music') {
-          const waveletGains = buildMusicWaveletGains(bands);
-          console.log('[wavelet] sending level gains', waveletGains);
-          response = await processMusicMode(signalData, gains, names, sampleRate, waveletType, 6, waveletGains);
+          response = await processMusicMode(signalData, gains, names, sampleRate, method, waveletType, 6, waveletSliders);
         } else if (modeId === 'animal') {
-          response = await processAnimalsMode(signalData, gains, names, sampleRate);
+          response = await processAnimalsMode(signalData, gains, names, sampleRate, method, waveletType, 6, waveletSliders);
         } else if (modeId === 'human') {
-          response = await processHumansMode(signalData, gains, names, sampleRate);
+          response = await processHumansMode(signalData, gains, names, sampleRate, method, waveletType, 6, waveletSliders);
         } else if (modeId === 'ecg') {
-          response = await processECGMode(signalData, gains, names, sampleRate);
+          response = await processECGMode(signalData, gains, names, sampleRate, method, waveletType, 6, waveletSliders);
         } else {
-          response = await processGenericMode(signalData, bands, sampleRate);
+          response = await processGenericMode(signalData, bands, sampleRate, method, waveletType, 6, waveletSliders);
         }
 
         if (!cancelled) {
-          const out = Array.isArray(response?.data?.output_signal) ? response.data.output_signal : [];
-          if (out.length) {
-            let minV = Infinity;
-            let maxV = -Infinity;
-            for (let i = 0; i < out.length; i += 1) {
-              const v = Number(out[i]);
-              if (Number.isFinite(v)) {
-                if (v < minV) minV = v;
-                if (v > maxV) maxV = v;
-              }
-            }
-            console.log('[wavelet] received output signal range', { min: minV, max: maxV });
-          }
           setData(normalizeResponse(response?.data || {}, signalData, sampleRate));
         }
       } catch (err) {
@@ -152,7 +126,8 @@ export const useBackendProcessing = ({
     return () => {
       cancelled = true;
     };
-  }, [modeId, genericBands, sampleRate, signalData, useFallback, waveletType]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [modeId, bandsKey, sampleRate, signalData, useFallback, waveletType, processingMethod, waveletSlidersKey]);
 
   return { data, loading, error };
 };

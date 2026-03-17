@@ -19,8 +19,8 @@ class MusicModeRequest(BaseModel):
     sample_rate: int = 44100
     gains: List[float] = Field(description="Gains for each instrument (0-2)")
     instrument_names: List[str] = Field(description="Names of instruments")
+    method: str = "wavelet"
     sliders_wavelet: Optional[List[float]] = None
-    wavelet_gains: Optional[Dict[str, float]] = None
     wavelet: str = "db4"
     wavelet_level: int = 6
 

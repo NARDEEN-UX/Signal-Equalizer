@@ -47,7 +47,16 @@ async def process_humans(request: HumansModeRequest):
             raise ValueError("Number of gains must match number of voices")
         
         # Process signal
-        result = humans_service.process_signal(signal, request.gains, request.voice_names, sample_rate=request.sample_rate)
+        result = humans_service.process_signal(
+            signal, 
+            request.gains, 
+            request.voice_names, 
+            sample_rate=request.sample_rate,
+            method=request.method,
+            wavelet=request.wavelet,
+            wavelet_level=request.wavelet_level,
+            sliders_wavelet=request.sliders_wavelet
+        )
         
         return {
             "status": "success",
@@ -56,6 +65,8 @@ async def process_humans(request: HumansModeRequest):
             "output_fft": result["fft"],
             "input_spectrogram": result.get("input_spectrogram"),
             "output_spectrogram": result["spectrogram"],
+            "input_coeffs": result.get("input_coeffs"),
+            "output_coeffs": result.get("output_coeffs"),
             "processing_time": result["processing_time"]
         }
     except Exception as e:

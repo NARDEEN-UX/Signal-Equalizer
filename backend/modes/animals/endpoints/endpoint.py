@@ -47,7 +47,16 @@ async def process_animals(request: AnimalsModeRequest):
             raise ValueError("Number of gains must match number of animal sounds")
         
         # Process signal
-        result = animals_service.process_signal(signal, request.gains, request.animal_names, sample_rate=request.sample_rate)
+        result = animals_service.process_signal(
+            signal, 
+            request.gains, 
+            request.animal_names, 
+            sample_rate=request.sample_rate,
+            method=request.method,
+            wavelet=request.wavelet,
+            wavelet_level=request.wavelet_level,
+            sliders_wavelet=request.sliders_wavelet
+        )
         
         return {
             "status": "success",
@@ -56,6 +65,8 @@ async def process_animals(request: AnimalsModeRequest):
             "output_fft": result["fft"],
             "input_spectrogram": result.get("input_spectrogram"),
             "output_spectrogram": result["spectrogram"],
+            "input_coeffs": result.get("input_coeffs"),
+            "output_coeffs": result.get("output_coeffs"),
             "processing_time": result["processing_time"]
         }
     except Exception as e:

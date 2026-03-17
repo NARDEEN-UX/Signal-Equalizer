@@ -54,7 +54,16 @@ async def process_generic(request: GenericModeRequest):
         gains = [b.gain for b in request.bands]
         
         # Process signal
-        result = generic_service.process_signal(signal, bands, gains, sample_rate=request.sample_rate)
+        result = generic_service.process_signal(
+            signal, 
+            bands, 
+            gains, 
+            sample_rate=request.sample_rate,
+            method=request.method,
+            wavelet=request.wavelet,
+            wavelet_level=request.wavelet_level,
+            sliders_wavelet=request.sliders_wavelet
+        )
         
         return {
             "status": "success",
@@ -63,6 +72,8 @@ async def process_generic(request: GenericModeRequest):
             "output_fft": result["fft"],
             "input_spectrogram": result.get("input_spectrogram"),
             "output_spectrogram": result["spectrogram"],
+            "input_coeffs": result.get("input_coeffs"),
+            "output_coeffs": result.get("output_coeffs"),
             "processing_time": result["processing_time"]
         }
     except Exception as e:

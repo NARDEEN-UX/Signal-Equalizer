@@ -1,19 +1,10 @@
-"""
-Animal Mode Service
-Handles animal sound separation with 5 scientifically accurate frequency bands
-Routes: /api/modes/animals/...
-
-Bands:
-  0: Songbirds (2,000 - 12,000 Hz)
-  1: Canines (250 - 4,000 Hz)
-  2: Felines (100 - 8,000 Hz)
-  3: Large Mammals (20 - 2,000 Hz)
-  4: Insects (1,000 - 20,000 Hz)
-"""
-
 import numpy as np
 from scipy import signal
 import json
+import time
+from typing import List, Tuple, Optional, Dict
+import pywt
+from scipy.fft import fft, fftfreq
 
 
 class AnimalModeSeparator:
@@ -23,50 +14,59 @@ class AnimalModeSeparator:
     """
     
     # 5-Band Animal Configuration
-    ANIMAL_BANDS = {
-        'songbirds': {
-            'id': 'animal-0',
-            'name': 'Songbirds',
-            'low': 2000,
-            'high': 12000,
-            'examples': 'Sparrow, Canary, Warbler, Finch'
+    # 5-Band Animal Configuration (Acoustic ranges)
+    ANIMAL_RANGES = {
+        'large_mammals': {
+            'id': 'animal-3',
+            'name': 'Large Mammals',
+            'low': 10,
+            'high': 250,
+            'examples': 'Elephant, Whale, Horse, Cattle'
         },
         'canines': {
             'id': 'animal-1',
             'name': 'Canines',
             'low': 250,
-            'high': 4000,
+            'high': 1000,
             'examples': 'Dog, Wolf, Hyena, Fox'
         },
         'felines': {
             'id': 'animal-2',
             'name': 'Felines',
-            'low': 100,
-            'high': 8000,
+            'low': 1000,
+            'high': 3000,
             'examples': 'Cat, Lion, Tiger, Leopard'
         },
-        'large_mammals': {
-            'id': 'animal-3',
-            'name': 'Large Mammals',
-            'low': 20,
-            'high': 2000,
-            'examples': 'Elephant, Whale, Horse, Cattle'
+        'songbirds': {
+            'id': 'animal-0',
+            'name': 'Songbirds',
+            'low': 3000,
+            'high': 8000,
+            'examples': 'Sparrow, Canary, Warbler, Finch'
         },
         'insects': {
             'id': 'animal-4',
             'name': 'Insects',
-            'low': 1000,
+            'low': 8000,
             'high': 20000,
             'examples': 'Cricket, Cicada, Bee, Grasshopper'
         }
     }
     
+    # 10-level Animal Configuration at 44.1kHz
+    # L1: 11k-22k, L2: 5.5k-11k, L3: 2.7k-5.5k, L4: 1.3k-2.7k, L5: 689-1.3k
+    # L6: 344-689, L7: 172-344, L8: 86-172, L9: 43-86, L10: 21.5-43, A10: 0-21.5
+    ANIMAL_LEVEL_MAP = {
+        "large_mammals": [8, 9, 10, 0],   # 0 - 172 Hz
+        "canines": [6, 7],                # 172 - 689 Hz
+        "felines": [4, 5],                # 689 - 2.7k Hz
+        "songbirds": [2, 3],              # 2.7k - 11k Hz
+        "insects": [1]                    # 11k - 22k Hz
+    }
+
     def __init__(self, sample_rate=44100):
         """
         Initialize animal mode separator
-        
-        Args:
-            sample_rate: Sample rate in Hz (default 44100)
         """
         self.sample_rate = sample_rate
         self.num_bands = 5
@@ -74,21 +74,14 @@ class AnimalModeSeparator:
     def _get_frequency_ranges_from_bands(self, band_names):
         """
         Get frequency ranges for specified bands
-        
-        Args:
-            band_names: List of band names or IDs
-            
-        Returns:
-            List of (low, high) frequency tuples
         """
         ranges = []
         for band in band_names:
-            if band in self.ANIMAL_BANDS:
-                band_info = self.ANIMAL_BANDS[band]
+            band_info = None
+            if band in self.ANIMAL_RANGES:
+                band_info = self.ANIMAL_RANGES[band]
             else:
-                # Try to find by ID
-                band_info = None
-                for b_info in self.ANIMAL_BANDS.values():
+                for b_info in self.ANIMAL_RANGES.values():
                     if b_info['id'] == band:
                         band_info = b_info
                         break
@@ -101,292 +94,179 @@ class AnimalModeSeparator:
         return ranges
     
     def create_bandpass_filter(self, low_freq, high_freq, order=5):
-        """
-        Create a butterworth bandpass filter
-        
-        Args:
-            low_freq: Lower cutoff frequency
-            high_freq: Upper cutoff frequency
-            order: Filter order
-            
-        Returns:
-            Tuple of (b, a) coefficients
-        """
+        """Create a butterworth bandpass filter"""
         nyquist = self.sample_rate / 2
-        
-        # Normalize frequencies
         low = low_freq / nyquist
         high = high_freq / nyquist
-        
-        # Ensure valid range
         low = max(0.001, min(0.999, low))
         high = max(0.001, min(0.999, high))
-        
-        # Ensure low < high
         if low >= high:
             low = max(0.001, high - 0.01)
         
         try:
-            b, a = signal.butter(order, [low, high], btype='band')
-            return b, a
-        except Exception as e:
-            print(f"Error creating filter: {e}")
-            return None, None
+            sos = signal.butter(order, [low, high], btype='band', output='sos')
+            return sos
+        except Exception:
+            return None
     
     def apply_bandpass_filter(self, data, low_freq, high_freq, order=5):
-        """
-        Apply bandpass filter to signal
-        
-        Args:
-            data: Input signal
-            low_freq: Lower cutoff frequency
-            high_freq: Upper cutoff frequency
-            order: Filter order
-            
-        Returns:
-            Filtered signal
-        """
-        b, a = self.create_bandpass_filter(low_freq, high_freq, order)
-        
-        if b is None or a is None:
+        """Apply bandpass filter to signal using SOS for stability."""
+        sos = self.create_bandpass_filter(low_freq, high_freq, order)
+        if sos is None:
             return data
-        
         try:
-            return signal.filtfilt(b, a, data)
-        except Exception as e:
-            print(f"Error applying filter: {e}")
+            return signal.sosfiltfilt(sos, data)
+        except Exception:
             return data
-    
-    def separate_animals(self, audio_data, gains=None):
+
+    def process_signal(
+        self,
+        signal_data: np.ndarray,
+        gains: List[float],
+        animal_names: List[str],
+        sample_rate: float = None,
+        method: str = "fft",
+        wavelet: str = "db4",
+        wavelet_level: int = 6,
+        sliders_wavelet: Optional[List[float]] = None
+    ) -> dict:
         """
-        Separate audio into 5 animal categories
-        
-        Args:
-            audio_data: Input audio signal (numpy array)
-            gains: List of 5 gain values [0-2] for each band
-                  Default: [1.0, 1.0, 1.0, 1.0, 1.0]
-            
-        Returns:
-            Dictionary with separated animal signals:
-            {
-                'songbirds': separated signal,
-                'canines': separated signal,
-                'felines': separated signal,
-                'large_mammals': separated signal,
-                'insects': separated signal,
-                'output': combined with gains applied,
-                'metadata': processing info
-            }
+        Process signal with animal-based equalization
         """
-        if gains is None:
-            gains = [1.0, 1.0, 1.0, 1.0, 1.0]
+        start_time = time.time()
+        sr = float(sample_rate) if sample_rate and sample_rate > 0 else float(self.sample_rate)
         
-        # Ensure we have 5 gains
-        while len(gains) < 5:
-            gains.append(1.0)
-        gains = gains[:5]
+        input_fft = self._compute_fft_data(signal_data, sr)
+        input_spectrogram = self._compute_spectrogram_data(signal_data, sr)
         
-        separated = {}
-        bands_list = ['songbirds', 'canines', 'felines', 'large_mammals', 'insects']
+        input_coeffs = None
+        output_coeffs = None
         
-        output_signal = np.zeros_like(audio_data)
-        
-        for i, band_name in enumerate(bands_list):
-            band_info = self.ANIMAL_BANDS[band_name]
-            low_freq = band_info['low']
-            high_freq = band_info['high']
-            gain = gains[i]
+        if method == "fft":
+            processed_gains = list(gains)
+            while len(processed_gains) < len(self.ANIMAL_RANGES):
+                processed_gains.append(1.0)
+            processed_gains = processed_gains[:len(self.ANIMAL_RANGES)]
+
+            output_signal = np.zeros_like(signal_data)
+            bands_list = ['songbirds', 'canines', 'felines', 'large_mammals', 'insects']
+
+            for i, band_name in enumerate(bands_list):
+                band_info = self.ANIMAL_RANGES[band_name]
+                filtered = self.apply_bandpass_filter(signal_data, band_info['low'], band_info['high'])
+                output_signal += filtered * processed_gains[i]
             
-            # Apply bandpass filter
-            filtered = self.apply_bandpass_filter(
-                audio_data,
-                low_freq,
-                high_freq,
-                order=5
+            # Normalize
+            max_val = np.max(np.abs(output_signal))
+            if max_val > 1.0:
+                output_signal = output_signal / max_val * 0.95
+            
+            equalized_signal = output_signal
+        else:
+            wavelet_name = wavelet if wavelet in pywt.wavelist(kind='discrete') else "db4"
+            actual_level = 10 if not sliders_wavelet else max(1, min(int(wavelet_level or 6), 10))
+            input_coeffs, output_coeffs, equalized_signal = self._apply_wavelet_equalization(
+                signal_data, animal_names, gains, wavelet_name, actual_level, sliders_wavelet
             )
-            
-            # Apply gain
-            filtered = filtered * gain
-            
-            # Store separated signal
-            separated[band_name] = {
-                'signal': filtered,
-                'band': band_info['name'],
-                'freq_range': f"{low_freq}-{high_freq} Hz",
-                'gain': gain
-            }
-            
-            # Add to output
-            output_signal += filtered
         
-        # Normalize output to prevent clipping
-        max_val = np.max(np.abs(output_signal))
-        if max_val > 0:
-            output_signal = output_signal / max_val * 0.95
+        output_fft = self._compute_fft_data(equalized_signal, sr)
+        output_spectrogram = self._compute_spectrogram_data(equalized_signal, sr)
         
         return {
-            'separated': separated,
-            'output': output_signal,
-            'metadata': {
-                'num_bands': 5,
-                'sample_rate': self.sample_rate,
-                'bands': bands_list,
-                'gains': gains
-            }
+            "signal": equalized_signal.tolist(),
+            "input_fft": input_fft,
+            "fft": output_fft,
+            "input_spectrogram": input_spectrogram,
+            "spectrogram": output_spectrogram,
+            "input_coeffs": input_coeffs,
+            "output_coeffs": output_coeffs,
+            "processing_time": time.time() - start_time
         }
-    
-    def get_band_info(self):
-        """
-        Get information about all animal bands
+
+    def _detail_index_for_level(self, total_level: int, detail_level: int) -> int:
+        return total_level - detail_level + 1
+
+    def _compute_level_gains(self, animal_names: List[str], gains: List[float], level: int) -> List[float]:
+        level_gains = [1.0] * (level + 1)
+        for name, gain in zip(animal_names, gains):
+            name_low = str(name or "").lower().replace(" ", "_")
+            mapped = self.ANIMAL_LEVEL_MAP.get(name_low, [])
+            g = float(gain)
+            for lv in mapped:
+                if 0 <= lv <= level:
+                    level_gains[lv] *= g
+        return level_gains
+
+    def _apply_wavelet_equalization(
+        self,
+        signal: np.ndarray,
+        animal_names: List[str],
+        gains: List[float],
+        wavelet: str,
+        level: int,
+        sliders_wavelet: Optional[List[float]] = None
+    ) -> Tuple[List[List[float]], List[List[float]], np.ndarray]:
+        coeffs = pywt.wavedec(signal, wavelet, level=level)
         
-        Returns:
-            List of band information dictionaries
-        """
-        bands_info = []
-        for band_name, band_info in self.ANIMAL_BANDS.items():
-            bands_info.append({
-                'id': band_info['id'],
-                'name': band_info['name'],
-                'low': band_info['low'],
-                'high': band_info['high'],
-                'examples': band_info['examples'],
-                'key': band_name
-            })
-        return bands_info
-    
-    def get_frequency_stats(self, audio_data):
-        """
-        Get frequency statistics for the input signal
+        input_detail_coeffs = []
+        input_detail_coeffs.append(coeffs[0].tolist())
+        for lv in range(1, level + 1):
+            idx = self._detail_index_for_level(level, lv)
+            input_detail_coeffs.append(coeffs[idx].tolist())
+
+        level_gains = self._compute_level_gains(animal_names, gains, level)
+
+        if sliders_wavelet is not None:
+            for i, gain in enumerate(sliders_wavelet):
+                lv = i + 1
+                if lv <= level:
+                    level_gains[lv] *= gain
+
+        out_coeffs = [np.array(c, copy=True) for c in coeffs]
         
-        Args:
-            audio_data: Input audio signal
-            
-        Returns:
-            Dictionary with frequency analysis
-        """
-        # Compute FFT
-        fft_result = np.fft.rfft(audio_data)
-        freqs = np.fft.rfftfreq(len(audio_data), 1/self.sample_rate)
-        magnitude = np.abs(fft_result)
+        out_coeffs[0] = out_coeffs[0] * level_gains[0]
+        for lv in range(1, level + 1):
+            idx = self._detail_index_for_level(level, lv)
+            out_coeffs[idx] = out_coeffs[idx] * level_gains[lv]
+
+        output_detail_coeffs = []
+        output_detail_coeffs.append(out_coeffs[0].tolist())
+        for lv in range(1, level + 1):
+            idx = self._detail_index_for_level(level, lv)
+            output_detail_coeffs.append(out_coeffs[idx].tolist())
+
+        reconstructed = pywt.waverec(out_coeffs, wavelet)
+        reconstructed = np.asarray(reconstructed[:len(signal)], dtype=float)
         
-        # Find peak frequency
-        peak_idx = np.argmax(magnitude)
-        peak_freq = freqs[peak_idx]
-        
-        # Band energy
-        bands_list = ['songbirds', 'canines', 'felines', 'large_mammals', 'insects']
-        band_energies = {}
-        
-        for band_name in bands_list:
-            band_info = self.ANIMAL_BANDS[band_name]
-            low = band_info['low']
-            high = band_info['high']
-            
-            mask = (freqs >= low) & (freqs <= high)
-            energy = np.sum(magnitude[mask] ** 2)
-            band_energies[band_name] = float(energy)
-        
+        return input_detail_coeffs, output_detail_coeffs, reconstructed
+
+    def _compute_fft_data(self, signal_data, sample_rate):
+        """Compute FFT for visualization."""
+        fft_vals = fft(signal_data)
+        freqs = fftfreq(len(signal_data), 1.0 / sample_rate)
+        magnitudes = np.abs(fft_vals)
+        positive_idx = freqs > 0
+        pos_freqs = freqs[positive_idx]
+        pos_mags = magnitudes[positive_idx]
+        step = max(1, len(pos_freqs) // 1000)
         return {
-            'peak_frequency': float(peak_freq),
-            'band_energies': band_energies,
-            'total_energy': float(np.sum(magnitude ** 2))
+            "frequencies": pos_freqs[::step].tolist(),
+            "magnitudes": pos_mags[::step].tolist()
         }
 
+    def _compute_spectrogram_data(self, signal_data, sample_rate):
+        """Compute spectrogram for visualization."""
+        from scipy.signal import spectrogram
+        f, t, Sxx = spectrogram(signal_data, sample_rate, window='hann', nperseg=1024, noverlap=768)
+        ref = max(float(np.max(Sxx)), 1e-12)
+        Sxx_db = 10 * np.log10(np.maximum(Sxx, 1e-12) / ref)
+        Sxx_db = np.maximum(Sxx_db, -80.0)
+        freq_step = max(1, len(f) // 100)
+        time_step = max(1, len(t) // 100)
+        return {
+            "frequencies": f[::freq_step].tolist(),
+            "times": t[::time_step].tolist(),
+            "magnitude": Sxx_db[::freq_step, ::time_step].tolist()
+        }
 
-# ============================================================================
-# SINGLETON INSTANCE - THIS IS WHAT YOUR ENDPOINT IMPORTS
-# ============================================================================
 animals_service = AnimalModeSeparator(sample_rate=44100)
-
-
-# ============================================================================
-# Flask Route Handlers (Optional - for reference)
-# ============================================================================
-
-def create_animal_routes(app):
-    """
-    Create Flask routes for animal mode
-    
-    Args:
-        app: Flask application instance
-    """
-    
-    @app.route('/api/modes/animals/info', methods=['GET'])
-    def get_animal_info():
-        """Get animal band information"""
-        try:
-            bands_info = animals_service.get_band_info()
-            return {
-                'status': 'success',
-                'mode': 'animals',
-                'num_bands': 5,
-                'bands': bands_info,
-                'description': 'Animal sounds with 5 scientifically accurate frequency bands'
-            }, 200
-        except Exception as e:
-            return {'status': 'error', 'message': str(e)}, 500
-    
-    @app.route('/api/modes/animals/separate', methods=['POST'])
-    def separate_animals():
-        """
-        Separate animal sounds in audio
-        
-        Request body:
-        {
-            'audio': base64 encoded audio or numpy array,
-            'gains': [gain0, gain1, gain2, gain3, gain4]
-        }
-        """
-        try:
-            from flask import request
-            data = request.get_json()
-            
-            # Get audio data (implement based on your audio handling)
-            # This is a placeholder
-            if 'audio' not in data:
-                return {'status': 'error', 'message': 'No audio provided'}, 400
-            
-            # Get gains (default to 1.0 for each band)
-            gains = data.get('gains', [1.0, 1.0, 1.0, 1.0, 1.0])
-            
-            # Separate animals
-            result = animals_service.separate_animals(audio_data, gains)
-            
-            return {
-                'status': 'success',
-                'separated': {k: v['signal'].tolist() for k, v in result['separated'].items()},
-                'output': result['output'].tolist(),
-                'metadata': result['metadata']
-            }, 200
-        except Exception as e:
-            return {'status': 'error', 'message': str(e)}, 500
-    
-    @app.route('/api/modes/animals/stats', methods=['POST'])
-    def get_animal_stats():
-        """Get frequency statistics for audio"""
-        try:
-            from flask import request
-            data = request.get_json()
-            
-            if 'audio' not in data:
-                return {'status': 'error', 'message': 'No audio provided'}, 400
-            
-            # Get frequency statistics
-            stats = animals_service.get_frequency_stats(audio_data)
-            
-            return {
-                'status': 'success',
-                'stats': stats
-            }, 200
-        except Exception as e:
-            return {'status': 'error', 'message': str(e)}, 500
-
-
-if __name__ == '__main__':
-    # Example usage
-    print("Animal Mode Service Initialized")
-    print(f"Sample Rate: {animals_service.sample_rate} Hz")
-    print(f"Number of Bands: {animals_service.num_bands}")
-    print("\nAvailable Bands:")
-    for band_info in animals_service.get_band_info():
-        print(f"  - {band_info['name']}: {band_info['low']}-{band_info['high']} Hz")

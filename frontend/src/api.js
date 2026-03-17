@@ -18,6 +18,10 @@ export const uploadsAudioWithSettings = (audioFile, settingsFile) => {
 };
 
 export const loadSampleHuman = () => API.get('/sample/human', { responseType: 'blob' });
+export const loadSampleGeneric = () => API.get('/sample/generic', { responseType: 'blob' });
+export const loadSampleMusic = () => API.get('/sample/music', { responseType: 'blob' });
+export const loadSampleAnimals = () => API.get('/sample/animals', { responseType: 'blob' });
+export const loadSampleECG = () => API.get('/sample/ecg', { responseType: 'blob' });
 
 export const processSignals = (mode, slidersFreq, slidersWavelet) => {
   return API.post('/process', { mode, sliders_freq: slidersFreq, sliders_wavelet: slidersWavelet });
@@ -40,7 +44,7 @@ export const loadSettings = (filename) => {
 };
 
 // Mode-specific API calls
-export const processGenericMode = (signal, bands, sampleRate = 44100) => {
+export const processGenericMode = (signal, bands, sampleRate = 44100, method = 'fft', wavelet = 'db4', waveletLevel = 6, slidersWavelet = null) => {
   return API.post('/api/modes/generic/process', {
     signal,
     bands: bands.map(b => ({
@@ -50,46 +54,64 @@ export const processGenericMode = (signal, bands, sampleRate = 44100) => {
       high: b.high,
       gain: b.gain
     })),
-    sample_rate: sampleRate
+    sample_rate: sampleRate,
+    method,
+    wavelet,
+    wavelet_level: waveletLevel,
+    sliders_wavelet: slidersWavelet
   });
 };
 
-export const processMusicMode = (signal, gains, instrumentNames, sampleRate = 44100, wavelet = 'db8', waveletLevel = 6, waveletGains = null) => {
+export const processMusicMode = (signal, gains, instrumentNames, sampleRate = 44100, method = 'wavelet', wavelet = 'db8', waveletLevel = 6, waveletGains = null, slidersWavelet = null) => {
   return API.post('/api/modes/music/process', {
     signal,
     gains,
     instrument_names: instrumentNames,
     sample_rate: sampleRate,
+    method,
     wavelet,
     wavelet_level: waveletLevel,
-    wavelet_gains: waveletGains
+    wavelet_gains: waveletGains,
+    sliders_wavelet: slidersWavelet
   });
 };
 
-export const processAnimalsMode = (signal, gains, animalNames, sampleRate = 44100) => {
+export const processAnimalsMode = (signal, gains, animalNames, sampleRate = 44100, method = 'fft', wavelet = 'sym8', waveletLevel = 6, slidersWavelet = null) => {
   return API.post('/api/modes/animals/process', {
     signal,
     gains,
     animal_names: animalNames,
-    sample_rate: sampleRate
+    sample_rate: sampleRate,
+    method,
+    wavelet,
+    wavelet_level: waveletLevel,
+    sliders_wavelet: slidersWavelet
   });
 };
 
-export const processHumansMode = (signal, gains, voiceNames, sampleRate = 44100) => {
+export const processHumansMode = (signal, gains, voiceNames, sampleRate = 44100, method = 'fft', wavelet = 'sym5', waveletLevel = 6, slidersWavelet = null) => {
   return API.post('/api/modes/humans/process', {
     signal,
     gains,
     voice_names: voiceNames,
-    sample_rate: sampleRate
+    sample_rate: sampleRate,
+    method,
+    wavelet,
+    wavelet_level: waveletLevel,
+    sliders_wavelet: slidersWavelet
   });
 };
 
-export const processECGMode = (signal, gains, componentNames, sampleRate = 500) => {
+export const processECGMode = (signal, gains, componentNames, sampleRate = 500, method = 'fft', wavelet = 'bior3.5', waveletLevel = 6, slidersWavelet = null) => {
   return API.post('/api/modes/ecg/process', {
     signal,
     gains,
     component_names: componentNames,
-    sample_rate: sampleRate
+    sample_rate: sampleRate,
+    method,
+    wavelet,
+    wavelet_level: waveletLevel,
+    sliders_wavelet: slidersWavelet
   });
 };
 

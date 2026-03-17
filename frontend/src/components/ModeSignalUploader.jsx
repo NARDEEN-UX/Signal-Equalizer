@@ -4,8 +4,10 @@ import {
   uploadAnimalSignal, listAnimalSignals, loadAnimalSignal, deleteAnimalSignal,
   uploadHumanSignal, listHumanSignals, loadHumanSignal, deleteHumanSignal,
   uploadECGSignal, listECGSignals, loadECGSignal, deleteECGSignal,
-  uploadGenericSignal, listGenericSignals, loadGenericSignal, deleteGenericSignal
+  uploadGenericSignal, listGenericSignals, loadGenericSignal, deleteGenericSignal,
+  loadSampleGeneric, loadSampleMusic, loadSampleAnimals, loadSampleHuman, loadSampleECG
 } from '../api';
+import { audioBufferToWav } from '../utils/audioUtils';
 
 const ModeSignalUploader = ({ mode, onSignalLoad, onClose }) => {
   const [signals, setSignals] = useState([]);
@@ -21,6 +23,15 @@ const ModeSignalUploader = ({ mode, onSignalLoad, onClose }) => {
     human: { upload: uploadHumanSignal, list: listHumanSignals, load: loadHumanSignal, delete: deleteHumanSignal },
     ecg: { upload: uploadECGSignal, list: listECGSignals, load: loadECGSignal, delete: deleteECGSignal },
     generic: { upload: uploadGenericSignal, list: listGenericSignals, load: loadGenericSignal, delete: deleteGenericSignal }
+  };
+
+  // Map mode to sample loaders
+  const sampleMap = {
+    generic: loadSampleGeneric,
+    music: loadSampleMusic,
+    animal: loadSampleAnimals,
+    human: loadSampleHuman,
+    ecg: loadSampleECG
   };
 
   useEffect(() => {
@@ -45,7 +56,7 @@ const ModeSignalUploader = ({ mode, onSignalLoad, onClose }) => {
   };
 
   const handleUpload = async (e) => {
-    const file = e.target.files?.[0];
+    let file = e.target.files?.[0];
     if (!file) return;
 
     try {
@@ -53,7 +64,17 @@ const ModeSignalUploader = ({ mode, onSignalLoad, onClose }) => {
       const api = apiMap[mode];
       if (!api) return;
 
-      const response = await api.upload(file);
+      // Convert M4A/AAC to WAV client-side to bypass backend soundfile limitations
+      if (file.name.toLowerCase().match(/\.(m4a|mp4|aac)$/)) {
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const arrayBuffer = await file.arrayBuffer();
+        const decoded = await audioCtx.decodeAudioData(arrayBuffer);
+        const wavBlob = audioBufferToWav(decoded);
+        file = new File([wavBlob], file.name.replace(/\.[^/.]+$/, '') + '.wav', { type: 'audio/wav' });
+        await audioCtx.close();
+      }
+
+      await api.upload(file);
       setSuccess(`Signal "${file.name}" uploaded successfully!`);
       setError('');
       
@@ -65,6 +86,96 @@ const ModeSignalUploader = ({ mode, onSignalLoad, onClose }) => {
     } catch (err) {
       const errorMsg = err.response?.data?.detail || err.message || 'Unknown error';
       setError('Upload failed: ' + (typeof errorMsg === 'object' ? JSON.stringify(errorMsg) : errorMsg));
+      setSuccess('');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  /**
+   * Parse a WAV ArrayBuffer manually. Handles sample rates too low for
+   * AudioContext.decodeAudioData (e.g., ECG at 500 Hz).
+   */
+  const parseWavBuffer = (buffer) => {
+    const view = new DataView(buffer);
+    // RIFF header check
+    const riff = String.fromCharCode(view.getUint8(0), view.getUint8(1), view.getUint8(2), view.getUint8(3));
+    if (riff !== 'RIFF') throw new Error('Not a valid WAV file');
+
+    const numChannels = view.getUint16(22, true);
+    const sampleRate = view.getUint32(24, true);
+    const bitsPerSample = view.getUint16(34, true);
+
+    // Find "data" sub-chunk
+    let offset = 12;
+    while (offset < view.byteLength - 8) {
+      const id = String.fromCharCode(
+        view.getUint8(offset), view.getUint8(offset + 1),
+        view.getUint8(offset + 2), view.getUint8(offset + 3)
+      );
+      const size = view.getUint32(offset + 4, true);
+      if (id === 'data') {
+        offset += 8;
+        const bytesPerSample = bitsPerSample / 8;
+        const numSamples = Math.floor(size / (bytesPerSample * numChannels));
+        const signal = new Float32Array(numSamples);
+
+        for (let i = 0; i < numSamples; i++) {
+          const byteOffset = offset + i * bytesPerSample * numChannels;
+          if (bytesPerSample === 4) {
+            signal[i] = view.getFloat32(byteOffset, true);
+          } else if (bytesPerSample === 2) {
+            signal[i] = view.getInt16(byteOffset, true) / 32768;
+          } else {
+            signal[i] = (view.getUint8(byteOffset) - 128) / 128;
+          }
+        }
+        return { signal: Array.from(signal), sampleRate };
+      }
+      offset += 8 + size;
+    }
+    throw new Error('No data chunk found in WAV');
+  };
+
+  const handleLoadSample = async () => {
+    const loader = sampleMap[mode];
+    if (!loader) {
+      setError('No synthetic sample available for this mode.');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setError('');
+      const response = await loader();
+      const blob = response.data;
+      const arrayBuffer = await blob.arrayBuffer();
+
+      let signal, sampleRate;
+
+      // Try browser decode first; fall back to manual WAV parse for low sample rates
+      try {
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        try {
+          const decoded = await audioCtx.decodeAudioData(arrayBuffer.slice(0));
+          signal = Array.from(decoded.getChannelData(0));
+          sampleRate = decoded.sampleRate;
+        } finally {
+          await audioCtx.close();
+        }
+      } catch {
+        // Manual parse for files the browser can't decode (e.g. ECG at 500 Hz)
+        const parsed = parseWavBuffer(arrayBuffer);
+        signal = parsed.signal;
+        sampleRate = parsed.sampleRate;
+      }
+
+      const sampleName = `${mode}_synthetic_sample.wav`;
+      onSignalLoad(signal, sampleRate, sampleName);
+      setSuccess(`Synthetic ${getModeLabel()} sample loaded!`);
+      setTimeout(onClose, 500);
+    } catch (err) {
+      setError('Failed to load sample: ' + (err.message || 'Unknown error'));
       setSuccess('');
     } finally {
       setLoading(false);
@@ -145,13 +256,23 @@ const ModeSignalUploader = ({ mode, onSignalLoad, onClose }) => {
               disabled={loading}
               style={{ display: 'none' }}
             />
-            <button
-              className="btn btn-primary"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={loading}
-            >
-              <span className="btn-icon">↑</span> Choose Audio File
-            </button>
+            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+              <button
+                className="btn btn-primary"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={loading}
+              >
+                <span className="btn-icon">↑</span> Choose Audio File
+              </button>
+              <button
+                className="btn btn-secondary"
+                onClick={handleLoadSample}
+                disabled={loading}
+                title={`Load a synthetic ${getModeLabel()} sample generated by the backend`}
+              >
+                <span className="btn-icon">⚡</span> Load Synthetic Sample
+              </button>
+            </div>
           </div>
 
           {error && <div className="error-message">{error}</div>}
@@ -195,7 +316,7 @@ const ModeSignalUploader = ({ mode, onSignalLoad, onClose }) => {
                 ))}
               </ul>
             ) : (
-              <p className="empty-message">No signals uploaded yet. Upload your first signal!</p>
+              <p className="empty-message">No signals uploaded yet. Upload a file or load a synthetic sample!</p>
             )}
           </div>
         </div>

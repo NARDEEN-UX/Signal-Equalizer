@@ -19,6 +19,7 @@ class ECGModeRequest(BaseModel):
     sample_rate: int = 44100
     gains: List[float] = Field(description="Gains for each ECG component (0-2)")
     component_names: List[str] = Field(description="Names of ECG components")
+    method: str = "fft"
     sliders_wavelet: Optional[List[float]] = None
     wavelet: str = "db4"
     wavelet_level: int = 6
@@ -32,6 +33,8 @@ class ECGModeResponse(BaseModel):
     output_fft: Optional[dict] = None
     input_spectrogram: Optional[dict] = None
     output_spectrogram: Optional[dict] = None
+    input_coeffs: Optional[List[List[float]]] = None
+    output_coeffs: Optional[List[List[float]]] = None
     processing_time: float
 
 

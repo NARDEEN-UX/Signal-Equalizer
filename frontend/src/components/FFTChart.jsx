@@ -31,18 +31,27 @@ const FFTChart = ({ data, audiogram, variant, zoomWindow = null, onZoomWindowCha
   const effectiveYWindow = controlled ? (zoomWindow?.y || null) : yWindow;
 
   const yDomain = useMemo(() => {
-    const combined = [
-      ...(Array.isArray(data?.in) ? data.in : []),
-      ...(Array.isArray(data?.out) ? data.out : [])
-    ];
-
-    let maxVal = 0;
-    for (let i = 0; i < combined.length; i += 1) {
-      const v = Number(combined[i]);
-      if (Number.isFinite(v) && v > maxVal) maxVal = v;
+    // Lock the scale primarily to the input data to prevent the graph from shifting
+    // when the output is modified.
+    const inputData = Array.isArray(data?.in) ? data.in : [];
+    const outputData = Array.isArray(data?.out) ? data.out : [];
+    
+    let maxInput = 0;
+    for (let i = 0; i < inputData.length; i++) {
+      const v = Number(inputData[i]);
+      if (v > maxInput) maxInput = v;
     }
 
-    const paddedMax = maxVal > 0 ? maxVal * 1.05 : 2;
+    let maxOutput = 0;
+    for (let i = 0; i < outputData.length; i++) {
+      const v = Number(outputData[i]);
+      if (v > maxOutput) maxOutput = v;
+    }
+
+    // We use the max of input, but allow output to go slightly beyond if it's boosted.
+    // However, the "floor" of the scale should be based on the input to keep it stable.
+    const maxVal = Math.max(maxInput, maxOutput * 0.5);
+    const paddedMax = maxVal > 0 ? maxVal * 1.1 : 2;
     return { min: 0, max: Math.max(0.1, paddedMax) };
   }, [data]);
 
@@ -218,10 +227,10 @@ const FFTChart = ({ data, audiogram, variant, zoomWindow = null, onZoomWindowCha
 
   const datasets = [];
   if (!variant || variant === 'input') {
-    datasets.push({ label: 'Input', data: data.in, borderColor: '#531009', borderWidth: 2, pointRadius: 0, tension: 0.2 });
+    datasets.push({ label: 'Input', data: data.in, borderColor: '#ef4444', borderWidth: 2, pointRadius: 0, tension: 0.2 });
   }
   if (!variant || variant === 'output') {
-    datasets.push({ label: 'Output', data: data.out, borderColor: '#3e0c07', borderWidth: 2, pointRadius: 0, tension: 0.2 });
+    datasets.push({ label: 'Output', data: data.out, borderColor: '#22d3ee', borderWidth: 2, pointRadius: 0, tension: 0.2 });
   }
 
   const chartData = {

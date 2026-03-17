@@ -218,7 +218,7 @@ function computeRealFft(signal, fs, nFft = 1024) {
     mags.push(mag);
   }
 
-  return { freq: freqs, mag: mags };
+  return { freq: freqs, mag: mags, in: mags, out: mags };
 }
 
 function pseudoSpectrogram(rows, cols, tone = 0.6) {
@@ -283,7 +283,7 @@ function computeSpectrogram(signal, fs, winSize = 256, hop = 128) {
     times.push(((idx * hop) / fs));
   }
 
-  return { t: times, f: freqs, mag: mags };
+  return { t: times, f: freqs, mag: mags, in: mags, out: mags };
 }
 
 const MUSIC_LEVEL_MAP = {
@@ -383,6 +383,15 @@ export function useMockProcessing({
     [input.mix, fs]
   );
   const [data, setData] = useState(null);
+  // Serialize slider/band arrays to stable strings so useEffect doesn't
+  // fire on every render due to new array/object references.
+  const freqKey = JSON.stringify(freqSliders);
+  const waveletKey = JSON.stringify(waveletSliders);
+  const bandsKey = JSON.stringify(
+    (genericBands || []).map(b => ({
+      id: b?.id, name: b?.name, low: b?.low, high: b?.high, gain: b?.gain
+    }))
+  );
 
   useEffect(() => {
     // Use the per-mode band configuration passed from App for *all* modes.
@@ -499,7 +508,8 @@ export function useMockProcessing({
         output_coeffs: outputCoeffs
       }
     });
-  }, [freqSliders, waveletSliders, modeId, genericBands, waveletType, input, baseFft, baseSpec]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [freqKey, waveletKey, modeId, bandsKey, waveletType, input, baseFft, baseSpec]);
 
   return data;
 }

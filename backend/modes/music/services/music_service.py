@@ -15,26 +15,32 @@ import pywt
 class MusicModeService:
     """Service for music mode signal processing with configurable bands"""
     
-    # Default instrument frequency ranges (used as fallback)
+    # Exact Fundamental Frequency Ranges (in Hz)
     INSTRUMENT_RANGES = {
-        "Bass": [(20, 250)],
-        "Piano": [(27, 4186)],
-        "Vocals": [(80, 8000)],
-        "Violin": [(196, 3520)],
-        "Drums": [(20, 10000)],
-        "Guitar": [(82, 3520)],
-        "Flute": [(262, 3951)],
-        "Trumpet": [(165, 2349)],
+        "Bass": [(40, 400)],          # Bass string fundamentals 41Hz - ~400Hz
+        "Piano": [(27.5, 4186)],      # Full 88-key piano range A0 - C8
+        "Vocals": [(85, 1100)],       # Male Bass (85Hz) to Female Soprano (1100Hz)
+        "Violin": [(196, 3520)],      # G3 (196Hz) to A7 (3520Hz)
+        "Drums": [(50, 250)],         # Kicks (50-90Hz), Snares/Toms (100-250Hz)
+        "Guitar": [(82, 1175)],       # Low E (82Hz) to high frets ~1kHz
+        "Flute": [(261, 2349)],       # C4 (261Hz) to D7 (2349Hz)
+        "Trumpet": [(164, 987)],      # E3 (164Hz) to B5 (987Hz)
         "Others": [(20, 20000)]
     }
 
-    # Music-mode mapping requested by product spec for 6-level decomposition.
-    # Levels are detail bands L1..L6 where L1 is highest-frequency detail.
+    # Music-mode mapping for 10-level decomposition at 44.1kHz.
+    # L1: 11k-22k, L2: 5.5k-11k, L3: 2.7k-5.5k, L4: 1.3k-2.7k, L5: 689-1.3k
+    # L6: 344-689, L7: 172-344, L8: 86-172, L9: 43-86, L10: 21.5-43, A10: 0-21.5
+    # 0 maps to Approximation (A10)
     INSTRUMENT_LEVEL_MAP = {
-        "Bass": [5, 6],
-        "Piano": [3, 4],
-        "Vocals": [3, 4, 5],
-        "Violin": [3, 4]
+        "Bass": [7, 8, 9, 10],            # 43 - 344 Hz
+        "Piano": [3, 4, 5, 6, 7, 8, 9, 10, 0], # 0 - 5.5k Hz
+        "Vocals": [5, 6, 7, 8, 9],        # 43 - 1.3k Hz
+        "Violin": [3, 4, 5, 6, 7],        # 172 - 5.5k Hz
+        "Drums": [7, 8, 9],               # 43 - 344 Hz (Fundamentals)
+        "Guitar": [4, 5, 6, 7, 8],        # 86 - 2.7k Hz
+        "Flute": [4, 5, 6, 7],            # 172 - 2.7k Hz
+        "Trumpet": [5, 6, 7, 8]           # 86 - 1.3k Hz
     }
 
     ALLOWED_WAVELETS = {
@@ -51,10 +57,10 @@ class MusicModeService:
         instrument_names: List[str],
         sample_rate: float = None,
         bands: Optional[List[Dict]] = None,
+        method: str = "wavelet",
         wavelet: str = "db4",
         wavelet_level: int = 6,
-        sliders_wavelet: Optional[List[float]] = None,
-        wavelet_gains: Optional[Dict[str, float]] = None
+        sliders_wavelet: Optional[List[float]] = None
     ) -> dict:
         """
         Process signal with instrument-based equalization
@@ -65,7 +71,7 @@ class MusicModeService:
             instrument_names: Names of instruments being controlled
             sample_rate: Sample rate of the signal
             bands: Optional list of band configurations with frequency ranges
-                   Format: [{"id": str, "name": str, "low": float, "high": float, "gain": float}, ...]
+            method: 'fft' or 'wavelet'
             
         Returns:
             Dictionary with processed signal and analysis
@@ -77,18 +83,26 @@ class MusicModeService:
         input_fft = self._compute_fft_data(signal, sr)
         input_spectrogram = self._compute_spectrogram_data(signal, sr)
         
-        # Wavelet coefficient decomposition for visualization and level-domain gain mapping.
-        wavelet_name = self._validate_wavelet(wavelet)
-        level = max(1, min(int(wavelet_level or 6), 6))
-        input_coeffs, output_coeffs, equalized_signal = self._compute_music_wavelet_coeffs(
-            signal=signal,
-            instrument_names=instrument_names,
-            gains=gains,
-            wavelet=wavelet_name,
-            level=level,
-            sliders_wavelet=sliders_wavelet,
-            wavelet_gains=wavelet_gains
-        )
+        input_coeffs = None
+        output_coeffs = None
+        
+        if method == "fft":
+            # FFT path
+            freq_ranges = self._get_frequency_ranges(instrument_names)
+            equalized_signal = self._apply_instrument_equalization(signal, freq_ranges, gains, sr)
+        else:
+            # Wavelet path
+            wavelet_name = self._validate_wavelet(wavelet)
+            # Use level 10 for semantic instrument mapping, ignore UI 6 if instruments used.
+            actual_level = 10 if not sliders_wavelet else max(1, min(int(wavelet_level or 6), 10))
+            input_coeffs, output_coeffs, equalized_signal = self._compute_music_wavelet_coeffs(
+                signal=signal,
+                instrument_names=instrument_names,
+                gains=gains,
+                wavelet=wavelet_name,
+                level=actual_level,
+                sliders_wavelet=sliders_wavelet
+            )
 
         if equalized_signal.size:
             print(
@@ -127,17 +141,17 @@ class MusicModeService:
         return level - target_level + 1
 
     def _compute_level_gains(self, instrument_names: List[str], gains: List[float], level: int) -> List[float]:
-        level_gains = [1.0] * (level + 1)  # index 0 unused for cA; details are 1..level
+        # Include index 0 for approximation coefficient
+        level_gains = [1.0] * (level + 1)
 
         for name, gain in zip(instrument_names, gains):
             instrument = str(name or "").strip()
-            # "Others" is intentionally neutral (1.0) across all levels.
             if instrument == "Others":
                 continue
             mapped = self.INSTRUMENT_LEVEL_MAP.get(instrument, [])
             g = float(gain)
             for lv in mapped:
-                if 1 <= lv <= level:
+                if 0 <= lv <= level:
                     level_gains[lv] *= g
 
         return level_gains
@@ -149,39 +163,33 @@ class MusicModeService:
         gains: List[float],
         wavelet: str,
         level: int,
-        sliders_wavelet: Optional[List[float]] = None,
-        wavelet_gains: Optional[Dict[str, float]] = None
+        sliders_wavelet: Optional[List[float]] = None
     ) -> Tuple[List[List[float]], List[List[float]], np.ndarray]:
         coeffs = pywt.wavedec(signal, wavelet, level=level)
-        # Keep full coefficient arrays for each detail level L1..L{level}.
+        
         input_detail_coeffs = []
-
+        input_detail_coeffs.append(coeffs[0].tolist())
         for lv in range(1, level + 1):
             idx = self._detail_index_for_level(level, lv)
             input_detail_coeffs.append(coeffs[idx].tolist())
 
-        if isinstance(wavelet_gains, dict) and wavelet_gains:
-            level_gains = [1.0] * (level + 1)
-            for lv in range(1, level + 1):
-                key = f"L{lv}"
-                g = wavelet_gains.get(key, 1.0)
-                level_gains[lv] = max(0.0, min(2.0, float(g)))
-        else:
-            level_gains = self._compute_level_gains(instrument_names, gains, level)
+        level_gains = self._compute_level_gains(instrument_names, gains, level)
 
-        # Apply explicit per-level gain sliders (L1..L6) on top of instrument mapping.
         if sliders_wavelet:
             for lv in range(1, level + 1):
                 if lv - 1 < len(sliders_wavelet):
                     s = float(sliders_wavelet[lv - 1])
                     level_gains[lv] *= max(0.0, min(2.0, s))
+                    
         out_coeffs = [np.array(c, copy=True) for c in coeffs]
-
+        
+        out_coeffs[0] = out_coeffs[0] * level_gains[0]
         for lv in range(1, level + 1):
             idx = self._detail_index_for_level(level, lv)
             out_coeffs[idx] = out_coeffs[idx] * level_gains[lv]
 
         output_detail_coeffs = []
+        output_detail_coeffs.append(out_coeffs[0].tolist())
         for lv in range(1, level + 1):
             idx = self._detail_index_for_level(level, lv)
             output_detail_coeffs.append(out_coeffs[idx].tolist())
