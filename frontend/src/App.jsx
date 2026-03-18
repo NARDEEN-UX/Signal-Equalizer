@@ -822,11 +822,25 @@ function App() {
       wavelet: waveletType,
       bands: modeFreqBands
     };
-    saveSchema('equalizer_preset.json', schema).then(() => {
-      window.alert('Preset saved. You can edit the file in backend/schemas/ and load it later.');
-    }).catch(() => {
-      window.alert('Save failed (backend may be offline). Use Load preset when server is running.');
-    });
+    
+    // Create a blob from the schema JSON
+    const blob = new Blob([JSON.stringify(schema, null, 2)], { type: 'application/json' });
+    
+    // Create a URL for the blob
+    const url = URL.createObjectURL(blob);
+    
+    // Create a temporary link element and trigger download
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'equalizer_preset.json';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    // Clean up the URL
+    URL.revokeObjectURL(url);
+    
+    window.alert('Preset downloaded to your Downloads folder!');
   };
   const handleLoadPreset = () => {
     loadSchema('equalizer_preset.json').then((res) => {
