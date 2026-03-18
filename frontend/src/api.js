@@ -62,7 +62,7 @@ export const processGenericMode = (signal, bands, sampleRate = 44100, method = '
   });
 };
 
-export const processMusicMode = (signal, gains, instrumentNames, sampleRate = 44100, method = 'wavelet', wavelet = 'db8', waveletLevel = 6, waveletGains = null, slidersWavelet = null) => {
+export const processMusicMode = (signal, gains, instrumentNames, sampleRate = 44100, method = 'wavelet', wavelet = 'db8', waveletLevel = 6, slidersWavelet = null) => {
   return API.post('/api/modes/music/process', {
     signal,
     gains,
@@ -71,7 +71,6 @@ export const processMusicMode = (signal, gains, instrumentNames, sampleRate = 44
     method,
     wavelet,
     wavelet_level: waveletLevel,
-    wavelet_gains: waveletGains,
     sliders_wavelet: slidersWavelet
   });
 };

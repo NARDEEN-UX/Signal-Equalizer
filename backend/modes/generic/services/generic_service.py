@@ -54,7 +54,7 @@ class GenericModeService:
         
         if method == "wavelet":
             input_coeffs, output_coeffs, equalized_signal = self._apply_wavelet_equalization(
-                signal, wavelet, wavelet_level, bands, gains, sr
+                signal, wavelet, wavelet_level, bands, gains, sr, sliders_wavelet
             )
         else:
             # Apply FFT-based equalization
@@ -84,13 +84,27 @@ class GenericModeService:
         level: int,
         bands: List[dict],
         gains: List[float],
-        sample_rate: float
+        sample_rate: float,
+        sliders_wavelet: Optional[List[float]] = None
     ) -> Tuple[List[List[float]], List[List[float]], np.ndarray]:
-        """Apply DWT-based equalization using precise custom frequency bands."""
+        """Apply DWT-based equalization using custom bands and/or per-level wavelet sliders."""
         import pywt
         
         # Decompose
         coeffs = pywt.wavedec(signal, wavelet, level=level)
+
+        # Always apply a light wavelet-domain denoise so different wavelet bases
+        # produce a different reconstructed signal even when gains are unity.
+        try:
+            d1 = np.asarray(coeffs[-1], dtype=float)
+            sigma = float(np.median(np.abs(d1)) / 0.6745) if d1.size else 0.0
+            if sigma > 0:
+                uthresh = (sigma * np.sqrt(2.0 * np.log(max(2, len(signal))))) * 0.35
+                for i in range(1, len(coeffs)):
+                    coeffs[i] = pywt.threshold(coeffs[i], uthresh, mode="soft")
+        except Exception:
+            # If thresholding fails for any reason, keep coefficients unchanged.
+            pass
         
         # Calculate the center frequency of the chosen wavelet
         try:
@@ -138,6 +152,15 @@ class GenericModeService:
             # We use the compounded result `level_gain` to scale this detail level
             if overlap_count > 0:
                 out_coeffs[idx] = out_coeffs[idx] * level_gain
+
+        # Apply explicit per-level wavelet sliders (L1..Llevel) if present.
+        if sliders_wavelet:
+            for i, s in enumerate(sliders_wavelet):
+                lv = i + 1
+                if lv > level:
+                    break
+                idx = level - lv + 1
+                out_coeffs[idx] = out_coeffs[idx] * max(0.0, min(2.0, float(s)))
                     
         # Prepare modified detail coeffs for response
         output_detail_coeffs = []

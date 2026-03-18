@@ -444,7 +444,7 @@ function App() {
         const oneHot = modeFreqBands.map((__, i) => (i === idx ? 1 : 0));
 
         if (activeModeId === 'music') {
-          return processMusicMode(inputSignal, oneHot, names, sr, 'fft', waveletType, 6, null, null);
+          return processMusicMode(inputSignal, oneHot, names, sr, 'fft', waveletType, 6, null);
         }
         if (activeModeId === 'animal') {
           return processAnimalsMode(inputSignal, oneHot, names, sr, 'fft', waveletType, 6, null);

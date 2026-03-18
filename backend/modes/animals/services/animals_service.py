@@ -207,6 +207,17 @@ class AnimalModeSeparator:
         sliders_wavelet: Optional[List[float]] = None
     ) -> Tuple[List[List[float]], List[List[float]], np.ndarray]:
         coeffs = pywt.wavedec(signal, wavelet, level=level)
+
+        # Light denoise so wavelet basis affects output by default.
+        try:
+            d1 = np.asarray(coeffs[-1], dtype=float)
+            sigma = float(np.median(np.abs(d1)) / 0.6745) if d1.size else 0.0
+            if sigma > 0:
+                uthresh = (sigma * np.sqrt(2.0 * np.log(max(2, len(signal))))) * 0.35
+                for i in range(1, len(coeffs)):
+                    coeffs[i] = pywt.threshold(coeffs[i], uthresh, mode="soft")
+        except Exception:
+            pass
         
         input_detail_coeffs = []
         input_detail_coeffs.append(coeffs[0].tolist())
