@@ -72,6 +72,17 @@ const GenericBandBuilder = ({ bands, setBands, maxHz = 20000, isEditable = true 
     setBands(safeBands.filter((b) => b.id !== id));
   };
 
+  const moveBand = (index, direction) => {
+    if (!isEditable) return;
+    const newIndex = index + direction;
+    if (newIndex < 0 || newIndex >= safeBands.length) return;
+    const newBands = [...safeBands];
+    const temp = newBands[index];
+    newBands[index] = newBands[newIndex];
+    newBands[newIndex] = temp;
+    setBands(newBands);
+  };
+
   const update = (id, patch) => {
     setBands(
       safeBands.map((b) => {
@@ -139,11 +150,35 @@ const GenericBandBuilder = ({ bands, setBands, maxHz = 20000, isEditable = true 
       </div>
 
       <div className="generic-band-list">
-        {safeBands.map((b) => (
+        {safeBands.map((b, idx) => (
           <div key={b.id} className="generic-band">
             <div className="generic-band-top">
               <div className="generic-band-name">{b.name}</div>
-              {isEditable && <button type="button" className="icon-btn" onClick={() => removeBand(b.id)} title="Remove">🗑</button>}
+              {isEditable && (
+                <div style={{ display: 'flex', gap: '4px' }}>
+                  <button 
+                    type="button" 
+                    className="icon-btn" 
+                    onClick={() => moveBand(idx, -1)} 
+                    disabled={idx === 0} 
+                    title="Move Up"
+                    style={{ opacity: idx === 0 ? 0.3 : 1, cursor: idx === 0 ? 'not-allowed' : 'pointer' }}
+                  >
+                    ↑
+                  </button>
+                  <button 
+                    type="button" 
+                    className="icon-btn" 
+                    onClick={() => moveBand(idx, 1)} 
+                    disabled={idx === safeBands.length - 1} 
+                    title="Move Down"
+                    style={{ opacity: idx === safeBands.length - 1 ? 0.3 : 1, cursor: idx === safeBands.length - 1 ? 'not-allowed' : 'pointer' }}
+                  >
+                    ↓
+                  </button>
+                  <button type="button" className="icon-btn" onClick={() => removeBand(b.id)} title="Remove">🗑</button>
+                </div>
+              )}
             </div>
 
             <div className="generic-band-grid">

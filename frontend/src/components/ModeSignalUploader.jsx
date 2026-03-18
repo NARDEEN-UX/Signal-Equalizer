@@ -77,10 +77,10 @@ const ModeSignalUploader = ({ mode, onSignalLoad, onClose }) => {
       await api.upload(file);
       setSuccess(`Signal "${file.name}" uploaded successfully!`);
       setError('');
-      
+
       // Reload signals list after upload
       await loadSignalsList();
-      
+
       // Clear input
       if (fileInputRef.current) fileInputRef.current.value = '';
     } catch (err) {
@@ -191,11 +191,11 @@ const ModeSignalUploader = ({ mode, onSignalLoad, onClose }) => {
       const response = await api.load(filename);
       const signal = response.data.signal;
       const sampleRate = response.data.sample_rate;
-      
+
       onSignalLoad(signal, sampleRate, filename);
       setSuccess(`Signal "${filename}" loaded successfully!`);
       setError('');
-      
+
       setLoading(false);
       setTimeout(onClose, 500);
     } catch (err) {
@@ -216,7 +216,7 @@ const ModeSignalUploader = ({ mode, onSignalLoad, onClose }) => {
       await api.delete(filename);
       setSuccess(`Signal "${filename}" deleted successfully!`);
       setError('');
-      
+
       await loadSignalsList();
     } catch (err) {
       setError('Failed to delete signal: ' + (err.response?.data?.detail || err.message));
