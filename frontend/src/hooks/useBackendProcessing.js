@@ -93,9 +93,9 @@ export const useBackendProcessing = ({
         const bands = Array.isArray(genericBands) ? genericBands : [];
         const gains = bands.map((b) => toNum(b?.gain, 1));
         const names = bands.map((b, i) => String(b?.name || `Band ${i + 1}`));
-        
+
         const method = processingMethod;
-        
+
         let response;
         if (modeId === 'music') {
           response = await processMusicMode(signalData, gains, names, sampleRate, method, waveletType, 6, waveletSliders);
@@ -126,7 +126,7 @@ export const useBackendProcessing = ({
     return () => {
       cancelled = true;
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [modeId, bandsKey, sampleRate, signalData, useFallback, waveletType, processingMethod, waveletSlidersKey]);
 
   return { data, loading, error };

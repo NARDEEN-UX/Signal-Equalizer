@@ -772,8 +772,8 @@ function App() {
 
     // Stop old source
     const oldSource = sourceRef.current;
-    try { oldSource.onended = null; oldSource.stop(); } catch {}
-    try { oldSource.disconnect(); } catch {}
+    try { oldSource.onended = null; oldSource.stop(); } catch { }
+    try { oldSource.disconnect(); } catch { }
     if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null; }
 
     // Create new buffer with new signal
@@ -813,7 +813,7 @@ function App() {
       }
     };
     rafRef.current = requestAnimationFrame(tick);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [signalData?.output_signal]);
 
   // ── Auto-scroll waveform view to follow playback cursor ──
@@ -834,7 +834,7 @@ function App() {
       const newStart = Math.max(0, Math.min(1 - span, normalized - span * 0.25));
       setLinkedViewWindow({ start: newStart, end: newStart + span });
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [playbackTime, isPlaying]);
 
   const handleSpeedChange = (speed) => {
