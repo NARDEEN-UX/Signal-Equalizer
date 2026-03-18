@@ -224,7 +224,7 @@ function App() {
   const [modeUploadedSignals, setModeUploadedSignals] = useState({});
   const [modeUploadedSampleRates, setModeUploadedSampleRates] = useState({});
   const [modeAudioFiles, setModeAudioFiles] = useState({});
-  
+
   // Get uploaded signal for current mode
   const uploadedSignal = modeUploadedSignals[activeModeId] || null;
   const uploadedSampleRate = modeUploadedSampleRates[activeModeId] || 44100;
@@ -241,7 +241,7 @@ function App() {
     });
     return initial;
   });
-  
+
   const [modeWaveletSliders, setModeWaveletSliders] = useState(() => {
     const initial = {};
     MODES.forEach(mode => {
@@ -289,6 +289,9 @@ function App() {
   const durationRef = useRef(0);
   const rafRef = useRef(null);
   const offsetTimeRef = useRef(0);
+  const playbackSampleRateRef = useRef(44100);
+  const prevOutputSignalRef = useRef(null);
+  const autoScrollEnabledRef = useRef(true);
 
   const activeMode = MODES.find((m) => m.id === activeModeId) || MODES[0];
   const activeWaveletBasis = WAVELET_BASIS_MAP[normalizeWaveletName(waveletType, getModeWaveletDefault(activeModeId))] || WAVELET_BASIS_MAP.db4;
@@ -637,6 +640,7 @@ function App() {
       MIN_PLAYBACK_SAMPLE_RATE,
       Math.min(MAX_PLAYBACK_SAMPLE_RATE, Math.round(desiredSampleRate) || 44100)
     );
+    playbackSampleRateRef.current = playbackSampleRate;
 
     let buffer;
     try {
@@ -658,7 +662,7 @@ function App() {
     gainNode.gain.value = volume;
 
     source.connect(gainNode).connect(ctx.destination);
-    
+
     // Add ended event listener to stop playback when audio finishes
     source.onended = () => {
       setIsPlaying(false);
@@ -707,6 +711,7 @@ function App() {
     };
 
     setIsPlaying(true);
+    prevOutputSignalRef.current = signalData.output_signal;
     rafRef.current = requestAnimationFrame(tick);
   };
 
@@ -747,6 +752,90 @@ function App() {
       audioCtxRef.current = null;
     }
   };
+
+  // ── Seamless buffer swap when output_signal changes during playback ──
+  useEffect(() => {
+    const newSignal = signalData?.output_signal;
+    if (!newSignal || !isPlaying || !audioCtxRef.current || !sourceRef.current) {
+      prevOutputSignalRef.current = newSignal || null;
+      return;
+    }
+    // Skip if the reference is the same (no actual change)
+    if (newSignal === prevOutputSignalRef.current) return;
+    prevOutputSignalRef.current = newSignal;
+
+    const ctx = audioCtxRef.current;
+    // Compute exact current position
+    const elapsed = (ctx.currentTime - startTimeRef.current) * playbackRate;
+    const currentPos = offsetTimeRef.current + elapsed;
+    if (currentPos >= durationRef.current) return;
+
+    // Stop old source
+    const oldSource = sourceRef.current;
+    try { oldSource.onended = null; oldSource.stop(); } catch {}
+    try { oldSource.disconnect(); } catch {}
+    if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null; }
+
+    // Create new buffer with new signal
+    const sr = playbackSampleRateRef.current;
+    let buffer;
+    try {
+      buffer = ctx.createBuffer(1, newSignal.length, sr);
+    } catch { return; }
+    const bufData = buffer.getChannelData(0);
+    for (let i = 0; i < bufData.length; i++) bufData[i] = newSignal[i];
+
+    const source = ctx.createBufferSource();
+    source.buffer = buffer;
+    source.playbackRate.value = playbackRate;
+    source.connect(gainRef.current);
+    source.onended = () => {
+      setIsPlaying(false);
+      setPlaybackTime(0);
+      offsetTimeRef.current = 0;
+    };
+
+    const safeOffset = Math.max(0, Math.min(currentPos, buffer.duration - 1e-4));
+    try { source.start(0, safeOffset); } catch { source.start(0, 0); }
+
+    sourceRef.current = source;
+    startTimeRef.current = ctx.currentTime;
+    offsetTimeRef.current = safeOffset;
+
+    // Restart animation tick
+    const tick = () => {
+      if (!audioCtxRef.current || !sourceRef.current) return;
+      const el = (audioCtxRef.current.currentTime - startTimeRef.current) * playbackRate;
+      const clamped = Math.min(offsetTimeRef.current + el, durationRef.current);
+      setPlaybackTime(clamped);
+      if (offsetTimeRef.current + el < durationRef.current) {
+        rafRef.current = requestAnimationFrame(tick);
+      }
+    };
+    rafRef.current = requestAnimationFrame(tick);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [signalData?.output_signal]);
+
+  // ── Auto-scroll waveform view to follow playback cursor ──
+  useEffect(() => {
+    if (!isPlaying || !autoScrollEnabledRef.current) return;
+    if (!durationRef.current || durationRef.current <= 0) return;
+
+    const normalized = playbackTime / durationRef.current; // 0..1
+    const { start, end } = linkedViewWindow;
+    const span = end - start;
+
+    // If fully zoomed out, no need to scroll
+    if (span >= 0.99) return;
+
+    // If cursor moved past 75% of the visible window, scroll to keep it at 25%
+    const cursorInWindow = (normalized - start) / span;
+    if (cursorInWindow > 0.75 || cursorInWindow < 0) {
+      const newStart = Math.max(0, Math.min(1 - span, normalized - span * 0.25));
+      setLinkedViewWindow({ start: newStart, end: newStart + span });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [playbackTime, isPlaying]);
 
   const handleSpeedChange = (speed) => {
     setPlaybackRate(speed);
@@ -822,13 +911,13 @@ function App() {
       wavelet: waveletType,
       bands: modeFreqBands
     };
-    
+
     // Create a blob from the schema JSON
     const blob = new Blob([JSON.stringify(schema, null, 2)], { type: 'application/json' });
-    
+
     // Create a URL for the blob
     const url = URL.createObjectURL(blob);
-    
+
     // Create a temporary link element and trigger download
     const link = document.createElement('a');
     link.href = url;
@@ -836,10 +925,10 @@ function App() {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    
+
     // Clean up the URL
     URL.revokeObjectURL(url);
-    
+
     window.alert('Preset downloaded to your Downloads folder!');
   };
   const handleLoadPreset = () => {
@@ -914,18 +1003,18 @@ function App() {
 
   const handleSettingsSelect = (settings) => {
     if (!settings) return;
-    
+
     // Apply settings to current mode
     if (settings.mode) {
       setActiveModeId(settings.mode);
     }
-    
+
     // Slider gains are stored in band configurations, not as separate state
-    
+
     const selectedWavelet = normalizeWaveletName(settings.wavelet, getModeWaveletDefault(settings.mode || activeModeId));
     setWaveletType(selectedWavelet);
     setWaveletSliders(normalizeWaveletSliders(selectedWavelet, settings.sliders_wavelet));
-    
+
     // Apply band configurations for the mode
     if (settings.bands && Array.isArray(settings.bands)) {
       const normalizedBands = settings.bands.map((b, i) => ({
@@ -940,7 +1029,7 @@ function App() {
         [settings.mode || activeModeId]: normalizedBands
       }));
     }
-    
+
     window.alert('Settings loaded successfully. Controls updated.');
   };
 
@@ -1184,9 +1273,9 @@ function App() {
           <button type="button" className="btn btn-header" onClick={() => setModeModalOpen(true)}>
             <span className="btn-icon">⚙</span> Change Mode
           </button>
-          <button 
-            type="button" 
-            className="btn btn-header" 
+          <button
+            type="button"
+            className="btn btn-header"
             onClick={() => setSignalUploaderOpen(true)}
             title="Upload signal for Music mode"
           >
@@ -1250,14 +1339,14 @@ function App() {
                 <h2 className="box-title">Equalizer Controls</h2>
                 <div className="box-actions">
                   <div className="method-toggle" style={{ marginRight: '1rem', display: 'flex', gap: '0.2rem', background: 'rgba(255,255,255,0.05)', padding: '2px', borderRadius: '4px' }}>
-                    <button 
-                      type="button" 
+                    <button
+                      type="button"
                       className={`btn-xs ${processingMethod === 'fft' ? 'active' : ''}`}
                       onClick={() => setProcessingMethod('fft')}
                       style={{ fontSize: '10px', padding: '2px 6px', borderRadius: '3px', background: processingMethod === 'fft' ? '#6366f1' : 'transparent', color: 'white', border: 'none', cursor: 'pointer' }}
                     >FFT</button>
-                    <button 
-                      type="button" 
+                    <button
+                      type="button"
                       className={`btn-xs ${processingMethod === 'wavelet' ? 'active' : ''}`}
                       onClick={() => {
                         setProcessingMethod('wavelet');
@@ -1268,15 +1357,15 @@ function App() {
                       style={{ fontSize: '10px', padding: '2px 6px', borderRadius: '3px', background: processingMethod === 'wavelet' ? '#6366f1' : 'transparent', color: 'white', border: 'none', cursor: 'pointer' }}
                     >Wavelet</button>
                   </div>
-                  <button 
-                    type="button" 
-                    className="icon-btn" 
+                  <button
+                    type="button"
+                    className="icon-btn"
                     onClick={() => {
                       setModeFreqBands(modeFreqBands.map((b) => ({ ...b, gain: 1 })));
                       if (processingMethod === 'wavelet' && activeModeId !== 'generic') {
-                         setWaveletSliders(buildWaveletDefaults(waveletType));
+                        setWaveletSliders(buildWaveletDefaults(waveletType));
                       }
-                    }} 
+                    }}
                     title="Reset"
                   >↺</button>
                   <button
@@ -1290,25 +1379,25 @@ function App() {
               </div>
               <div className="equalizer-scroll-container">
                 {/* Equalizer Curve - Works for all modes */}
-                <EqualizerCurve 
+                <EqualizerCurve
                   labels={
                     (activeModeId === 'generic' || (modeFreqBands && modeFreqBands.length > 0))
                       ? modeFreqBands.map((b) => b.name)
                       : []
-                  } 
+                  }
                   values={
                     (activeModeId === 'generic' || (modeFreqBands && modeFreqBands.length > 0))
                       ? modeFreqBands.map((b) => Number(b.gain))
                       : []
-                  } 
+                  }
                   onChange={(vals) => {
                     setModeFreqBands(modeFreqBands.map((b, i) => ({ ...b, gain: vals[i] })));
-                  }} 
+                  }}
                 />
 
                 {/* Band Builder - Works for all modes */}
-                <GenericBandBuilder 
-                  bands={modeFreqBands} 
+                <GenericBandBuilder
+                  bands={modeFreqBands}
                   setBands={setModeFreqBands}
                   isEditable={activeModeId === 'generic'}
                 />
