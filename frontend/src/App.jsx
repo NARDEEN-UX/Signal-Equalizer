@@ -209,7 +209,6 @@ function App() {
   const [view, setView] = useState('landing'); // 'landing' | 'workspace'
   const [homeMode, setHomeMode] = useState('Home');
   const [activeModeId, setActiveModeId] = useState('generic');
-  const [freqSliders, setFreqSliders] = useState([1, 1, 1, 1]);
   const [audiogram, setAudiogram] = useState(false);
   const [showSpec, setShowSpec] = useState(false);
   const [inputSpecColorScale, setInputSpecColorScale] = useState('inferno');
@@ -304,8 +303,6 @@ function App() {
       ...prev,
       [activeModeId]: bands
     }));
-    // Update frequency sliders to match the new gains
-    setFreqSliders(bands.map(b => Number(b.gain) || 1));
   };
 
   const mockSignalData = useMockProcessing({
@@ -527,7 +524,6 @@ function App() {
                 ...prev,
                 generic: response.data.bands
               }));
-              setFreqSliders(response.data.bands.map(b => (b.gain ?? 1)));
             }
             {
               const selectedWavelet = normalizeWaveletName(response.data?.wavelet, getModeWaveletDefault('generic'));
@@ -542,7 +538,6 @@ function App() {
                 ...prev,
                 music: response.data.bands
               }));
-              setFreqSliders(response.data.bands.map(b => (b.gain ?? 1)));
             }
             {
               const selectedWavelet = normalizeWaveletName(response.data?.wavelet, getModeWaveletDefault('music'));
@@ -557,7 +552,6 @@ function App() {
                 ...prev,
                 animal: response.data.bands
               }));
-              setFreqSliders(response.data.bands.map(b => (b.gain ?? 1)));
             }
             {
               const selectedWavelet = normalizeWaveletName(response.data?.wavelet, getModeWaveletDefault('animal'));
@@ -572,7 +566,6 @@ function App() {
                 ...prev,
                 human: response.data.bands
               }));
-              setFreqSliders(response.data.bands.map(b => (b.gain ?? 1)));
             }
             {
               const selectedWavelet = normalizeWaveletName(response.data?.wavelet, getModeWaveletDefault('human'));
@@ -587,7 +580,6 @@ function App() {
                 ...prev,
                 ecg: response.data.bands
               }));
-              setFreqSliders(response.data.bands.map(b => (b.gain ?? 1)));
             }
             {
               const selectedWavelet = normalizeWaveletName(response.data?.wavelet, getModeWaveletDefault('ecg'));
@@ -848,7 +840,6 @@ function App() {
           const n = Number(v);
           return Number.isFinite(n) ? Math.max(0, Math.min(2, n)) : 1;
         });
-        setFreqSliders(gains);
 
         // Keep preset loading in the current mode; never force mode switching.
         setModeFreqConfig((prev) => {
@@ -905,7 +896,6 @@ function App() {
       ...prev,
       [mode]: normalizedBands
     }));
-    setFreqSliders(normalizedBands.map(b => Number(b.gain) || 1));
   };
 
   const handleSettingsSelect = (settings) => {
@@ -916,10 +906,7 @@ function App() {
       setActiveModeId(settings.mode);
     }
     
-    // Apply slider gains if available
-    if (Array.isArray(settings.sliders_freq) && settings.sliders_freq.length > 0) {
-      setFreqSliders(settings.sliders_freq);
-    }
+    // Slider gains are stored in band configurations, not as separate state
     
     const selectedWavelet = normalizeWaveletName(settings.wavelet, getModeWaveletDefault(settings.mode || activeModeId));
     setWaveletType(selectedWavelet);
@@ -938,7 +925,6 @@ function App() {
         ...prev,
         [settings.mode || activeModeId]: normalizedBands
       }));
-      setFreqSliders(normalizedBands.map(b => b.gain));
     }
     
     window.alert('Settings loaded successfully. Controls updated.');

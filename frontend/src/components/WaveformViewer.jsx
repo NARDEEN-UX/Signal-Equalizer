@@ -51,9 +51,18 @@ const WaveformViewer = ({
   }, []);
 
   useEffect(() => {
-    if (!data || !time || !Array.isArray(data) || data.length === 0) return;
     const canvas = canvasRef.current;
     if (!canvas) return;
+
+    const ctx = canvas.getContext('2d');
+    const width = canvas.width;
+    const height = canvas.height;
+    
+    // Always clear the canvas, even if there's no data
+    ctx.clearRect(0, 0, width, height);
+
+    // Check if there's data to draw
+    if (!data || !time || !Array.isArray(data) || data.length === 0) return;
 
     const len = data.length;
     const startIdx = Math.floor((viewWindow.start ?? 0) * len);
@@ -66,11 +75,6 @@ const WaveformViewer = ({
     const t0 = drawTime[0];
     const t1 = drawTime[drawTime.length - 1];
     const timeSpan = t1 - t0 || 1e-6;
-
-    const ctx = canvas.getContext('2d');
-    const width = canvas.width;
-    const height = canvas.height;
-    ctx.clearRect(0, 0, width, height);
 
     let maxVal = 0;
     for (let i = 0; i < drawData.length; i++) {
