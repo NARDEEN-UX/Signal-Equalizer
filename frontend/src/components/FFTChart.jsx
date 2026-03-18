@@ -31,27 +31,21 @@ const FFTChart = ({ data, audiogram, variant, zoomWindow = null, onZoomWindowCha
   const effectiveYWindow = controlled ? (zoomWindow?.y || null) : yWindow;
 
   const yDomain = useMemo(() => {
-    // Lock the scale primarily to the input data to prevent the graph from shifting
-    // when the output is modified.
+    // Use the true max of both input and output so boosted signals are never clipped.
     const inputData = Array.isArray(data?.in) ? data.in : [];
     const outputData = Array.isArray(data?.out) ? data.out : [];
-    
-    let maxInput = 0;
+
+    let maxVal = 0;
     for (let i = 0; i < inputData.length; i++) {
       const v = Number(inputData[i]);
-      if (v > maxInput) maxInput = v;
+      if (v > maxVal) maxVal = v;
     }
-
-    let maxOutput = 0;
     for (let i = 0; i < outputData.length; i++) {
       const v = Number(outputData[i]);
-      if (v > maxOutput) maxOutput = v;
+      if (v > maxVal) maxVal = v;
     }
 
-    // We use the max of input, but allow output to go slightly beyond if it's boosted.
-    // However, the "floor" of the scale should be based on the input to keep it stable.
-    const maxVal = Math.max(maxInput, maxOutput * 0.5);
-    const paddedMax = maxVal > 0 ? maxVal * 1.1 : 2;
+    const paddedMax = maxVal > 0 ? maxVal * 1.15 : 2;
     return { min: 0, max: Math.max(0.1, paddedMax) };
   }, [data]);
 
@@ -165,12 +159,12 @@ const FFTChart = ({ data, audiogram, variant, zoomWindow = null, onZoomWindowCha
     setDrag((d) =>
       d
         ? {
-            ...d,
-            currentCanvasX: p.canvasX,
-            currentCanvasY: p.canvasY,
-            currentX: p.drawX,
-            currentY: p.drawY
-          }
+          ...d,
+          currentCanvasX: p.canvasX,
+          currentCanvasY: p.canvasY,
+          currentX: p.drawX,
+          currentY: p.drawY
+        }
         : d
     );
   };
@@ -265,32 +259,56 @@ const FFTChart = ({ data, audiogram, variant, zoomWindow = null, onZoomWindowCha
   };
 
   return (
-    <div
-      className="chart-wrap"
-      style={{ height: 300 }}
-      ref={wrapRef}
-      onMouseDown={handleMouseDown}
-      onMouseMove={handleMouseMove}
-      onMouseUp={finishDragZoom}
-      onMouseLeave={finishDragZoom}
-      onDoubleClick={handleResetZoom}
-      title="Drag to select FFT zoom region. Double-click: reset."
-    >
-      <Line ref={chartRef} data={chartData} options={options} />
-      {drag?.active && (
-        <div
+    <div style={{ position: 'relative' }}>
+      {(effectiveXWindow || effectiveYWindow) && (
+        <button
+          type="button"
+          onClick={handleResetZoom}
           style={{
             position: 'absolute',
-            left: `${Math.min(drag.startX, drag.currentX)}px`,
-            top: `${Math.min(drag.startY, drag.currentY)}px`,
-            width: `${Math.max(1, Math.abs(drag.currentX - drag.startX))}px`,
-            height: `${Math.max(1, Math.abs(drag.currentY - drag.startY))}px`,
-            border: '1px solid rgba(255,255,255,0.7)',
-            background: 'rgba(255,255,255,0.15)',
-            pointerEvents: 'none'
+            top: 6,
+            right: 8,
+            zIndex: 10,
+            fontSize: '0.7rem',
+            fontWeight: 600,
+            padding: '2px 8px',
+            borderRadius: '4px',
+            border: '1px solid rgba(255,255,255,0.2)',
+            background: 'rgba(0,0,0,0.5)',
+            color: '#f2f2f2',
+            cursor: 'pointer'
           }}
-        />
+        >
+          Reset Zoom
+        </button>
       )}
+      <div
+        className="chart-wrap"
+        style={{ height: 300 }}
+        ref={wrapRef}
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={finishDragZoom}
+        onMouseLeave={finishDragZoom}
+        onDoubleClick={handleResetZoom}
+        title="Drag to select FFT zoom region. Double-click: reset."
+      >
+        <Line ref={chartRef} data={chartData} options={options} />
+        {drag?.active && (
+          <div
+            style={{
+              position: 'absolute',
+              left: `${Math.min(drag.startX, drag.currentX)}px`,
+              top: `${Math.min(drag.startY, drag.currentY)}px`,
+              width: `${Math.max(1, Math.abs(drag.currentX - drag.startX))}px`,
+              height: `${Math.max(1, Math.abs(drag.currentY - drag.startY))}px`,
+              border: '1px solid rgba(255,255,255,0.7)',
+              background: 'rgba(255,255,255,0.15)',
+              pointerEvents: 'none'
+            }}
+          />
+        )}
+      </div>
     </div>
   );
 };
