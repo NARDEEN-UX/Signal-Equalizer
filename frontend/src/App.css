@@ -328,3 +328,58 @@
   font-size: 0.9rem;
 }
 
+/* --- Box Header and Action Buttons --- */
+.box-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+}
+
+.box-title {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--redLight);
+  flex-grow: 1;
+  min-width: 150px;
+}
+
+.box-actions {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 36px;
+  height: 36px;
+  padding: 0;
+  background: rgba(62, 12, 7, 0.6);
+  border: 1px solid rgba(230, 126, 102, 0.4);
+  border-radius: 6px;
+  color: var(--redLight);
+  cursor: pointer;
+  font-size: 0.95rem;
+  transition: all 0.2s ease;
+}
+
+.icon-btn:hover {
+  background: rgba(230, 126, 102, 0.2);
+  border-color: var(--redLight);
+  color: var(--redLightActive);
+  transform: scale(1.1);
+  box-shadow: 0 0 8px rgba(230, 126, 102, 0.4);
+}
+
+.icon-btn:active {
+  transform: scale(0.95);
+}
+
