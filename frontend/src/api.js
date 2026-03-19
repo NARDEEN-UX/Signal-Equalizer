@@ -44,7 +44,7 @@ export const loadSettings = (filename) => {
 };
 
 // Mode-specific API calls
-export const processGenericMode = (signal, bands, sampleRate = 44100, method = 'fft', wavelet = 'db4', waveletLevel = 6, slidersWavelet = null) => {
+export const processGenericMode = (signal, bands, sampleRate = 44100) => {
   return API.post('/api/modes/generic/process', {
     signal,
     bands: bands.map(b => ({
@@ -54,11 +54,7 @@ export const processGenericMode = (signal, bands, sampleRate = 44100, method = '
       high: b.high,
       gain: b.gain
     })),
-    sample_rate: sampleRate,
-    method,
-    wavelet,
-    wavelet_level: waveletLevel,
-    sliders_wavelet: slidersWavelet
+    sample_rate: sampleRate
   });
 };
 

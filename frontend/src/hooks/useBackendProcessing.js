@@ -94,7 +94,7 @@ export const useBackendProcessing = ({
         const gains = bands.map((b) => toNum(b?.gain, 1));
         const names = bands.map((b, i) => String(b?.name || `Band ${i + 1}`));
 
-        const method = processingMethod;
+        const method = modeId === 'generic' ? 'fft' : processingMethod;
 
         let response;
         if (modeId === 'music') {
@@ -106,7 +106,7 @@ export const useBackendProcessing = ({
         } else if (modeId === 'ecg') {
           response = await processECGMode(signalData, gains, names, sampleRate, method, waveletType, 6, waveletSliders);
         } else {
-          response = await processGenericMode(signalData, bands, sampleRate, method, waveletType, 6, waveletSliders);
+          response = await processGenericMode(signalData, bands, sampleRate);
         }
 
         if (!cancelled) {

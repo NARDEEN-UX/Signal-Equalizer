@@ -20,10 +20,6 @@ class GenericModeRequest(BaseModel):
     signal: List[float]
     sample_rate: int = 44100
     bands: List[BandConfig]
-    method: str = "fft"
-    sliders_wavelet: Optional[List[float]] = None
-    wavelet: str = "db4"
-    wavelet_level: int = 6
 
 
 class GenericModeResponse(BaseModel):
@@ -43,7 +39,5 @@ class GenericSettingsSchema(BaseModel):
     """Settings schema for generic mode"""
     mode: str = "generic"
     bands: List[BandConfig]
-    wavelet: str = "db4"
-    wavelet_level: int = 6
     description: Optional[str] = None
     created_at: Optional[str] = None

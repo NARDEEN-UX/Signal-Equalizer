@@ -164,9 +164,11 @@ class AnimalModeSeparator:
             equalized_signal = np.real(np.fft.ifft(fft_data))
         else:
             wavelet_name = wavelet if wavelet in pywt.wavelist(kind='discrete') else "db4"
-            actual_level = 10 if not sliders_wavelet else max(1, min(int(wavelet_level or 6), 10))
+            max_level = pywt.dwt_max_level(len(signal_data), pywt.Wavelet(wavelet_name).dec_len)
+            actual_level = max(1, min(int(wavelet_level or 6), max_level))
+            freq_ranges = self._get_frequency_ranges(animal_names)
             input_coeffs, output_coeffs, equalized_signal = self._apply_wavelet_equalization(
-                signal_data, animal_names, gains, wavelet_name, actual_level, sliders_wavelet
+                signal_data, freq_ranges, gains, wavelet_name, actual_level, sr, sliders_wavelet
             )
         
         output_fft = self._compute_fft_data(equalized_signal, sr)
@@ -186,62 +188,79 @@ class AnimalModeSeparator:
     def _detail_index_for_level(self, total_level: int, detail_level: int) -> int:
         return total_level - detail_level + 1
 
-    def _compute_level_gains(self, animal_names: List[str], gains: List[float], level: int) -> List[float]:
+    @staticmethod
+    def _clamp_gain(gain: float) -> float:
+        return max(0.0, min(2.0, float(gain)))
+
+    @staticmethod
+    def _ranges_overlap(low_a: float, high_a: float, low_b: float, high_b: float) -> bool:
+        return min(high_a, high_b) > max(low_a, low_b)
+
+    @staticmethod
+    def _detail_level_band(level_idx: int, sample_rate: float) -> Tuple[float, float]:
+        high = sample_rate / (2 ** level_idx)
+        low = sample_rate / (2 ** (level_idx + 1))
+        return low, high
+
+    def _compute_level_gains_from_ranges(
+        self,
+        freq_ranges: List[List[Tuple[float, float]]],
+        gains: List[float],
+        level: int,
+        sample_rate: float,
+        sliders_wavelet: Optional[List[float]] = None
+    ) -> List[float]:
         level_gains = [1.0] * (level + 1)
-        for name, gain in zip(animal_names, gains):
-            name_low = str(name or "").lower().replace(" ", "_")
-            mapped = self.ANIMAL_LEVEL_MAP.get(name_low, [])
-            g = float(gain)
-            for lv in mapped:
-                if 0 <= lv <= level:
-                    level_gains[lv] *= g
+
+        for lv in range(1, level + 1):
+            lv_low, lv_high = self._detail_level_band(lv, sample_rate)
+            matched = []
+            for ranges, gain in zip(freq_ranges, gains):
+                for low, high in ranges:
+                    if self._ranges_overlap(lv_low, lv_high, float(low), float(high)):
+                        matched.append(self._clamp_gain(gain))
+                        break
+
+            base_gain = float(np.mean(matched)) if matched else 1.0
+            if sliders_wavelet is not None and lv - 1 < len(sliders_wavelet):
+                base_gain *= self._clamp_gain(sliders_wavelet[lv - 1])
+            level_gains[lv] = self._clamp_gain(base_gain)
+
         return level_gains
 
     def _apply_wavelet_equalization(
         self,
         signal: np.ndarray,
-        animal_names: List[str],
+        freq_ranges: List[List[Tuple[float, float]]],
         gains: List[float],
         wavelet: str,
         level: int,
+        sample_rate: float,
         sliders_wavelet: Optional[List[float]] = None
     ) -> Tuple[List[List[float]], List[List[float]], np.ndarray]:
         coeffs = pywt.wavedec(signal, wavelet, level=level)
-
-        # Light denoise so wavelet basis affects output by default.
-        try:
-            d1 = np.asarray(coeffs[-1], dtype=float)
-            sigma = float(np.median(np.abs(d1)) / 0.6745) if d1.size else 0.0
-            if sigma > 0:
-                uthresh = (sigma * np.sqrt(2.0 * np.log(max(2, len(signal))))) * 0.35
-                for i in range(1, len(coeffs)):
-                    coeffs[i] = pywt.threshold(coeffs[i], uthresh, mode="soft")
-        except Exception:
-            pass
         
         input_detail_coeffs = []
-        input_detail_coeffs.append(coeffs[0].tolist())
         for lv in range(1, level + 1):
             idx = self._detail_index_for_level(level, lv)
             input_detail_coeffs.append(coeffs[idx].tolist())
 
-        level_gains = self._compute_level_gains(animal_names, gains, level)
-
-        if sliders_wavelet is not None:
-            for i, gain in enumerate(sliders_wavelet):
-                lv = i + 1
-                if lv <= level:
-                    level_gains[lv] *= gain
+        level_gains = self._compute_level_gains_from_ranges(
+            freq_ranges=freq_ranges,
+            gains=gains,
+            level=level,
+            sample_rate=sample_rate,
+            sliders_wavelet=sliders_wavelet
+        )
 
         out_coeffs = [np.array(c, copy=True) for c in coeffs]
-        
-        out_coeffs[0] = out_coeffs[0] * level_gains[0]
+
+        # Keep approximation unchanged; level sliders target details L1..LN.
         for lv in range(1, level + 1):
             idx = self._detail_index_for_level(level, lv)
             out_coeffs[idx] = out_coeffs[idx] * level_gains[lv]
 
         output_detail_coeffs = []
-        output_detail_coeffs.append(out_coeffs[0].tolist())
         for lv in range(1, level + 1):
             idx = self._detail_index_for_level(level, lv)
             output_detail_coeffs.append(out_coeffs[idx].tolist())
@@ -250,6 +269,31 @@ class AnimalModeSeparator:
         reconstructed = np.asarray(reconstructed[:len(signal)], dtype=float)
         
         return input_detail_coeffs, output_detail_coeffs, reconstructed
+
+    def _get_frequency_ranges(self, animal_names: List[str]) -> List[List[Tuple[float, float]]]:
+        ranges = []
+        for name in animal_names:
+            normalized = str(name or "").strip().lower().replace(" ", "_")
+            if normalized == "large_mammals":
+                key = "large_mammals"
+            elif normalized == "songbirds":
+                key = "songbirds"
+            elif normalized == "canines":
+                key = "canines"
+            elif normalized == "felines":
+                key = "felines"
+            elif normalized == "insects":
+                key = "insects"
+            else:
+                key = None
+
+            if key and key in self.ANIMAL_RANGES:
+                b = self.ANIMAL_RANGES[key]
+                ranges.append([(float(b['low']), float(b['high']))])
+            else:
+                ranges.append([(0.0, self.sample_rate / 2.0)])
+
+        return ranges
 
     def _compute_fft_data(self, signal_data, sample_rate):
         """Compute FFT for visualization."""

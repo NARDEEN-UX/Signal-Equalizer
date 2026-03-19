@@ -58,11 +58,7 @@ async def process_generic(request: GenericModeRequest):
             signal, 
             bands, 
             gains, 
-            sample_rate=request.sample_rate,
-            method=request.method,
-            wavelet=request.wavelet,
-            wavelet_level=request.wavelet_level,
-            sliders_wavelet=request.sliders_wavelet
+            sample_rate=request.sample_rate
         )
         
         return {

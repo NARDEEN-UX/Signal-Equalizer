@@ -16,11 +16,13 @@ function yToValue(y, chartHeight) {
 
 // Line path through points (smooth appearance via strokeLinecap/round)
 function linePathThrough(xs, ys) {
-  if (xs.length < 2) return `M ${xs[0]} ${ys[0]} L ${xs[1]} ${ys[1]}`;
+  if (xs.length === 0) return '';
+  if (xs.length === 1) return `M ${xs[0]} ${ys[0]} L ${xs[0]} ${ys[0]}`;
   return `M ${xs[0]} ${ys[0]}` + xs.slice(1).map((x, i) => ` L ${x} ${ys[i + 1]}`).join('');
 }
 
 function areaPathUnder(xs, ys, baseY) {
+  if (xs.length === 0) return '';
   return linePathThrough(xs, ys) + ` L ${xs[xs.length - 1]} ${baseY} L ${xs[0]} ${baseY} Z`;
 }
 
