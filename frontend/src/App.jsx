@@ -128,10 +128,10 @@ const DEFAULT_MODE_BANDS = {
     { id: 'animal-4', name: 'Insects', low: 600, high: 20000, gain: 1.0, examples: 'Cricket, Cicada, Bee, Grasshopper' }
   ],
   human: [
-    { id: 'human-0', name: 'Voice 1', low: 80, high: 8000, gain: 1 },
-    { id: 'human-1', name: 'Voice 2', low: 80, high: 8000, gain: 1 },
-    { id: 'human-2', name: 'Voice 3', low: 80, high: 8000, gain: 1 },
-    { id: 'human-3', name: 'Voice 4', low: 80, high: 8000, gain: 1 }
+    { id: 'human-0', name: 'Male Voice', low: 85, high: 180, gain: 1 },
+    { id: 'human-1', name: 'Female Voice', low: 165, high: 255, gain: 1 },
+    { id: 'human-2', name: 'Young Speaker', low: 250, high: 450, gain: 1 },
+    { id: 'human-3', name: 'Old Speaker', low: 80, high: 150, gain: 1 }
   ],
   ecg: [
     { id: 'ecg-0', name: 'Normal Sinus', low: 0.5, high: 3, gain: 1 },
@@ -253,7 +253,6 @@ const describeWaveletLevel = (level, sampleRate) => {
 };
 
 function App() {
-  const MAX_UI_SIGNAL_SAMPLES = 120000;
   const MIN_PLAYBACK_SAMPLE_RATE = 3000;
   const MAX_PLAYBACK_SAMPLE_RATE = 192000;
 
@@ -1087,27 +1086,15 @@ function App() {
     window.alert('Settings loaded successfully. Controls updated.');
   };
 
-  const prepareSignalForUi = (signal, sampleRate) => {
+  const normalizeUploadedSignal = (signal, sampleRate) => {
     if (!signal || signal.length === 0) {
       return { signal: [], sampleRate: Number(sampleRate) || 44100 };
     }
 
-    const step = Math.max(1, Math.ceil(signal.length / MAX_UI_SIGNAL_SAMPLES));
-    if (step === 1) {
-      return {
-        signal: Array.from(signal),
-        sampleRate: Number(sampleRate) || 44100
-      };
-    }
-
-    const reduced = [];
-    for (let i = 0; i < signal.length; i += step) {
-      reduced.push(Number(signal[i]) || 0);
-    }
-
+    // Preserve exact uploaded content. Downsampling here changes playback pitch/timbre.
     return {
-      signal: reduced,
-      sampleRate: Math.round((Number(sampleRate) || 44100) / step)
+      signal: Array.from(signal, (v) => Number(v) || 0),
+      sampleRate: Number(sampleRate) || 44100
     };
   };
 
@@ -1115,23 +1102,23 @@ function App() {
     // Reset transport to avoid stale offsets from previous files.
     handleStop();
 
-    const prepared = prepareSignalForUi(signal, sampleRate);
+    const normalized = normalizeUploadedSignal(signal, sampleRate);
 
     // Store the actual uploaded signal data for current mode
     setModeUploadedSignals(prev => ({
       ...prev,
-      [activeModeId]: prepared.signal
+      [activeModeId]: normalized.signal
     }));
     setModeUploadedSampleRates(prev => ({
       ...prev,
-      [activeModeId]: prepared.sampleRate
+      [activeModeId]: normalized.sampleRate
     }));
     // Also update the audioFile name for display (per mode)
     setModeAudioFiles(prev => ({
       ...prev,
       [activeModeId]: {
         name: filename,
-        size: prepared.signal.length * 4,
+        size: normalized.signal.length * 4,
         type: 'audio/wav'
       }
     }));
@@ -1143,10 +1130,10 @@ function App() {
     try {
       const decoded = await audioCtx.decodeAudioData(arrayBuffer.slice(0));
       const channel = decoded.getChannelData(0);
-      const prepared = prepareSignalForUi(channel, decoded.sampleRate);
+      const normalized = normalizeUploadedSignal(channel, decoded.sampleRate);
       return {
-        signal: prepared.signal,
-        sampleRate: prepared.sampleRate
+        signal: normalized.signal,
+        sampleRate: normalized.sampleRate
       };
     } finally {
       await audioCtx.close();
@@ -1222,14 +1209,14 @@ function App() {
       const backendSampleRate = response?.data?.audio?.sample_rate;
 
       if (Array.isArray(backendSignal) && backendSignal.length > 0) {
-        const prepared = prepareSignalForUi(backendSignal, backendSampleRate);
+        const normalized = normalizeUploadedSignal(backendSignal, backendSampleRate);
         setModeUploadedSignals(prev => ({
           ...prev,
-          [activeModeId]: prepared.signal
+          [activeModeId]: normalized.signal
         }));
         setModeUploadedSampleRates(prev => ({
           ...prev,
-          [activeModeId]: prepared.sampleRate
+          [activeModeId]: normalized.sampleRate
         }));
         return;
       }

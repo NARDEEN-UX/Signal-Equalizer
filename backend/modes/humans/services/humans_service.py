@@ -16,6 +16,22 @@ class HumansModeService:
         "Old Speaker":    [(80, 150)],   # Older adults (typically overlaps male low/mid)
     }
 
+    # Canonical mapping with aliases to keep legacy presets compatible.
+    VOICE_NAME_ALIASES = {
+        "male voice": "Male Voice",
+        "male": "Male Voice",
+        "voice 1": "Male Voice",
+        "female voice": "Female Voice",
+        "female": "Female Voice",
+        "voice 2": "Female Voice",
+        "young speaker": "Young Speaker",
+        "young": "Young Speaker",
+        "voice 3": "Young Speaker",
+        "old speaker": "Old Speaker",
+        "old": "Old Speaker",
+        "voice 4": "Old Speaker",
+    }
+
     # 8-level Human Voice Configuration at 22.05kHz
     # L1: 5.5k-11k, L2: 2.7k-5.5k, L3: 1378-2756, L4: 689-1378
     # L5: 344-689, L6: 172-344, L7: 86-172, L8: 43-86, A8: 0-43
@@ -26,10 +42,21 @@ class HumansModeService:
         "old": [7, 8]        # 43 - 172 Hz
     }
 
-    _ORDERED_KEYS = ["Male Voice", "Female Voice", "Young Speaker", "Old Speaker"]
-    
     def __init__(self):
         self.default_sample_rate = 22050  # Default SR for voice
+
+    def _canonical_voice_name(self, name: str) -> str:
+        raw = str(name or "").strip()
+        if raw in self.VOICE_RANGES:
+            return raw
+
+        key = raw.lower()
+        if key in self.VOICE_NAME_ALIASES:
+            return self.VOICE_NAME_ALIASES[key]
+
+        raise ValueError(
+            f"Unknown human voice label '{name}'. Allowed labels: {sorted(self.VOICE_RANGES.keys())}"
+        )
     
     def process_signal(
         self,
@@ -166,16 +193,11 @@ class HumansModeService:
         return input_detail_coeffs, output_detail_coeffs, reconstructed
     
     def _get_frequency_ranges(self, voice_names: List[str]) -> List[List[Tuple[float, float]]]:
-        """Get disjoint frequency sub-ranges for voice types."""
+        """Get frequency sub-ranges for explicitly labeled voice types."""
         ranges = []
-        for idx, name in enumerate(voice_names):
-            if name in self.VOICE_RANGES:
-                ranges.append(list(self.VOICE_RANGES[name]))
-            elif idx < len(self._ORDERED_KEYS):
-                key = self._ORDERED_KEYS[idx]
-                ranges.append(list(self.VOICE_RANGES[key]))
-            else:
-                ranges.append([(80, 500)])
+        for name in voice_names:
+            canonical = self._canonical_voice_name(name)
+            ranges.append(list(self.VOICE_RANGES[canonical]))
         return ranges
     
     def _apply_voice_equalization(self, signal, freq_ranges, gains, sample_rate):

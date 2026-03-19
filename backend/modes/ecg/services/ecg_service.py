@@ -8,30 +8,51 @@ import pywt
 class ECGModeService:
     """Service for ECG arrhythmia mode signal processing"""
     
-    # ECG Arrhythmia exact frequency bands (500Hz SR)
-    # References: VFib (2-10Hz), VTach (1-7Hz), Normal (0.05-35Hz), PVC (5-20Hz)
+    # ECG component bands aligned with UI labels.
     COMPONENT_RANGES = {
-        "Normal Sinus":     [(0.5, 35)],
-        "PVC (Premature Ventricular)": [(5, 20)],
-        "APC (Atrial Premature)":      [(0.5, 30)],  # P-wave focus
-        "VF (Ventricular Fibrillation)": [(2, 10)],
-        "VT (Ventricular Tachycardia)":  [(1, 7)],
+        "Normal Sinus": [(0.5, 3.0)],
+        "Atrial Fibrillation": [(5.0, 50.0)],
+        "Ventricular Tachycardia": [(3.0, 5.0)],
+        "Heart Block": [(0.05, 0.5)],
+    }
+
+    # Alias map to keep previous labels/settings working.
+    COMPONENT_NAME_ALIASES = {
+        "normal sinus": "Normal Sinus",
+        "atrial fibrillation": "Atrial Fibrillation",
+        "apc (atrial premature)": "Atrial Fibrillation",
+        "ventricular fibrillation": "Atrial Fibrillation",
+        "vf (ventricular fibrillation)": "Atrial Fibrillation",
+        "vt (ventricular tachycardia)": "Ventricular Tachycardia",
+        "ventricular tachycardia": "Ventricular Tachycardia",
+        "pvc (premature ventricular)": "Ventricular Tachycardia",
+        "heart block": "Heart Block",
     }
 
     # Level 10 details: 0.24-0.48 Hz. Level 10 approx: 0-0.24 Hz.
     # L9: 0.48-0.97, L8: 0.97-1.95, L7: 1.95-3.9, L6: 3.9-7.8, L5: 7.8-15.6, L4: 15.6-31.2
     COMPONENT_LEVEL_MAP = {
-        "Normal Sinus": [4, 5, 6, 7, 8, 9, 10],   # 0.24 - 31.2 Hz
-        "PVC (Premature Ventricular)": [4, 5, 6], # 3.9 - 31.2 Hz
-        "APC (Atrial Premature)": [4, 5, 6, 7, 8, 9, 10], # 0.24 - 31.2 Hz
-        "VF (Ventricular Fibrillation)": [5, 6, 7],       # 1.95 - 15.6 Hz
-        "VT (Ventricular Tachycardia)": [6, 7, 8]         # 0.97 - 7.8 Hz
+        "Normal Sinus": [7, 8, 9, 10],
+        "Atrial Fibrillation": [4, 5, 6],
+        "Ventricular Tachycardia": [6, 7],
+        "Heart Block": [10],
     }
-
-    _ORDERED_KEYS = ["Normal Sinus", "PVC (Premature Ventricular)", "APC (Atrial Premature)", "VF (Ventricular Fibrillation)", "VT (Ventricular Tachycardia)"]
     
     def __init__(self):
         self.default_sample_rate = 500  # Standard clinical ECG SR
+
+    def _canonical_component_name(self, name: str) -> str:
+        raw = str(name or "").strip()
+        if raw in self.COMPONENT_RANGES:
+            return raw
+
+        key = raw.lower()
+        if key in self.COMPONENT_NAME_ALIASES:
+            return self.COMPONENT_NAME_ALIASES[key]
+
+        raise ValueError(
+            f"Unknown ECG component label '{name}'. Allowed labels: {sorted(self.COMPONENT_RANGES.keys())}"
+        )
     
     def process_signal(
         self,
@@ -181,14 +202,9 @@ class ECGModeService:
     
     def _get_frequency_ranges(self, component_names: List[str]) -> List[List[Tuple[float, float]]]:
         ranges = []
-        for idx, name in enumerate(component_names):
-            if name in self.COMPONENT_RANGES:
-                ranges.append(list(self.COMPONENT_RANGES[name]))
-            elif idx < len(self._ORDERED_KEYS):
-                key = self._ORDERED_KEYS[idx]
-                ranges.append(list(self.COMPONENT_RANGES[key]))
-            else:
-                ranges.append([(0.5, 40)])
+        for name in component_names:
+            canonical = self._canonical_component_name(name)
+            ranges.append(list(self.COMPONENT_RANGES[canonical]))
         return ranges
     
     def _apply_ecg_equalization(self, signal, freq_ranges, gains, sample_rate):

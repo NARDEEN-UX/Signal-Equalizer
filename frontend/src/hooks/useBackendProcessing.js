@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   processGenericMode,
   processMusicMode,
@@ -12,9 +12,26 @@ const toNum = (v, fallback = 0) => {
   return Number.isFinite(n) ? n : fallback;
 };
 
+const timeCache = new Map();
+const MAX_TIME_CACHE_ITEMS = 6;
+
 const makeTime = (length, sampleRate) => {
   const sr = Math.max(1, toNum(sampleRate, 44100));
-  return Array.from({ length }, (_, i) => i / sr);
+  const n = Math.max(0, Number(length) || 0);
+  const key = `${n}:${sr}`;
+  const cached = timeCache.get(key);
+  if (cached) return cached;
+
+  const generated = Array.from({ length: n }, (_, i) => i / sr);
+  timeCache.set(key, generated);
+
+  // Keep cache bounded to avoid unbounded memory growth.
+  if (timeCache.size > MAX_TIME_CACHE_ITEMS) {
+    const oldestKey = timeCache.keys().next().value;
+    timeCache.delete(oldestKey);
+  }
+
+  return generated;
 };
 
 const normalizeResponse = (apiData, inputSignal, sampleRate) => {
@@ -67,6 +84,7 @@ export const useBackendProcessing = ({
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const requestSeqRef = useRef(0);
 
   // Serialize bands to a stable string so useEffect doesn't fire on
   // every render due to a new array/object reference.
@@ -86,6 +104,9 @@ export const useBackendProcessing = ({
     }
 
     let cancelled = false;
+    const requestSeq = ++requestSeqRef.current;
+    const signalLength = Array.isArray(signalData) ? signalData.length : 0;
+    const debounceMs = signalLength > 250000 ? 350 : 160;
 
     const run = async () => {
       setLoading(true);
@@ -110,22 +131,23 @@ export const useBackendProcessing = ({
           response = await processGenericMode(signalData, bands, sampleRate);
         }
 
-        if (!cancelled) {
+        if (!cancelled && requestSeq === requestSeqRef.current) {
           setData(normalizeResponse(response?.data || {}, signalData, sampleRate));
         }
       } catch (err) {
-        if (!cancelled) {
+        if (!cancelled && requestSeq === requestSeqRef.current) {
           setError(err?.message || 'Backend processing failed');
           if (!useFallback) setData(null);
         }
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled && requestSeq === requestSeqRef.current) setLoading(false);
       }
     };
 
-    run();
+    const timer = setTimeout(run, debounceMs);
     return () => {
       cancelled = true;
+      clearTimeout(timer);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [modeId, bandsKey, sampleRate, signalData, useFallback, waveletType, waveletLevel, processingMethod, waveletSlidersKey]);

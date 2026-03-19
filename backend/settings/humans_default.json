@@ -3,30 +3,30 @@
   "bands": [
     {
       "id": "human-0",
-      "name": "Young",
-      "low": 200,
-      "high": 15000,
+      "name": "Male Voice",
+      "low": 85,
+      "high": 180,
       "gain": 1.0
     },
     {
       "id": "human-1",
-      "name": "Old",
-      "low": 80,
-      "high": 4000,
+      "name": "Female Voice",
+      "low": 165,
+      "high": 255,
       "gain": 1.0
     },
     {
       "id": "human-2",
-      "name": "Male",
-      "low": 85,
-      "high": 255,
+      "name": "Young Speaker",
+      "low": 250,
+      "high": 450,
       "gain": 1.0
     },
     {
       "id": "human-3",
-      "name": "Female",
-      "low": 165,
-      "high": 255,
+      "name": "Old Speaker",
+      "low": 80,
+      "high": 150,
       "gain": 1.0
     }
   ],
