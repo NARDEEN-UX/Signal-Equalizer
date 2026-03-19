@@ -49,7 +49,7 @@ const WaveletChart = ({ data }) => {
     return <div className="chart-wrap">No wavelet coefficient data</div>;
   }
 
-  const count = Math.min(6, levels.length, inputCoeffs.length, outputCoeffs.length);
+  const count = Math.min(levels.length, inputCoeffs.length, outputCoeffs.length);
 
   return (
     <div className="chart-wrap" style={{ display: 'flex', flexDirection: 'column', gap: '0.55rem' }}>

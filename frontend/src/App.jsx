@@ -142,16 +142,29 @@ const DEFAULT_MODE_BANDS = {
 };
 
 const WAVELET_BASIS_OPTIONS = [
-  { value: 'haar', label: 'Haar', sliderLabels: ['L1', 'L2', 'L3', 'L4', 'L5', 'L6'] },
-  { value: 'db4', label: 'Daubechies 4 (db4)', sliderLabels: ['L1', 'L2', 'L3', 'L4', 'L5', 'L6'] },
-  { value: 'db6', label: 'Daubechies 6 (db6)', sliderLabels: ['L1', 'L2', 'L3', 'L4', 'L5', 'L6'] },
-  { value: 'db8', label: 'Daubechies 8 (db8)', sliderLabels: ['L1', 'L2', 'L3', 'L4', 'L5', 'L6'] },
-  { value: 'sym5', label: 'Symlet 5 (sym5)', sliderLabels: ['L1', 'L2', 'L3', 'L4', 'L5', 'L6'] },
-  { value: 'sym8', label: 'Symlet 8 (sym8)', sliderLabels: ['L1', 'L2', 'L3', 'L4', 'L5', 'L6'] },
-  { value: 'coif3', label: 'Coiflet 3 (coif3)', sliderLabels: ['L1', 'L2', 'L3', 'L4', 'L5', 'L6'] },
-  { value: 'bior3.5', label: 'Biorthogonal 3.5 (bior3.5)', sliderLabels: ['L1', 'L2', 'L3', 'L4', 'L5', 'L6'] },
-  { value: 'dmey', label: 'Discrete Meyer (dmey)', sliderLabels: ['L1', 'L2', 'L3', 'L4', 'L5', 'L6'] }
+  { value: 'haar', label: 'Haar' },
+  { value: 'db4', label: 'Daubechies 4 (db4)' },
+  { value: 'db6', label: 'Daubechies 6 (db6)' },
+  { value: 'db8', label: 'Daubechies 8 (db8)' },
+  { value: 'sym5', label: 'Symlet 5 (sym5)' },
+  { value: 'sym8', label: 'Symlet 8 (sym8)' },
+  { value: 'coif3', label: 'Coiflet 3 (coif3)' },
+  { value: 'bior3.5', label: 'Biorthogonal 3.5 (bior3.5)' },
+  { value: 'dmey', label: 'Discrete Meyer (dmey)' }
 ];
+
+const DEFAULT_WAVELET_LEVEL = 6;
+const WAVELET_DEC_LEN = {
+  haar: 2,
+  db4: 8,
+  db6: 12,
+  db8: 16,
+  sym5: 10,
+  sym8: 16,
+  coif3: 18,
+  'bior3.5': 12,
+  dmey: 62
+};
 
 const WAVELET_BASIS_MAP = WAVELET_BASIS_OPTIONS.reduce((acc, item) => {
   acc[item.value] = item;
@@ -186,14 +199,31 @@ const normalizeWaveletName = (waveletName, fallback = 'db4') => {
 
 const getModeWaveletDefault = (modeId) => MODE_DEFAULT_WAVELET[modeId] || 'db4';
 
-const buildWaveletDefaults = (waveletName) => {
+const computeMaxWaveletLevel = (signalLength, waveletName, fallback = DEFAULT_WAVELET_LEVEL) => {
+  const n = Number(signalLength);
+  if (!Number.isFinite(n) || n < 2) return fallback;
+
   const key = normalizeWaveletName(waveletName, 'db4');
-  const labels = WAVELET_BASIS_MAP[key]?.sliderLabels || WAVELET_BASIS_MAP.db4.sliderLabels;
-  return Array.from({ length: labels.length }, () => 1);
+  const decLen = WAVELET_DEC_LEN[key] || WAVELET_DEC_LEN.db4;
+  const denom = Math.max(1, decLen - 1);
+  const ratio = n / denom;
+  if (ratio <= 1) return 1;
+
+  return Math.max(1, Math.floor(Math.log2(ratio)));
 };
 
-const normalizeWaveletSliders = (waveletName, sliders) => {
-  const defaults = buildWaveletDefaults(waveletName);
+const makeWaveletLevelLabels = (count) => {
+  const n = Math.max(1, Number(count) || DEFAULT_WAVELET_LEVEL);
+  return Array.from({ length: n }, (_, i) => `L${i + 1}`);
+};
+
+const buildWaveletDefaults = (count = DEFAULT_WAVELET_LEVEL) => {
+  const n = Math.max(1, Number(count) || DEFAULT_WAVELET_LEVEL);
+  return Array.from({ length: n }, () => 1);
+};
+
+const normalizeWaveletSliders = (sliders, levelCount) => {
+  const defaults = buildWaveletDefaults(levelCount);
   if (!Array.isArray(sliders) || sliders.length === 0) return defaults;
 
   return defaults.map((d, i) => {
@@ -266,14 +296,14 @@ function App() {
   const [modeWaveletSliders, setModeWaveletSliders] = useState(() => {
     const initial = {};
     MODES.forEach(mode => {
-      initial[mode.id] = buildWaveletDefaults(getModeWaveletDefault(mode.id));
+      initial[mode.id] = buildWaveletDefaults(DEFAULT_WAVELET_LEVEL);
     });
     return initial;
   });
 
   // Derived values for current mode
   const waveletType = modeWaveletTypes[activeModeId] || getModeWaveletDefault(activeModeId);
-  const waveletSliders = modeWaveletSliders[activeModeId] || buildWaveletDefaults(getModeWaveletDefault(activeModeId));
+  const waveletSliders = modeWaveletSliders[activeModeId] || buildWaveletDefaults(DEFAULT_WAVELET_LEVEL);
 
   // Functions to update mode-specific wavelet state - stable references
   const updateWaveletType = (modeId, newType) => {
@@ -318,7 +348,6 @@ function App() {
   const isGenericMode = activeModeId === 'generic';
   const activeWaveletBasis = WAVELET_BASIS_MAP[normalizeWaveletName(waveletType, getModeWaveletDefault(activeModeId))] || WAVELET_BASIS_MAP.db4;
   const recommendedWavelet = WAVELET_RECOMMENDATION_BY_MODE[activeModeId] || WAVELET_RECOMMENDATION_BY_MODE.generic;
-  const waveletLevelLabels = activeWaveletBasis?.sliderLabels || ['L1', 'L2', 'L3', 'L4', 'L5', 'L6'];
 
   // Get frequency bands for current mode
   const modeFreqBands = modeFreqConfig[activeModeId] || DEFAULT_MODE_BANDS[activeModeId] || [];
@@ -341,11 +370,20 @@ function App() {
     sampleRate: uploadedSampleRate
   });
 
+  const currentSignalLength =
+    (Array.isArray(uploadedSignal) && uploadedSignal.length > 0 ? uploadedSignal.length : 0)
+    || (Array.isArray(mockSignalData?.input_signal) ? mockSignalData.input_signal.length : 0)
+    || 0;
+  const maxWaveletLevel = computeMaxWaveletLevel(currentSignalLength, waveletType, DEFAULT_WAVELET_LEVEL);
+  const waveletLevelLabels = makeWaveletLevelLabels(maxWaveletLevel);
+  const waveletLevel = maxWaveletLevel;
+
   const { data: backendSignalData, error: backendProcessingError } = useBackendProcessing({
     modeId: activeModeId,
     freqSliders: modeFreqBands.map(b => Number(b.gain) || 1),
     genericBands: modeFreqBands,
     waveletType,
+    waveletLevel,
     sampleRate: uploadedSampleRate,
     signalData: uploadedSignal || null,
     useFallback: true,
@@ -509,8 +547,13 @@ function App() {
     }
     const modeDefault = getModeWaveletDefault(activeModeId);
     setWaveletType(modeDefault);
-    setWaveletSliders(buildWaveletDefaults(modeDefault));
+    setWaveletSliders(buildWaveletDefaults(DEFAULT_WAVELET_LEVEL));
   }, [activeModeId]);
+
+  useEffect(() => {
+    if (isGenericMode) return;
+    setWaveletSliders((prev) => normalizeWaveletSliders(prev, maxWaveletLevel));
+  }, [isGenericMode, maxWaveletLevel, waveletType]);
 
   // Load default settings when mode changes
   // Ensure graphs are clear when switching to a mode without an uploaded signal
@@ -548,7 +591,7 @@ function App() {
             {
               const selectedWavelet = normalizeWaveletName(response.data?.wavelet, getModeWaveletDefault('music'));
               setWaveletType(selectedWavelet);
-              setWaveletSliders(normalizeWaveletSliders(selectedWavelet, response.data?.sliders_wavelet));
+              setWaveletSliders(normalizeWaveletSliders(response.data?.sliders_wavelet, maxWaveletLevel));
             }
             break;
           case 'animal':
@@ -562,7 +605,7 @@ function App() {
             {
               const selectedWavelet = normalizeWaveletName(response.data?.wavelet, getModeWaveletDefault('animal'));
               setWaveletType(selectedWavelet);
-              setWaveletSliders(normalizeWaveletSliders(selectedWavelet, response.data?.sliders_wavelet));
+              setWaveletSliders(normalizeWaveletSliders(response.data?.sliders_wavelet, maxWaveletLevel));
             }
             break;
           case 'human':
@@ -576,7 +619,7 @@ function App() {
             {
               const selectedWavelet = normalizeWaveletName(response.data?.wavelet, getModeWaveletDefault('human'));
               setWaveletType(selectedWavelet);
-              setWaveletSliders(normalizeWaveletSliders(selectedWavelet, response.data?.sliders_wavelet));
+              setWaveletSliders(normalizeWaveletSliders(response.data?.sliders_wavelet, maxWaveletLevel));
             }
             break;
           case 'ecg':
@@ -590,7 +633,7 @@ function App() {
             {
               const selectedWavelet = normalizeWaveletName(response.data?.wavelet, getModeWaveletDefault('ecg'));
               setWaveletType(selectedWavelet);
-              setWaveletSliders(normalizeWaveletSliders(selectedWavelet, response.data?.sliders_wavelet));
+              setWaveletSliders(normalizeWaveletSliders(response.data?.sliders_wavelet, maxWaveletLevel));
             }
             break;
           default:
@@ -967,7 +1010,7 @@ function App() {
       if (currentMode !== 'generic') {
         const selectedWavelet = normalizeWaveletName(d.wavelet, getModeWaveletDefault(currentMode));
         setWaveletType(selectedWavelet);
-        setWaveletSliders(normalizeWaveletSliders(selectedWavelet, d.sliders_wavelet));
+        setWaveletSliders(normalizeWaveletSliders(d.sliders_wavelet, maxWaveletLevel));
       }
 
       if (Array.isArray(d.bands) && d.bands.length && !modeMismatch) {
@@ -1023,7 +1066,7 @@ function App() {
     if (selectedMode !== 'generic') {
       const selectedWavelet = normalizeWaveletName(settings.wavelet, getModeWaveletDefault(selectedMode));
       setWaveletType(selectedWavelet);
-      setWaveletSliders(normalizeWaveletSliders(selectedWavelet, settings.sliders_wavelet));
+      setWaveletSliders(normalizeWaveletSliders(settings.sliders_wavelet, maxWaveletLevel));
     }
 
     // Apply band configurations for the mode
@@ -1371,7 +1414,7 @@ function App() {
                     onClick={() => {
                       setModeFreqBands(modeFreqBands.map((b) => ({ ...b, gain: 1 })));
                       if (processingMethod === 'wavelet' && !isGenericMode) {
-                        setWaveletSliders(buildWaveletDefaults(waveletType));
+                        setWaveletSliders(buildWaveletDefaults(maxWaveletLevel));
                       }
                     }}
                     title="Reset"
@@ -1458,7 +1501,7 @@ function App() {
                         onChange={(e) => {
                           const nextType = normalizeWaveletName(e.target.value, getModeWaveletDefault(activeModeId));
                           setWaveletType(nextType);
-                          setWaveletSliders((prev) => normalizeWaveletSliders(nextType, prev));
+                          setWaveletSliders((prev) => normalizeWaveletSliders(prev, maxWaveletLevel));
                         }}
                       >
                         {WAVELET_BASIS_OPTIONS.map((option) => (
@@ -1474,7 +1517,7 @@ function App() {
                       count={waveletLevelLabels.length}
                       labels={waveletLevelLabels}
                       values={waveletSliders}
-                      onChange={(vals) => setWaveletSliders(normalizeWaveletSliders(waveletType, vals))}
+                      onChange={(vals) => setWaveletSliders(normalizeWaveletSliders(vals, maxWaveletLevel))}
                     />
 
                     <div className="helper-text" style={{ marginTop: '0.6rem' }}>

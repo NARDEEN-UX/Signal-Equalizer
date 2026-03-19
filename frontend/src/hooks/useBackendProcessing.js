@@ -60,6 +60,7 @@ export const useBackendProcessing = ({
   signalData,
   useFallback = true,
   waveletType = 'db8',
+  waveletLevel = 6,
   processingMethod = 'fft',
   waveletSliders = null
 }) => {
@@ -98,13 +99,13 @@ export const useBackendProcessing = ({
 
         let response;
         if (modeId === 'music') {
-          response = await processMusicMode(signalData, gains, names, sampleRate, method, waveletType, 6, waveletSliders);
+          response = await processMusicMode(signalData, gains, names, sampleRate, method, waveletType, waveletLevel, waveletSliders);
         } else if (modeId === 'animal') {
-          response = await processAnimalsMode(signalData, gains, names, sampleRate, method, waveletType, 6, waveletSliders);
+          response = await processAnimalsMode(signalData, gains, names, sampleRate, method, waveletType, waveletLevel, waveletSliders);
         } else if (modeId === 'human') {
-          response = await processHumansMode(signalData, gains, names, sampleRate, method, waveletType, 6, waveletSliders);
+          response = await processHumansMode(signalData, gains, names, sampleRate, method, waveletType, waveletLevel, waveletSliders);
         } else if (modeId === 'ecg') {
-          response = await processECGMode(signalData, gains, names, sampleRate, method, waveletType, 6, waveletSliders);
+          response = await processECGMode(signalData, gains, names, sampleRate, method, waveletType, waveletLevel, waveletSliders);
         } else {
           response = await processGenericMode(signalData, bands, sampleRate);
         }
@@ -127,7 +128,7 @@ export const useBackendProcessing = ({
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [modeId, bandsKey, sampleRate, signalData, useFallback, waveletType, processingMethod, waveletSlidersKey]);
+  }, [modeId, bandsKey, sampleRate, signalData, useFallback, waveletType, waveletLevel, processingMethod, waveletSlidersKey]);
 
   return { data, loading, error };
 };
