@@ -58,7 +58,7 @@ const AudioUploader = ({ onFileSelect, onSettingsSelect, currentFileName }) => {
       <input 
         ref={inputRef} 
         type="file" 
-        accept="audio/*,.wav,.mp3,.m4a,.aac,.mp4" 
+        accept="audio/*,.wav,.mp3,.m4a,.aac,.mp4,.csv" 
         onChange={(e) => handleFile(e.target.files?.[0])} 
         style={{ display: 'none' }} 
       />

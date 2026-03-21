@@ -11,6 +11,7 @@ import ModeSignalUploader from './components/ModeSignalUploader';
 import GenericBandBuilder from './components/GenericBandBuilder';
 import BandPresetModal from './components/BandPresetModal';
 import SliderGroup from './components/SliderGroup';
+import ECGAIViewer from './components/ECGAIViewer';
 import './App.css';
 import { useBackendProcessing } from './hooks/useBackendProcessing';
 import { useMockProcessing } from './mock/useMockProcessing';
@@ -1520,48 +1521,63 @@ function App() {
             </div>
           )}
           {equalizerTab === 'ai' && (
-            <div className="box ai-box">
-              <h2 className="box-title">AI Model Comparison</h2>
-              <p className="helper-text">Run component separation for the current mode and inspect each isolated track.</p>
-              <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.75rem', marginBottom: '0.75rem' }}>
-                <button type="button" className="btn btn-small" onClick={runAiSeparation} disabled={aiLoading}>
-                  {aiLoading ? 'Separating...' : 'Run AI Separation'}
-                </button>
+  <div className="box ai-box">
+    {activeModeId === 'ecg' ? (
+      <>
+        <h2 className="box-title">ECG AI Diagnosis</h2>
+        <p className="helper-text" style={{ marginBottom: '8px' }}>
+          ResNet arrhythmia classifier · GradCAM explainability · Upload a WAV file via Mode Signals first.
+        </p>
+        <ECGAIViewer
+          signal={modeUploadedSignals['ecg'] || null}
+          sampleRate={modeUploadedSampleRates['ecg'] || 360}
+        />
+      </>
+    ) : (
+      <>
+        <h2 className="box-title">AI Model Comparison</h2>
+        <p className="helper-text">Run component separation for the current mode and inspect each isolated track.</p>
+        <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.75rem', marginBottom: '0.75rem' }}>
+          <button type="button" className="btn btn-small" onClick={runAiSeparation} disabled={aiLoading}>
+            {aiLoading ? 'Separating...' : 'Run AI Separation'}
+          </button>
+          <button
+            type="button"
+            className="btn btn-small"
+            onClick={() => setModeFreqBands(modeFreqBands.map((b) => ({ ...b, gain: 1 })))}
+          >
+            Reset EQ Gains
+          </button>
+        </div>
+
+        {aiError && <p className="helper-text" style={{ color: '#fda4af' }}>{aiError}</p>}
+
+        {!aiLoading && !aiError && aiComponents.length === 0 && (
+          <p className="helper-text">No separated components yet. Click Run AI Separation.</p>
+        )}
+
+        {!aiLoading && aiComponents.length > 0 && (
+          <div className="bands-info" style={{ marginTop: '0.25rem' }}>
+            {aiComponents.map((comp, idx) => (
+              <div key={comp.id} className="band-info-item" style={{ alignItems: 'center', gap: '0.5rem' }}>
+                <span className="band-info-label">{comp.name}</span>
+                <span className="band-info-gain">RMS {comp.rms.toFixed(4)}</span>
                 <button
                   type="button"
                   className="btn btn-small"
-                  onClick={() => setModeFreqBands(modeFreqBands.map((b) => ({ ...b, gain: 1 })))}
+                  onClick={() => applyAiSoloToEqualizer(idx)}
+                  title="Apply this component as solo in Equalizer mode"
                 >
-                  Reset EQ Gains
+                  Solo In EQ
                 </button>
               </div>
-
-              {aiError && <p className="helper-text" style={{ color: '#fda4af' }}>{aiError}</p>}
-
-              {!aiLoading && !aiError && aiComponents.length === 0 && (
-                <p className="helper-text">No separated components yet. Click Run AI Separation.</p>
-              )}
-
-              {!aiLoading && aiComponents.length > 0 && (
-                <div className="bands-info" style={{ marginTop: '0.25rem' }}>
-                  {aiComponents.map((comp, idx) => (
-                    <div key={comp.id} className="band-info-item" style={{ alignItems: 'center', gap: '0.5rem' }}>
-                      <span className="band-info-label">{comp.name}</span>
-                      <span className="band-info-gain">RMS {comp.rms.toFixed(4)}</span>
-                      <button
-                        type="button"
-                        className="btn btn-small"
-                        onClick={() => applyAiSoloToEqualizer(idx)}
-                        title="Apply this component as solo in Equalizer mode"
-                      >
-                        Solo In EQ
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
+            ))}
+          </div>
+        )}
+      </>
+    )}
+  </div>
+)}
         </aside>
 
         <main className="workspace-right">

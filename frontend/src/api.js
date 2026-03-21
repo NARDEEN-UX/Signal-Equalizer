@@ -211,6 +211,30 @@ export const deleteECGSignal = (filename) => {
   return API.delete(`/api/modes/ecg/signal/${filename}`);
 };
 
+/**
+ * Analyze ECG from a signal array already in memory.
+ * Call after loadECGSignal or uploadECGSignal returns the signal array.
+ * @param {number[]} signal     - raw samples (any sample rate)
+ * @param {number}   sampleRate - sample rate of the signal (e.g. 360, 44100)
+ */
+export const analyzeECGWithAI = (signal, sampleRate) => {
+  return API.post('/api/modes/ecg/ai-analyze', {
+    signal,
+    sample_rate: sampleRate,
+  });
+};
+
+/**
+ * Upload a WAV or CSV file directly for AI analysis.
+ * Bypasses frontend state — useful for direct file → diagnosis.
+ * @param {File} file - WAV or CSV file
+ */
+export const analyzeECGFileWithAI = (file) => {
+  const formData = new FormData();
+  formData.append('signal_file', file);
+  return API.post('/api/modes/ecg/ai-analyze-file', formData);
+};
+
 // ==================== Generic Mode Signal Upload ====================
 
 export const uploadGenericSignal = (file) => {
@@ -230,4 +254,3 @@ export const loadGenericSignal = (filename) => {
 export const deleteGenericSignal = (filename) => {
   return API.delete(`/api/modes/generic/signal/${filename}`);
 };
-

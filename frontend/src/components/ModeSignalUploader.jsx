@@ -251,7 +251,7 @@ const ModeSignalUploader = ({ mode, onSignalLoad, onClose }) => {
             <input
               ref={fileInputRef}
               type="file"
-              accept="audio/*,.wav,.mp3,.flac,.ogg"
+              accept="audio/*,.wav,.mp3,.flac,.ogg,.csv"
               onChange={handleUpload}
               disabled={loading}
               style={{ display: 'none' }}
