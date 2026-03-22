@@ -332,6 +332,7 @@ function App() {
   const [aiModeFreqConfig, setAiModeFreqConfig] = useState({});
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState('');
+  const [aiComparisonView, setAiComparisonView] = useState('ai'); // 'ai' | 'static'
   // Linked viewer window (0-1 normalized signal range) shared by input and output.
   const [linkedViewWindow, setLinkedViewWindow] = useState({ start: 0, end: 1 });
   const [fftZoomWindow, setFftZoomWindow] = useState({ x: null, y: null });
@@ -564,6 +565,23 @@ function App() {
     gain: Number.isFinite(Number(b?.gain)) ? Number(b.gain) : 1
   })) : []);
 
+  const canonicalBandName = (name) => {
+    const key = String(name || '').trim().toLowerCase();
+    if (key === 'others') return 'other';
+    return key;
+  };
+
+  const findBandIndexByName = (bands, name) => {
+    const target = canonicalBandName(name);
+    if (!target) return -1;
+    const list = Array.isArray(bands) ? bands : [];
+    for (let i = 0; i < list.length; i += 1) {
+      const candidate = canonicalBandName(list[i]?.name);
+      if (candidate && candidate === target) return i;
+    }
+    return -1;
+  };
+
   const runAiSeparation = async () => {
     const inputSignal = signalData?.input_signal;
     if (!Array.isArray(inputSignal) || inputSignal.length === 0) {
@@ -609,34 +627,9 @@ function App() {
         });
         setAiModeFreqConfig((prev) => ({ ...prev, music: autoBands }));
 
-        const names = autoBands.map((b) => b.name);
-        const method = processingMethod === 'wavelet' ? 'wavelet' : 'fft';
-        const aiWaveletSliders = method === 'wavelet'
-          ? normalizeWaveletSliders(waveletSliders, maxWaveletLevel)
-          : null;
-
-        const dspRequests = autoBands.map((_, idx) => {
-          const oneHot = autoBands.map((band, i) => (i === idx ? (Number(band?.gain) || 1) : 0));
-          return processMusicMode(
-            inputSignal,
-            oneHot,
-            names,
-            srInt,
-            method,
-            waveletType,
-            maxWaveletLevel,
-            aiWaveletSliders,
-            autoBands
-          );
-        });
-
-        const dspResponses = await Promise.all(dspRequests);
-
         const extracted = autoBands.map((band, idx) => {
           const modelComp = rawComponents[idx] || {};
-          const dspSignal = Array.isArray(dspResponses[idx]?.data?.output_signal) ? dspResponses[idx].data.output_signal : [];
           const modelSignal = Array.isArray(modelComp?.signal) ? modelComp.signal : [];
-          const metrics = computeComparisonMetrics(modelSignal, dspSignal);
           const relativeStemUrl = String(modelComp?.stem_url || '');
           const modelStemUrl = relativeStemUrl
             ? (relativeStemUrl.startsWith('http') ? relativeStemUrl : `${API_BASE_URL}${relativeStemUrl}`)
@@ -647,15 +640,13 @@ function App() {
             name: band.name,
             low: band.low,
             high: band.high,
-            modelRms: Number.isFinite(Number(modelComp?.rms)) ? Number(modelComp.rms) : metrics.modelRms,
-            dspRms: metrics.dspRms,
-            snr: metrics.snr,
-            correlation: metrics.correlation,
+            modelRms: Number.isFinite(Number(modelComp?.rms)) ? Number(modelComp.rms) : computeRms(modelSignal),
             modelStemUrl,
             stemFilename: String(modelComp?.stem_filename || ''),
             source: String(modelComp?.source || band.name),
             modelSignal,
-            dspSignal
+            compareAi: null,
+            compareStatic: null
           };
         });
 
@@ -713,6 +704,112 @@ function App() {
     }
   };
 
+  const runAiComparison = async () => {
+    const inputSignal = signalData?.input_signal;
+    if (activeModeId !== 'music') {
+      setAiError('AI comparison is only available for Music mode.');
+      return;
+    }
+    if (!Array.isArray(aiComponents) || aiComponents.length === 0) {
+      setAiError('Run AI Separation first to create stems for comparison.');
+      return;
+    }
+    if (!Array.isArray(inputSignal) || inputSignal.length === 0) {
+      setAiError('No input signal available. Upload or load a signal first.');
+      return;
+    }
+
+    setAiLoading(true);
+    setAiError('');
+
+    try {
+      const sr = Number(uploadedSampleRate) || 44100;
+      const srInt = Math.max(1, Math.round(sr));
+      const method = processingMethod === 'wavelet' ? 'wavelet' : 'fft';
+      const aiWaveletSliders = method === 'wavelet'
+        ? normalizeWaveletSliders(waveletSliders, maxWaveletLevel)
+        : null;
+
+      const aiBands = (Array.isArray(aiModeFreqBands) && aiModeFreqBands.length > 0)
+        ? aiModeFreqBands
+        : aiComponents.map((comp, idx) => ({
+          id: String(comp?.id || `music-${idx}`),
+          name: String(comp?.name || `Component ${idx + 1}`),
+          low: Number(comp?.low) || 0,
+          high: Number(comp?.high) || 1,
+          gain: 1
+        }));
+      const aiNames = aiBands.map((b) => b.name);
+
+      const aiRequests = aiBands.map((_, idx) => {
+        const oneHot = aiBands.map((band, i) => (i === idx ? (Number(band?.gain) || 1) : 0));
+        return processMusicMode(
+          inputSignal,
+          oneHot,
+          aiNames,
+          srInt,
+          method,
+          waveletType,
+          maxWaveletLevel,
+          aiWaveletSliders,
+          aiBands
+        );
+      });
+      const aiResponses = await Promise.all(aiRequests);
+      const aiDspSignals = aiResponses.map((resp) => (
+        Array.isArray(resp?.data?.output_signal) ? resp.data.output_signal : []
+      ));
+
+      const staticBands = Array.isArray(modeFreqBands) ? modeFreqBands : [];
+      const staticNames = staticBands.map((b) => b.name);
+      const staticRequests = staticBands.map((_, idx) => {
+        const oneHot = staticBands.map((band, i) => (i === idx ? (Number(band?.gain) || 1) : 0));
+        return processMusicMode(
+          inputSignal,
+          oneHot,
+          staticNames,
+          srInt,
+          method,
+          waveletType,
+          maxWaveletLevel,
+          aiWaveletSliders,
+          staticBands
+        );
+      });
+      const staticResponses = await Promise.all(staticRequests);
+      const staticDspSignals = staticResponses.map((resp) => (
+        Array.isArray(resp?.data?.output_signal) ? resp.data.output_signal : []
+      ));
+
+      const updated = aiComponents.map((comp, idx) => {
+        const modelSignal = Array.isArray(comp?.modelSignal) ? comp.modelSignal : [];
+        const aiDspSignal = Array.isArray(aiDspSignals[idx]) ? aiDspSignals[idx] : [];
+        const compareAi = computeComparisonMetrics(modelSignal, aiDspSignal);
+
+        const namedIndex = findBandIndexByName(staticBands, comp?.name);
+        const fallbackIndex = idx < staticBands.length ? idx : -1;
+        const staticIndex = namedIndex >= 0 ? namedIndex : fallbackIndex;
+        const staticDspSignal = staticIndex >= 0 && Array.isArray(staticDspSignals[staticIndex])
+          ? staticDspSignals[staticIndex]
+          : [];
+        const compareStatic = computeComparisonMetrics(modelSignal, staticDspSignal);
+
+        return {
+          ...comp,
+          compareAi,
+          compareStatic,
+          staticBandName: staticIndex >= 0 ? String(staticBands[staticIndex]?.name || '') : ''
+        };
+      });
+
+      setAiComponents(updated);
+    } catch (err) {
+      setAiError(err?.response?.data?.detail || err?.message || 'AI comparison failed.');
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
   const applyAiSoloToEqualizer = (componentIndex) => {
     const selected = aiComponents[componentIndex];
     const selectedName = String(selected?.name || '').toLowerCase();
@@ -724,11 +821,35 @@ function App() {
     setEqualizerTab('equalizer');
   };
 
-  const aiComparisonSummary = useMemo(() => {
+  const aiBandsComparisonSummary = useMemo(() => {
     if (activeModeId !== 'music' || !Array.isArray(aiComponents) || aiComponents.length === 0) {
       return null;
     }
-    const items = aiComponents.filter((c) => Number.isFinite(Number(c?.snr)) || Number.isFinite(Number(c?.correlation)));
+    const items = aiComponents
+      .map((c) => c?.compareAi)
+      .filter((c) => c && (Number.isFinite(Number(c?.snr)) || Number.isFinite(Number(c?.correlation))));
+    if (!items.length) return null;
+
+    const avgSNR = items.reduce((s, c) => s + (Number(c?.snr) || 0), 0) / items.length;
+    const avgCorrelation = items.reduce((s, c) => s + (Number(c?.correlation) || 0), 0) / items.length;
+    const avgModelRms = items.reduce((s, c) => s + (Number(c?.modelRms) || 0), 0) / items.length;
+    const avgDspRms = items.reduce((s, c) => s + (Number(c?.dspRms) || 0), 0) / items.length;
+
+    return {
+      avgSNR,
+      avgCorrelation,
+      avgModelRms,
+      avgDspRms
+    };
+  }, [activeModeId, aiComponents]);
+
+  const staticBandsComparisonSummary = useMemo(() => {
+    if (activeModeId !== 'music' || !Array.isArray(aiComponents) || aiComponents.length === 0) {
+      return null;
+    }
+    const items = aiComponents
+      .map((c) => c?.compareStatic)
+      .filter((c) => c && (Number.isFinite(Number(c?.snr)) || Number.isFinite(Number(c?.correlation))));
     if (!items.length) return null;
 
     const avgSNR = items.reduce((s, c) => s + (Number(c?.snr) || 0), 0) / items.length;
@@ -1985,18 +2106,26 @@ function App() {
 
                 <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.75rem', marginBottom: '0.35rem', flexWrap: 'wrap' }}>
                   <button type="button" className="btn btn-small" onClick={runAiSeparation} disabled={aiLoading}>
-                    {aiLoading ? 'Separating...' : 'Run AI Separation'}
+                    {aiLoading ? 'Separating...' : 'AI Separation'}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-small"
+                    onClick={runAiComparison}
+                    disabled={aiLoading || aiComponents.length === 0}
+                  >
+                    Compare
                   </button>
                 </div>
 
                 <p className="helper-text">
-                  AI sliders are independent from Equalizer sliders. Use Run AI Separation to update comparison outputs.
+                  AI sliders are independent from Equalizer sliders. Use Compare to compute AI vs DSP metrics.
                 </p>
 
                 {aiError && <p className="helper-text" style={{ color: '#fda4af' }}>{aiError}</p>}
 
                 {!aiLoading && !aiError && aiComponents.length === 0 && (
-                  <p className="helper-text">No separated components yet. Click Run AI Separation.</p>
+                  <p className="helper-text">No separated components yet. Click AI Separation.</p>
                 )}
 
                 {!aiLoading && aiComponents.length > 0 && (
@@ -2007,8 +2136,15 @@ function App() {
                         {activeModeId === 'music' ? (
                           <>
                             <span className="band-info-gain">{`${Number(comp.low || 0).toFixed(1)}-${Number(comp.high || 0).toFixed(1)} Hz`}</span>
-                            <span className="band-info-gain">SNR {Number.isFinite(Number(comp.snr)) ? `${Number(comp.snr).toFixed(2)} dB` : '--'}</span>
-                            <span className="band-info-gain">Corr {Number.isFinite(Number(comp.correlation)) ? Number(comp.correlation).toFixed(4) : '--'}</span>
+                            {(() => {
+                              const metrics = aiComparisonView === 'static' ? comp.compareStatic : comp.compareAi;
+                              return (
+                                <>
+                                  <span className="band-info-gain">SNR {Number.isFinite(Number(metrics?.snr)) ? `${Number(metrics.snr).toFixed(2)} dB` : '--'}</span>
+                                  <span className="band-info-gain">Corr {Number.isFinite(Number(metrics?.correlation)) ? Number(metrics.correlation).toFixed(4) : '--'}</span>
+                                </>
+                              );
+                            })()}
                             {comp.modelStemUrl && (
                               <audio
                                 controls
@@ -2175,14 +2311,32 @@ function App() {
             <div className="row section-row">
               <div className="section-head">
                 <h2 className="section-title">AI Comparison Results</h2>
+                {activeModeId === 'music' && (
+                  <div className="segmented-control">
+                    <button
+                      type="button"
+                      className={`segmented-option ${aiComparisonView === 'ai' ? 'active' : ''}`}
+                      onClick={() => setAiComparisonView('ai')}
+                    >
+                      AI Bands
+                    </button>
+                    <button
+                      type="button"
+                      className={`segmented-option ${aiComparisonView === 'static' ? 'active' : ''}`}
+                      onClick={() => setAiComparisonView('static')}
+                    >
+                      Static Bands
+                    </button>
+                  </div>
+                )}
               </div>
 
               <div className="box chart-box">
-                {aiLoading && <p className="helper-text">Running AI separation and DSP comparison...</p>}
+                {aiLoading && <p className="helper-text">Running AI comparison...</p>}
                 {!aiLoading && aiError && <p className="helper-text" style={{ color: '#fda4af' }}>{aiError}</p>}
 
                 {!aiLoading && !aiError && aiComponents.length === 0 && (
-                  <p className="helper-text">Run AI Separation to generate comparison metrics.</p>
+                  <p className="helper-text">Run AI Separation, then click Compare to generate metrics.</p>
                 )}
 
                 {!aiLoading && !aiError && aiComponents.length > 0 && activeModeId === 'music' && (
@@ -2216,33 +2370,46 @@ function App() {
                         }}
                       >
                         <span className="band-info-label">{comp.name}</span>
-                        <span className="band-info-gain">{Number.isFinite(Number(comp.snr)) ? Number(comp.snr).toFixed(2) : '--'}</span>
-                        <span className="band-info-gain">{Number.isFinite(Number(comp.modelRms)) ? Number(comp.modelRms).toFixed(4) : '--'}</span>
-                        <span className="band-info-gain">{Number.isFinite(Number(comp.dspRms)) ? Number(comp.dspRms).toFixed(4) : '--'}</span>
-                        <span className="band-info-gain">{Number.isFinite(Number(comp.correlation)) ? Number(comp.correlation).toFixed(4) : '--'}</span>
+                        {(() => {
+                          const metrics = aiComparisonView === 'static' ? comp.compareStatic : comp.compareAi;
+                          return (
+                            <>
+                              <span className="band-info-gain">{Number.isFinite(Number(metrics?.snr)) ? Number(metrics.snr).toFixed(2) : '--'}</span>
+                              <span className="band-info-gain">{Number.isFinite(Number(metrics?.modelRms)) ? Number(metrics.modelRms).toFixed(4) : '--'}</span>
+                              <span className="band-info-gain">{Number.isFinite(Number(metrics?.dspRms)) ? Number(metrics.dspRms).toFixed(4) : '--'}</span>
+                              <span className="band-info-gain">{Number.isFinite(Number(metrics?.correlation)) ? Number(metrics.correlation).toFixed(4) : '--'}</span>
+                            </>
+                          );
+                        })()}
                       </div>
                     ))}
 
-                    {aiComparisonSummary && (
-                      <div
-                        className="band-info-item"
-                        style={{
-                          display: 'grid',
-                          gridTemplateColumns: '1.25fr 1fr 1fr 1fr 1fr',
-                          gap: '0.5rem',
-                          alignItems: 'center',
-                          borderTop: '1px solid var(--border-subtle)',
-                          marginTop: '0.25rem',
-                          paddingTop: '0.65rem'
-                        }}
-                      >
-                        <span className="band-info-label">Average</span>
-                        <span className="band-info-gain">{Number(aiComparisonSummary.avgSNR).toFixed(2)}</span>
-                        <span className="band-info-gain">{Number(aiComparisonSummary.avgModelRms).toFixed(4)}</span>
-                        <span className="band-info-gain">{Number(aiComparisonSummary.avgDspRms).toFixed(4)}</span>
-                        <span className="band-info-gain">{Number(aiComparisonSummary.avgCorrelation).toFixed(4)}</span>
-                      </div>
-                    )}
+                    {(() => {
+                      const summary = aiComparisonView === 'static'
+                        ? staticBandsComparisonSummary
+                        : aiBandsComparisonSummary;
+                      if (!summary) return null;
+                      return (
+                        <div
+                          className="band-info-item"
+                          style={{
+                            display: 'grid',
+                            gridTemplateColumns: '1.25fr 1fr 1fr 1fr 1fr',
+                            gap: '0.5rem',
+                            alignItems: 'center',
+                            borderTop: '1px solid var(--border-subtle)',
+                            marginTop: '0.25rem',
+                            paddingTop: '0.65rem'
+                          }}
+                        >
+                          <span className="band-info-label">Average</span>
+                          <span className="band-info-gain">{Number(summary.avgSNR).toFixed(2)}</span>
+                          <span className="band-info-gain">{Number(summary.avgModelRms).toFixed(4)}</span>
+                          <span className="band-info-gain">{Number(summary.avgDspRms).toFixed(4)}</span>
+                          <span className="band-info-gain">{Number(summary.avgCorrelation).toFixed(4)}</span>
+                        </div>
+                      );
+                    })()}
                   </div>
                 )}
 
