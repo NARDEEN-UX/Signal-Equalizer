@@ -10,15 +10,16 @@
 export const MUSIC_MODE_CONFIG = {
   id: 'music',
   name: 'Musical Instruments',
-  description: 'Control individual instruments inside a musical mix',
-  sliderLabels: ['Bass', 'Piano', 'Vocals', 'Violin', 'Others'],
-  instrumentTypes: ['Bass', 'Piano', 'Vocals', 'Violin', 'Drums', 'Guitar', 'Flute', 'Trumpet', 'Others'],
+  description: 'Control Demucs stems inside a musical mix',
+  sliderLabels: ['drums', 'bass', 'vocals', 'guitar', 'piano', 'other'],
+  instrumentTypes: ['drums', 'bass', 'vocals', 'guitar', 'piano', 'other'],
   bands: [
-    { id: 'music-0', name: 'Bass', low: 20, high: 250, gain: 1.0 },
-    { id: 'music-1', name: 'Piano', low: 27, high: 4186, gain: 1.0 },
-    { id: 'music-2', name: 'Vocals', low: 80, high: 8000, gain: 1.0 },
-    { id: 'music-3', name: 'Violin', low: 196, high: 3520, gain: 1.0 },
-    { id: 'music-4', name: 'Others', low: 20, high: 20000, gain: 1.0 }
+    { id: 'music-0', name: 'drums', low: 20, high: 12000, gain: 1.0 },
+    { id: 'music-1', name: 'bass', low: 20, high: 300, gain: 1.0 },
+    { id: 'music-2', name: 'vocals', low: 80, high: 8000, gain: 1.0 },
+    { id: 'music-3', name: 'guitar', low: 80, high: 5000, gain: 1.0 },
+    { id: 'music-4', name: 'piano', low: 27, high: 5000, gain: 1.0 },
+    { id: 'music-5', name: 'other', low: 20, high: 20000, gain: 1.0 }
   ],
   wavelet: 'db4',
   waveletLevels: 6,

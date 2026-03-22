@@ -6,4 +6,8 @@ soundfile
 python-multipart
 starlette
 PyWavelets
+<<<<<<< HEAD
 pandas
+=======
+demucs
+>>>>>>> feature/music

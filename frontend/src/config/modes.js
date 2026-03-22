@@ -38,15 +38,15 @@ export const MODES = [
     id: 'music',
     name: 'Musical Instruments',
     tag: 'Music.wav',
-    description: 'Control individual instruments inside a musical mix.',
+    description: 'Control Demucs stems inside a musical mix.',
     accentClass: 'mode-music',
     icon: '♫',
-    sliderLabels: ['Bass', 'Piano', 'Vocals', 'Violin'],
-    freqBands: [(60, 250), (250, 2000), (2000, 4000), (4000, 12000)],
+    sliderLabels: ['drums', 'bass', 'vocals', 'guitar', 'piano', 'other'],
+    freqBands: [(20, 12000), (20, 300), (80, 8000), (80, 5000), (27, 5000), (20, 20000)],
     wavelet: 'db4',
     waveletLevels: 6,
     allowAddSubdivision: false,
-    requirements: ['Bass instrument', 'Piano', 'Vocal tracks', 'Violin']
+    requirements: ['Demucs drums stem', 'Demucs bass stem', 'Demucs vocals stem', 'Demucs guitar stem', 'Demucs piano stem', 'Demucs other stem']
   },
   {
     id: 'ecg',
