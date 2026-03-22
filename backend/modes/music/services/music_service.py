@@ -228,7 +228,7 @@ class MusicModeService:
             output_detail_coeffs.append(out_coeffs[idx].tolist())
 
         reconstructed = pywt.waverec(out_coeffs, wavelet)
-        reconstructed = np.asarray(reconstructed[:len(signal)], dtype=float)
+        reconstructed = np.asarray(reconstructed, dtype=float)
 
         return input_detail_coeffs, output_detail_coeffs, reconstructed
     

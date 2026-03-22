@@ -52,7 +52,7 @@ class SignalProcessor:
             gains: Gain array for each level
             
         Returns:
-            Reconstructed signal with equalization applied
+            Reconstructed signal with equalization applied (may be longer due to wavelet padding)
         """
         # Perform wavelet decomposition
         coeffs = pywt.wavedec(signal_data, wavelet, level=level)
@@ -65,9 +65,9 @@ class SignalProcessor:
             if i < len(gains):
                 coeffs[i] = coeffs[i] * gains[i]
         
-        # Reconstruct
+        # Reconstruct - keep full length to show reconstruction artifacts
         reconstructed = pywt.waverec(coeffs, wavelet)
-        return reconstructed[:len(signal_data)]
+        return reconstructed
     
     @staticmethod
     def compute_fft(signal_data, sample_rate=44100):
