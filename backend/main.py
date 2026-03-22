@@ -99,18 +99,23 @@ def _build_generic_sample(sample_rate: int = 44100, seconds: float = 4.0) -> np.
 
 
 def _build_music_sample(sample_rate: int = 44100, seconds: float = 4.0) -> np.ndarray:
-    """Synthetic mixture of 4 musical instruments using characteristic frequency ranges."""
+    """Synthetic mixture aligned with Demucs 6-source stems."""
     n = int(sample_rate * seconds)
     t = np.linspace(0, seconds, n, endpoint=False)
-    # Bass (20-250 Hz)
-    bass = 0.25 * np.sin(2 * np.pi * 60 * t) + 0.15 * np.sin(2 * np.pi * 120 * t)
-    # Piano (27-4186 Hz) — a chord
-    piano = 0.12 * np.sin(2 * np.pi * 262 * t) + 0.10 * np.sin(2 * np.pi * 330 * t) + 0.08 * np.sin(2 * np.pi * 392 * t)
-    # Vocals (80-8000 Hz) — fundamental + harmonics
-    vocals = 0.15 * np.sin(2 * np.pi * 440 * t) + 0.08 * np.sin(2 * np.pi * 880 * t) + 0.04 * np.sin(2 * np.pi * 1760 * t)
-    # Violin (196-3520 Hz)
-    violin = 0.12 * np.sin(2 * np.pi * 659 * t) + 0.06 * np.sin(2 * np.pi * 1318 * t) + 0.03 * np.sin(2 * np.pi * 2637 * t)
-    mix = bass + piano + vocals + violin
+    # drums: pulse train + broadband click texture
+    env = (np.sin(2 * np.pi * 2 * t) > 0.85).astype(np.float64)
+    drums = 0.12 * env * np.sin(2 * np.pi * 120 * t) + 0.05 * env * np.sin(2 * np.pi * 2500 * t)
+    # bass
+    bass = 0.22 * np.sin(2 * np.pi * 55 * t) + 0.10 * np.sin(2 * np.pi * 110 * t)
+    # vocals
+    vocals = 0.16 * np.sin(2 * np.pi * 220 * t) + 0.08 * np.sin(2 * np.pi * 440 * t) + 0.05 * np.sin(2 * np.pi * 880 * t)
+    # guitar
+    guitar = 0.11 * np.sin(2 * np.pi * 110 * t) + 0.07 * np.sin(2 * np.pi * 330 * t) + 0.05 * np.sin(2 * np.pi * 990 * t)
+    # piano
+    piano = 0.10 * np.sin(2 * np.pi * 262 * t) + 0.08 * np.sin(2 * np.pi * 330 * t) + 0.06 * np.sin(2 * np.pi * 392 * t)
+    # other
+    other = 0.08 * np.sin(2 * np.pi * 660 * t) + 0.06 * np.sin(2 * np.pi * 1320 * t) + 0.04 * np.sin(2 * np.pi * 2640 * t)
+    mix = drums + bass + vocals + guitar + piano + other
     peak = float(np.max(np.abs(mix))) or 1.0
     return (mix / peak * 0.9).astype(np.float32)
 

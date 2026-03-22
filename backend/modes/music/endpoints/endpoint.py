@@ -10,13 +10,25 @@ import os
 import soundfile as sf
 import io
 from datetime import datetime
-from ..schemas.schema import MusicModeRequest, MusicModeResponse
+import re
+from ..schemas.schema import (
+    MusicModeRequest,
+    MusicModeResponse,
+    MusicDemucsSeparationRequest,
+    MusicDemucsSeparationResponse
+)
 from ..services.music_service import music_service
 
 router = APIRouter()
 
 # Upload directory for music mode signals
 UPLOADS_DIR = os.path.join(os.path.dirname(__file__), '../../../uploads/music')
+AI_STEMS_DIR = os.path.join(os.path.dirname(__file__), '../../../uploads/music/ai_stems')
+
+
+def _safe_stem_slug(name: str) -> str:
+    slug = re.sub(r'[^a-z0-9_-]+', '_', str(name or '').strip().lower())
+    return slug.strip('_') or "stem"
 
 
 def load_default_settings():
@@ -45,6 +57,13 @@ async def process_music(request: MusicModeRequest):
         
         if len(request.gains) != len(request.instrument_names):
             raise ValueError("Number of gains must match number of instruments")
+
+        bands = None
+        if request.bands:
+            bands = [
+                (b.model_dump() if hasattr(b, "model_dump") else b.dict())
+                for b in request.bands
+            ]
         
         # Process signal
         result = music_service.process_signal(
@@ -52,6 +71,7 @@ async def process_music(request: MusicModeRequest):
             request.gains,
             request.instrument_names,
             sample_rate=request.sample_rate,
+            bands=bands,
             method=request.method,
             wavelet=request.wavelet,
             wavelet_level=request.wavelet_level,
@@ -88,6 +108,84 @@ async def get_available_instruments():
     return {
         "instruments": list(music_service.INSTRUMENT_RANGES.keys())
     }
+
+
+@router.post("/separate-ai", response_model=MusicDemucsSeparationResponse)
+async def separate_music_ai(request: MusicDemucsSeparationRequest):
+    """
+    Run Demucs source separation and return components aligned to requested instrument labels.
+    """
+    try:
+        signal = np.array(request.signal, dtype=np.float32)
+        if signal.size == 0:
+            raise ValueError("Signal is empty")
+        sample_rate = max(1, int(request.sample_rate))
+
+        result = music_service.separate_with_demucs(
+            signal=signal,
+            instrument_names=request.instrument_names,
+            sample_rate=sample_rate,
+            model_name=request.model_name
+        )
+
+        job_id = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+        job_dir = os.path.join(AI_STEMS_DIR, job_id)
+        os.makedirs(job_dir, exist_ok=True)
+
+        output_components = []
+        for idx, component in enumerate(result["components"]):
+            stem_signal = np.asarray(component.get("signal", []), dtype=np.float32)
+            source_name = str(component.get("name", f"stem_{idx}"))
+            safe_name = _safe_stem_slug(source_name)
+            stem_filename = f"{idx:02d}_{safe_name}.wav"
+            stem_path = os.path.join(job_dir, stem_filename)
+            sf.write(stem_path, stem_signal, int(result["sample_rate"]))
+
+            output_components.append({
+                "name": source_name,
+                "source": str(component.get("source", source_name)),
+                "low": float(component.get("low", 20.0)),
+                "high": float(component.get("high", 20000.0)),
+                "rms": float(component.get("rms", 0.0)),
+                "stem_filename": stem_filename,
+                "stem_url": f"/api/modes/music/ai-stems/{job_id}/{stem_filename}",
+                "signal": stem_signal.tolist()
+            })
+
+        return {
+            "status": "success",
+            "job_id": job_id,
+            "model_name": result["model_name"],
+            "sample_rate": result["sample_rate"],
+            "components": output_components,
+            "processing_time": result["processing_time"]
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.get("/ai-stems/{job_id}/{stem_filename}")
+async def get_ai_stem_file(job_id: str, stem_filename: str):
+    """Serve generated Demucs stem wav files."""
+    try:
+        if not re.fullmatch(r"[0-9_]+", job_id or ""):
+            raise HTTPException(status_code=400, detail="Invalid job id")
+        if '..' in stem_filename or '/' in stem_filename or '\\' in stem_filename:
+            raise HTTPException(status_code=400, detail="Invalid stem filename")
+
+        stem_path = os.path.join(AI_STEMS_DIR, job_id, stem_filename)
+        abs_root = os.path.abspath(AI_STEMS_DIR)
+        abs_path = os.path.abspath(stem_path)
+        if not abs_path.startswith(abs_root):
+            raise HTTPException(status_code=403, detail="Access denied")
+        if not os.path.exists(abs_path):
+            raise HTTPException(status_code=404, detail="Stem file not found")
+
+        return FileResponse(abs_path, media_type="audio/wav", filename=stem_filename)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Could not read stem file: {str(e)}")
 
 
 # ==================== Signal Upload Management ====================

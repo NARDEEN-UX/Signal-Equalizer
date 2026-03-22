@@ -157,20 +157,34 @@ function computeLevelRms(signal, levels = 6) {
 }
 
 function applyBandGainsToSpectrogram(normSpec, freqs, bands, gains) {
-  return normSpec.map((row, fIdx) => {
-    const f = freqs[fIdx] || 0;
-    let bandGain = 1;
+  const overlapGainAtFreq = (f) => {
     let matched = false;
+    let matchedSum = 0;
+    let matchedCount = 0;
+    let activeSum = 0;
+    let activeCount = 0;
 
     for (let b = 0; b < bands.length; b += 1) {
       const [lo, hi] = bands[b];
       if (f >= lo && f <= hi) {
-        bandGain *= toNumberOr(gains[b], 1);
         matched = true;
+        const g = clamp(toNumberOr(gains[b], 1), 0, 2);
+        matchedSum += g;
+        matchedCount += 1;
+        if (g > 1e-8) {
+          activeSum += g;
+          activeCount += 1;
+        }
       }
     }
 
-    const g = clamp(matched ? bandGain : 1, 0, 4);
+    if (activeCount > 0) return matchedSum / Math.max(1, matchedCount);
+    return matched ? 0 : 1;
+  };
+
+  return normSpec.map((row, fIdx) => {
+    const f = freqs[fIdx] || 0;
+    const g = clamp(overlapGainAtFreq(f), 0, 4);
     return row.map((v) => clamp(v * g, 0, 2));
   });
 }
@@ -447,14 +461,30 @@ export function useMockProcessing({
       // Fast: just multiply by per-frequency gains
       fftOut = fftIn.map((mag, i) => {
         const f = fftFreq[i];
-        let g = 1;
+        let matched = false;
+        let matchedSum = 0;
+        let matchedCount = 0;
+        let activeSum = 0;
+        let activeCount = 0;
+
         for (let b = 0; b < bands.length; b += 1) {
           const [lo, hi] = bands[b];
           if (f >= lo && f <= hi) {
-            g *= toNumberOr(clampedGains[b], 1);
+            matched = true;
+            const gain = toNumberOr(clampedGains[b], 1);
+            matchedSum += gain;
+            matchedCount += 1;
+            if (gain > 1e-8) {
+              activeSum += gain;
+              activeCount += 1;
+            }
           }
         }
-        return mag * clamp(g, 0, 4);
+
+        const overlapGain = activeCount > 0
+          ? (matchedSum / Math.max(1, matchedCount))
+          : (matched ? 0 : 1);
+        return mag * clamp(overlapGain, 0, 4);
       });
     } else {
       // Fallback to pseudo-FFT

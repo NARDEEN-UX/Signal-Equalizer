@@ -6,3 +6,4 @@ soundfile
 python-multipart
 starlette
 PyWavelets
+demucs

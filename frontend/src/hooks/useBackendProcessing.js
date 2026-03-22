@@ -120,7 +120,17 @@ export const useBackendProcessing = ({
 
         let response;
         if (modeId === 'music') {
-          response = await processMusicMode(signalData, gains, names, sampleRate, method, waveletType, waveletLevel, waveletSliders);
+          response = await processMusicMode(
+            signalData,
+            gains,
+            names,
+            sampleRate,
+            method,
+            waveletType,
+            waveletLevel,
+            waveletSliders,
+            bands
+          );
         } else if (modeId === 'animal') {
           response = await processAnimalsMode(signalData, gains, names, sampleRate, method, waveletType, waveletLevel, waveletSliders);
         } else if (modeId === 'human') {

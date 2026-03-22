@@ -15,6 +15,7 @@ import './App.css';
 import { useBackendProcessing } from './hooks/useBackendProcessing';
 import { useMockProcessing } from './mock/useMockProcessing';
 import {
+  API_BASE_URL,
   saveSchema,
   loadSchema,
   getGenericDefault,
@@ -25,6 +26,7 @@ import {
   uploadAudio,
   processGenericMode,
   processMusicMode,
+  separateMusicModeDemucs,
   processAnimalsMode,
   processHumansMode,
   processECGMode
@@ -45,12 +47,12 @@ const MODES = [
     id: 'music',
     name: 'Musical Instruments',
     tag: 'Music.wav',
-    description: 'Control individual instruments inside a musical mix.',
+    description: 'Control Demucs sources inside a musical mix.',
     accentClass: 'mode-music',
     icon: '♫',
-    sliderLabels: ['Bass', 'Piano', 'Vocals', 'Violin', 'Others'],
+    sliderLabels: ['drums', 'bass', 'vocals', 'guitar', 'piano', 'other'],
     allowAddSubdivision: false,
-    requirements: ['Bass instrument', 'Piano', 'Vocal tracks', 'Violin', 'Other sounds']
+    requirements: ['Demucs drums stem', 'Demucs bass stem', 'Demucs vocals stem', 'Demucs guitar stem', 'Demucs piano stem', 'Demucs other stem']
   },
   {
     id: 'animal',
@@ -99,7 +101,7 @@ const MODES = [
 
 const LANDING_MODES = [
   { id: 'generic', title: 'Generic Mode', desc: 'Custom frequency bands' },
-  { id: 'music', title: 'Musical Instruments', desc: 'Isolate drums, piano, etc.' },
+  { id: 'music', title: 'Musical Instruments', desc: 'Isolate Demucs stems (drums, bass, vocals, guitar, piano, other)' },
   { id: 'animal', title: 'Animal Sounds', desc: 'Separate mixed animal tracks' },
   { id: 'human', title: 'Human Voices', desc: 'Distinguish overlapping speakers' },
   { id: 'ecg', title: 'ECG Abnormalities', desc: 'Detect cardiac arrhythmias' }
@@ -114,11 +116,12 @@ const DEFAULT_MODE_BANDS = {
     { id: 'b4', name: 'Band 4', low: 3000, high: 8000, gain: 1 }
   ],
   music: [
-    { id: 'music-0', name: 'Bass', low: 20, high: 250, gain: 1.0 },
-    { id: 'music-1', name: 'Piano', low: 27, high: 4186, gain: 1.0 },
-    { id: 'music-2', name: 'Vocals', low: 80, high: 8000, gain: 1.0 },
-    { id: 'music-3', name: 'Violin', low: 196, high: 3520, gain: 1.0 },
-    { id: 'music-4', name: 'Others', low: 20, high: 20000, gain: 1.0 }
+    { id: 'music-0', name: 'drums', low: 20, high: 12000, gain: 1.0 },
+    { id: 'music-1', name: 'bass', low: 20, high: 300, gain: 1.0 },
+    { id: 'music-2', name: 'vocals', low: 80, high: 8000, gain: 1.0 },
+    { id: 'music-3', name: 'guitar', low: 80, high: 5000, gain: 1.0 },
+    { id: 'music-4', name: 'piano', low: 27, high: 5000, gain: 1.0 },
+    { id: 'music-5', name: 'other', low: 20, high: 20000, gain: 1.0 }
   ],
   animal: [
     { id: 'animal-0', name: 'Songbirds', low: 1000, high: 8000, gain: 1.0, examples: 'Sparrow, Canary, Warbler, Finch' },
@@ -326,6 +329,7 @@ function App() {
   const [processingMethod, setProcessingMethod] = useState('fft');
   const [equalizerTab, setEqualizerTab] = useState('equalizer'); // 'equalizer' | 'ai'
   const [aiComponents, setAiComponents] = useState([]);
+  const [aiModeFreqConfig, setAiModeFreqConfig] = useState({});
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState('');
   // Linked viewer window (0-1 normalized signal range) shared by input and output.
@@ -342,6 +346,7 @@ function App() {
   const playbackSampleRateRef = useRef(44100);
   const prevOutputSignalRef = useRef(null);
   const autoScrollEnabledRef = useRef(true);
+  const aiPresetFileInputRef = useRef(null);
 
   const activeMode = MODES.find((m) => m.id === activeModeId) || MODES[0];
   const isGenericMode = activeModeId === 'generic';
@@ -350,6 +355,7 @@ function App() {
 
   // Get frequency bands for current mode
   const modeFreqBands = modeFreqConfig[activeModeId] || DEFAULT_MODE_BANDS[activeModeId] || [];
+  const aiModeFreqBands = aiModeFreqConfig[activeModeId] || [];
 
   // Update frequency bands for current mode
   const setModeFreqBands = (bands) => {
@@ -359,11 +365,35 @@ function App() {
     }));
   };
 
+  const setAiModeFreqBands = (bands) => {
+    setAiModeFreqConfig(prev => ({
+      ...prev,
+      [activeModeId]: bands
+    }));
+  };
+
+  const resetAiSeparationState = (modeId = activeModeId) => {
+    setAiLoading(false);
+    setAiError('');
+    setAiComponents([]);
+    setAiModeFreqConfig((prev) => ({
+      ...prev,
+      [modeId]: []
+    }));
+  };
+
+  const activeProcessingBands = useMemo(() => {
+    if (equalizerTab === 'ai' && Array.isArray(aiModeFreqBands) && aiModeFreqBands.length > 0) {
+      return aiModeFreqBands;
+    }
+    return modeFreqBands;
+  }, [equalizerTab, aiModeFreqBands, modeFreqBands]);
+
   const mockSignalData = useMockProcessing({
     modeId: activeModeId,
-    freqSliders: modeFreqBands.map(b => Number(b.gain) || 1),
+    freqSliders: activeProcessingBands.map((b) => Number(b.gain) || 1),
     waveletSliders,
-    genericBands: modeFreqBands,
+    genericBands: activeProcessingBands,
     waveletType,
     inputSignal: uploadedSignal,
     sampleRate: uploadedSampleRate
@@ -379,8 +409,8 @@ function App() {
 
   const { data: backendSignalData, error: backendProcessingError } = useBackendProcessing({
     modeId: activeModeId,
-    freqSliders: modeFreqBands.map(b => Number(b.gain) || 1),
-    genericBands: modeFreqBands,
+    freqSliders: activeProcessingBands.map((b) => Number(b.gain) || 1),
+    genericBands: activeProcessingBands,
     waveletType,
     waveletLevel,
     sampleRate: uploadedSampleRate,
@@ -461,15 +491,83 @@ function App() {
     return Math.sqrt(sumSq / count);
   };
 
+  const computeCorrelation = (reference, test) => {
+    if (!Array.isArray(reference) || !Array.isArray(test)) return 0;
+    const n = Math.min(reference.length, test.length);
+    if (n < 2) return 0;
+
+    let sumX = 0;
+    let sumY = 0;
+    let sumXX = 0;
+    let sumYY = 0;
+    let sumXY = 0;
+    let count = 0;
+
+    for (let i = 0; i < n; i += 1) {
+      const x = Number(reference[i]);
+      const y = Number(test[i]);
+      if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+      sumX += x;
+      sumY += y;
+      sumXX += x * x;
+      sumYY += y * y;
+      sumXY += x * y;
+      count += 1;
+    }
+
+    if (count < 2) return 0;
+    const num = (count * sumXY) - (sumX * sumY);
+    const denA = (count * sumXX) - (sumX * sumX);
+    const denB = (count * sumYY) - (sumY * sumY);
+    const den = Math.sqrt(Math.max(denA, 0) * Math.max(denB, 0));
+    if (!(den > 0)) return 0;
+    return num / den;
+  };
+
+  const computeSNR = (reference, test) => {
+    if (!Array.isArray(reference) || !Array.isArray(test)) return 0;
+    const n = Math.min(reference.length, test.length);
+    if (n === 0) return 0;
+
+    let sig = 0;
+    let noise = 0;
+    let count = 0;
+
+    for (let i = 0; i < n; i += 1) {
+      const r = Number(reference[i]);
+      const t = Number(test[i]);
+      if (!Number.isFinite(r) || !Number.isFinite(t)) continue;
+      const e = r - t;
+      sig += r * r;
+      noise += e * e;
+      count += 1;
+    }
+
+    if (!count || sig <= 1e-12) return 0;
+    if (noise <= 1e-12) return 120;
+    return 10 * Math.log10(sig / noise);
+  };
+
+  const computeComparisonMetrics = (modelSignal, dspSignal) => {
+    const modelRms = computeRms(modelSignal);
+    const dspRms = computeRms(dspSignal);
+    const snr = computeSNR(modelSignal, dspSignal);
+    const correlation = computeCorrelation(modelSignal, dspSignal);
+    return { modelRms, dspRms, snr, correlation };
+  };
+
+  const cloneBands = (bands) => (Array.isArray(bands) ? bands.map((b, i) => ({
+    id: String(b?.id || `${activeModeId}-ai-${i}`),
+    name: String(b?.name || `Component ${i + 1}`),
+    low: Number(b?.low) || 0,
+    high: Number(b?.high) || 1,
+    gain: Number.isFinite(Number(b?.gain)) ? Number(b.gain) : 1
+  })) : []);
+
   const runAiSeparation = async () => {
     const inputSignal = signalData?.input_signal;
     if (!Array.isArray(inputSignal) || inputSignal.length === 0) {
       setAiError('No input signal available. Upload or load a signal first.');
-      setAiComponents([]);
-      return;
-    }
-    if (!Array.isArray(modeFreqBands) || modeFreqBands.length === 0) {
-      setAiError('No bands/components are configured for this mode.');
       setAiComponents([]);
       return;
     }
@@ -478,34 +576,128 @@ function App() {
     setAiError('');
 
     try {
-      const names = modeFreqBands.map((b, i) => String(b?.name || `Component ${i + 1}`));
       const sr = Number(uploadedSampleRate) || (activeModeId === 'ecg' ? 500 : 44100);
+      const srInt = Math.max(1, Math.round(sr));
 
-      const componentRequests = modeFreqBands.map((_, idx) => {
-        const oneHot = modeFreqBands.map((__, i) => (i === idx ? 1 : 0));
-
-        if (activeModeId === 'music') {
-          return processMusicMode(inputSignal, oneHot, names, sr, 'fft', waveletType, 6, null);
+      if (activeModeId === 'music') {
+        const demucsResponse = await separateMusicModeDemucs(inputSignal, [], srInt, 'htdemucs_6s');
+        const rawComponents = Array.isArray(demucsResponse?.data?.components) ? demucsResponse.data.components : [];
+        if (!rawComponents.length) {
+          throw new Error('Demucs returned no components for this file.');
         }
+
+        const previousBands = Array.isArray(aiModeFreqBands) && aiModeFreqBands.length
+          ? aiModeFreqBands
+          : modeFreqBands;
+        const gainByName = (Array.isArray(previousBands) ? previousBands : []).reduce((acc, band) => {
+          acc[String(band?.name || '').toLowerCase()] = Number(band?.gain) || 1;
+          return acc;
+        }, {});
+
+        const autoBands = rawComponents.map((comp, idx) => {
+          const name = String(comp?.name || `source-${idx + 1}`);
+          const key = name.toLowerCase();
+          const low = Math.max(0, Number(comp?.low) || 20);
+          const high = Math.max(low + 1, Number(comp?.high) || 20000);
+          return {
+            id: `music-${idx}`,
+            name,
+            low,
+            high,
+            gain: Number.isFinite(gainByName[key]) ? gainByName[key] : 1
+          };
+        });
+        setAiModeFreqConfig((prev) => ({ ...prev, music: autoBands }));
+
+        const names = autoBands.map((b) => b.name);
+        const method = processingMethod === 'wavelet' ? 'wavelet' : 'fft';
+        const aiWaveletSliders = method === 'wavelet'
+          ? normalizeWaveletSliders(waveletSliders, maxWaveletLevel)
+          : null;
+
+        const dspRequests = autoBands.map((_, idx) => {
+          const oneHot = autoBands.map((band, i) => (i === idx ? (Number(band?.gain) || 1) : 0));
+          return processMusicMode(
+            inputSignal,
+            oneHot,
+            names,
+            srInt,
+            method,
+            waveletType,
+            maxWaveletLevel,
+            aiWaveletSliders,
+            autoBands
+          );
+        });
+
+        const dspResponses = await Promise.all(dspRequests);
+
+        const extracted = autoBands.map((band, idx) => {
+          const modelComp = rawComponents[idx] || {};
+          const dspSignal = Array.isArray(dspResponses[idx]?.data?.output_signal) ? dspResponses[idx].data.output_signal : [];
+          const modelSignal = Array.isArray(modelComp?.signal) ? modelComp.signal : [];
+          const metrics = computeComparisonMetrics(modelSignal, dspSignal);
+          const relativeStemUrl = String(modelComp?.stem_url || '');
+          const modelStemUrl = relativeStemUrl
+            ? (relativeStemUrl.startsWith('http') ? relativeStemUrl : `${API_BASE_URL}${relativeStemUrl}`)
+            : '';
+
+          return {
+            id: band.id,
+            name: band.name,
+            low: band.low,
+            high: band.high,
+            modelRms: Number.isFinite(Number(modelComp?.rms)) ? Number(modelComp.rms) : metrics.modelRms,
+            dspRms: metrics.dspRms,
+            snr: metrics.snr,
+            correlation: metrics.correlation,
+            modelStemUrl,
+            stemFilename: String(modelComp?.stem_filename || ''),
+            source: String(modelComp?.source || band.name),
+            modelSignal,
+            dspSignal
+          };
+        });
+
+        setAiComponents(extracted);
+        return;
+      }
+
+      const baseAiBands = cloneBands(
+        (Array.isArray(aiModeFreqBands) && aiModeFreqBands.length > 0) ? aiModeFreqBands : modeFreqBands
+      );
+      if (!baseAiBands.length) {
+        setAiError('No bands/components are configured for this mode.');
+        setAiComponents([]);
+        return;
+      }
+      if (!aiModeFreqBands.length) {
+        setAiModeFreqBands(baseAiBands);
+      }
+
+      const names = baseAiBands.map((b, i) => String(b?.name || `Component ${i + 1}`));
+      const componentRequests = baseAiBands.map((_, idx) => {
+        const oneHot = baseAiBands.map((band, i) => (i === idx ? (Number(band?.gain) || 1) : 0));
+
         if (activeModeId === 'animal') {
-          return processAnimalsMode(inputSignal, oneHot, names, sr, 'fft', waveletType, 6, null);
+          return processAnimalsMode(inputSignal, oneHot, names, srInt, 'fft', waveletType, 6, null);
         }
         if (activeModeId === 'human') {
-          return processHumansMode(inputSignal, oneHot, names, sr, 'fft', waveletType, 6, null);
+          return processHumansMode(inputSignal, oneHot, names, srInt, 'fft', waveletType, 6, null);
         }
         if (activeModeId === 'ecg') {
-          return processECGMode(inputSignal, oneHot, names, sr, 'fft', waveletType, 6, null);
+          return processECGMode(inputSignal, oneHot, names, srInt, 'fft', waveletType, 6, null);
         }
 
-        const singleBandConfig = modeFreqBands.map((b, i) => ({ ...b, gain: i === idx ? 1 : 0 }));
-        return processGenericMode(inputSignal, singleBandConfig, sr);
+        const singleBandConfig = baseAiBands.map((b, i) => ({ ...b, gain: i === idx ? (Number(b?.gain) || 1) : 0 }));
+        return processGenericMode(inputSignal, singleBandConfig, srInt);
       });
 
       const responses = await Promise.all(componentRequests);
       const extracted = responses.map((resp, idx) => {
         const out = Array.isArray(resp?.data?.output_signal) ? resp.data.output_signal : [];
         return {
-          id: modeFreqBands[idx]?.id || `ai-${idx}`,
+          id: baseAiBands[idx]?.id || `ai-${idx}`,
           name: names[idx],
           signal: out,
           rms: computeRms(out)
@@ -522,9 +714,35 @@ function App() {
   };
 
   const applyAiSoloToEqualizer = (componentIndex) => {
-    setModeFreqBands(modeFreqBands.map((b, i) => ({ ...b, gain: i === componentIndex ? 1 : 0 })));
+    const selected = aiComponents[componentIndex];
+    const selectedName = String(selected?.name || '').toLowerCase();
+    setModeFreqBands(modeFreqBands.map((b, i) => {
+      const byNameMatch = selectedName && String(b?.name || '').toLowerCase() === selectedName;
+      const byIndexMatch = i === componentIndex;
+      return { ...b, gain: (byNameMatch || (!selectedName && byIndexMatch)) ? 1 : 0 };
+    }));
     setEqualizerTab('equalizer');
   };
+
+  const aiComparisonSummary = useMemo(() => {
+    if (activeModeId !== 'music' || !Array.isArray(aiComponents) || aiComponents.length === 0) {
+      return null;
+    }
+    const items = aiComponents.filter((c) => Number.isFinite(Number(c?.snr)) || Number.isFinite(Number(c?.correlation)));
+    if (!items.length) return null;
+
+    const avgSNR = items.reduce((s, c) => s + (Number(c?.snr) || 0), 0) / items.length;
+    const avgCorrelation = items.reduce((s, c) => s + (Number(c?.correlation) || 0), 0) / items.length;
+    const avgModelRms = items.reduce((s, c) => s + (Number(c?.modelRms) || 0), 0) / items.length;
+    const avgDspRms = items.reduce((s, c) => s + (Number(c?.dspRms) || 0), 0) / items.length;
+
+    return {
+      avgSNR,
+      avgCorrelation,
+      avgModelRms,
+      avgDspRms
+    };
+  }, [activeModeId, aiComponents]);
 
   useEffect(() => {
     if (signalData?.time?.length) {
@@ -979,6 +1197,115 @@ function App() {
 
     window.alert('Preset downloaded to your Downloads folder!');
   };
+
+  const handleSaveAiPreset = () => {
+    if (!Array.isArray(aiModeFreqBands) || aiModeFreqBands.length === 0) {
+      window.alert('No AI sliders to save yet. Run AI Separation first.');
+      return;
+    }
+
+    const schema = {
+      mode: activeModeId,
+      scope: 'ai_separation',
+      sliders_freq: aiModeFreqBands.map((b) => Number(b.gain) || 1),
+      bands: aiModeFreqBands
+    };
+
+    if (!isGenericMode) {
+      schema.sliders_wavelet = waveletSliders;
+      schema.wavelet = waveletType;
+    }
+
+    const blob = new Blob([JSON.stringify(schema, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'ai_separation_preset.json';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+
+    window.alert('AI preset downloaded to your Downloads folder.');
+  };
+
+  const applyAiPresetData = (rawPreset) => {
+    const d = rawPreset || {};
+    const currentMode = activeModeId;
+    const presetMode = d.mode;
+    const modeMismatch = Boolean(presetMode) && presetMode !== currentMode;
+
+    if (Array.isArray(d.sliders_freq)) {
+      const gains = d.sliders_freq.map((v) => {
+        const n = Number(v);
+        return Number.isFinite(n) ? Math.max(0, Math.min(2, n)) : 1;
+      });
+
+      setAiModeFreqConfig((prev) => {
+        const currentBands = Array.isArray(prev[currentMode]) ? prev[currentMode] : [];
+        if (!currentBands.length) return prev;
+        return {
+          ...prev,
+          [currentMode]: currentBands.map((b, i) => ({
+            ...b,
+            gain: Number.isFinite(gains[i]) ? gains[i] : Number(b.gain) || 1
+          }))
+        };
+      });
+    }
+
+    if (currentMode !== 'generic') {
+      const selectedWavelet = normalizeWaveletName(d.wavelet, getModeWaveletDefault(currentMode));
+      setWaveletType(selectedWavelet);
+      setWaveletSliders(normalizeWaveletSliders(d.sliders_wavelet, maxWaveletLevel));
+    }
+
+    if (Array.isArray(d.bands) && d.bands.length && !modeMismatch) {
+      const normalizedBands = d.bands.map((b, i) => ({
+        id: String(b.id || `${currentMode}-ai-${i}`),
+        name: String(b.name || `Component ${i + 1}`),
+        low: Number(b.low) || 0,
+        high: Number(b.high) || 1,
+        gain: Number.isFinite(Number(b.gain)) ? Number(b.gain) : 1
+      }));
+
+      setAiModeFreqConfig((prev) => ({
+        ...prev,
+        [currentMode]: normalizedBands
+      }));
+    }
+
+    if (modeMismatch) {
+      window.alert(`AI preset loaded into current mode (${currentMode}). Preset was saved for ${presetMode}, so band layout was not switched.`);
+    } else {
+      window.alert('AI preset loaded. Controls updated.');
+    }
+  };
+
+  const handleAiPresetLoadClick = () => {
+    if (aiPresetFileInputRef.current) {
+      aiPresetFileInputRef.current.value = '';
+      aiPresetFileInputRef.current.click();
+    }
+  };
+
+  const handleAiPresetFileSelected = async (event) => {
+    const file = event?.target?.files?.[0];
+    if (!file) return;
+
+    try {
+      const text = await file.text();
+      const parsed = JSON.parse(text);
+      applyAiPresetData(parsed);
+    } catch {
+      window.alert('Invalid AI preset file. Please select a valid JSON preset.');
+    } finally {
+      if (event?.target) {
+        event.target.value = '';
+      }
+    }
+  };
+
   const handleLoadPreset = () => {
     loadSchema('equalizer_preset.json').then((res) => {
       const d = res.data;
@@ -1101,6 +1428,8 @@ function App() {
   const handleModeSignalLoad = (signal, sampleRate, filename) => {
     // Reset transport to avoid stale offsets from previous files.
     handleStop();
+    // Reset AI Separation state for the current mode whenever a new signal is loaded.
+    resetAiSeparationState(activeModeId);
 
     const normalized = normalizeUploadedSignal(signal, sampleRate);
 
@@ -1196,6 +1525,8 @@ function App() {
   const handleAudioFileSelect = async (file) => {
     // Reset transport so the new file always starts from t=0.
     handleStop();
+    // Reset AI Separation state for the current mode whenever a new signal is loaded.
+    resetAiSeparationState(activeModeId);
 
     // Always show selected file name immediately.
     setModeAudioFiles(prev => ({
@@ -1471,6 +1802,9 @@ function App() {
                         <div key={b.id} className="band-info-item">
                           <span className="band-info-label">{b.name}</span>
                           <span className="band-info-examples">{b.examples && `(${b.examples})`}</span>
+                          {Number.isFinite(Number(b.low)) && Number.isFinite(Number(b.high)) && (
+                            <span className="band-info-gain">{`${Number(b.low).toFixed(1)}-${Number(b.high).toFixed(1)} Hz`}</span>
+                          )}
                           <span className="band-info-gain">{Number(b.gain).toFixed(2)}×</span>
                         </div>
                       ))}
@@ -1520,46 +1854,186 @@ function App() {
             </div>
           )}
           {equalizerTab === 'ai' && (
-            <div className="box ai-box">
-              <h2 className="box-title">AI Model Comparison</h2>
-              <p className="helper-text">Run component separation for the current mode and inspect each isolated track.</p>
-              <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.75rem', marginBottom: '0.75rem' }}>
-                <button type="button" className="btn btn-small" onClick={runAiSeparation} disabled={aiLoading}>
-                  {aiLoading ? 'Separating...' : 'Run AI Separation'}
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-small"
-                  onClick={() => setModeFreqBands(modeFreqBands.map((b) => ({ ...b, gain: 1 })))}
-                >
-                  Reset EQ Gains
-                </button>
-              </div>
-
-              {aiError && <p className="helper-text" style={{ color: '#fda4af' }}>{aiError}</p>}
-
-              {!aiLoading && !aiError && aiComponents.length === 0 && (
-                <p className="helper-text">No separated components yet. Click Run AI Separation.</p>
-              )}
-
-              {!aiLoading && aiComponents.length > 0 && (
-                <div className="bands-info" style={{ marginTop: '0.25rem' }}>
-                  {aiComponents.map((comp, idx) => (
-                    <div key={comp.id} className="band-info-item" style={{ alignItems: 'center', gap: '0.5rem' }}>
-                      <span className="band-info-label">{comp.name}</span>
-                      <span className="band-info-gain">RMS {comp.rms.toFixed(4)}</span>
+            <div className="box equalizer-box ai-box">
+              <input
+                ref={aiPresetFileInputRef}
+                type="file"
+                accept=".json,application/json"
+                onChange={handleAiPresetFileSelected}
+                style={{ display: 'none' }}
+              />
+              <div className="box-head">
+                <h2 className="box-title">AI Separation Controls</h2>
+                <div className="box-actions">
+                  <div className="method-toggle" style={{ marginRight: '1rem', display: 'flex', gap: '0.2rem', background: 'rgba(255,255,255,0.05)', padding: '2px', borderRadius: '4px' }}>
+                    <button
+                      type="button"
+                      className={`btn-xs ${processingMethod === 'fft' ? 'active' : ''}`}
+                      onClick={() => setProcessingMethod('fft')}
+                      style={{ fontSize: '10px', padding: '2px 6px', borderRadius: '3px', background: processingMethod === 'fft' ? '#6366f1' : 'transparent', color: 'white', border: 'none', cursor: 'pointer' }}
+                    >FFT</button>
+                    {!isGenericMode && (
                       <button
                         type="button"
-                        className="btn btn-small"
-                        onClick={() => applyAiSoloToEqualizer(idx)}
-                        title="Apply this component as solo in Equalizer mode"
-                      >
-                        Solo In EQ
-                      </button>
-                    </div>
-                  ))}
+                        className={`btn-xs ${processingMethod === 'wavelet' ? 'active' : ''}`}
+                        onClick={() => setProcessingMethod('wavelet')}
+                        style={{ fontSize: '10px', padding: '2px 6px', borderRadius: '3px', background: processingMethod === 'wavelet' ? '#6366f1' : 'transparent', color: 'white', border: 'none', cursor: 'pointer' }}
+                      >Wavelet</button>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    className="icon-btn"
+                    onClick={() => {
+                      setAiModeFreqBands(aiModeFreqBands.map((b) => ({ ...b, gain: 1 })));
+                      if (processingMethod === 'wavelet' && !isGenericMode) {
+                        setWaveletSliders(buildWaveletDefaults(maxWaveletLevel));
+                      }
+                    }}
+                    title="Reset"
+                  >{'\u21BA'}</button>
+                  <button
+                    type="button"
+                    className="icon-btn"
+                    onClick={handleAiPresetLoadClick}
+                    title="Load AI preset"
+                  >{'\u{1F4C2}'}</button>
+                  <button
+                    type="button"
+                    className="icon-btn"
+                    onClick={handleSaveAiPreset}
+                    title="Save AI preset"
+                  >{'\u{1F4BE}'}</button>
                 </div>
-              )}
+              </div>
+
+              <div className="equalizer-scroll-container">
+                <p className="helper-text">
+                  {activeModeId === 'music'
+                    ? 'Run Demucs separation, extract stem frequency ranges into AI sliders, then compare model stems against DSP isolation using FFT/Wavelet.'
+                    : 'Run component separation for the current mode and inspect each isolated track.'}
+                </p>
+
+                {activeModeId === 'music' && aiModeFreqBands.length === 0 && (
+                  <p className="helper-text">Run AI Separation once to extract Demucs stem ranges into the AI sliders.</p>
+                )}
+
+                {aiModeFreqBands.length > 0 && (
+                  <>
+                    <EqualizerCurve
+                      labels={aiModeFreqBands.map((b) => b.name)}
+                      values={aiModeFreqBands.map((b) => Number(b.gain) || 1)}
+                      onChange={(vals) => {
+                        setAiModeFreqBands(aiModeFreqBands.map((b, i) => ({ ...b, gain: vals[i] })));
+                      }}
+                    />
+
+                    <GenericBandBuilder
+                      bands={aiModeFreqBands}
+                      setBands={setAiModeFreqBands}
+                      isEditable={false}
+                    />
+
+                    <div className="bands-info">
+                      {aiModeFreqBands.map((b) => (
+                        <div key={b.id} className="band-info-item">
+                          <span className="band-info-label">{b.name}</span>
+                          <span className="band-info-gain">{`${Number(b.low || 0).toFixed(1)}-${Number(b.high || 0).toFixed(1)} Hz`}</span>
+                          <span className="band-info-gain">{Number(b.gain || 1).toFixed(2)}×</span>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
+
+                {!isGenericMode && processingMethod === 'wavelet' && (
+                  <>
+                    <div className="field" style={{ marginTop: '0.5rem' }}>
+                      <span>Wavelet Basis</span>
+                      <select
+                        className="select"
+                        value={waveletType}
+                        onChange={(e) => {
+                          const nextType = normalizeWaveletName(e.target.value, getModeWaveletDefault(activeModeId));
+                          setWaveletType(nextType);
+                          setWaveletSliders((prev) => normalizeWaveletSliders(prev, maxWaveletLevel));
+                        }}
+                      >
+                        {WAVELET_BASIS_OPTIONS.map((option) => (
+                          <option key={option.value} value={option.value}>{option.label}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <p className="helper-text" style={{ marginTop: '0.35rem' }}>{recommendedWavelet}</p>
+
+                    <h3 className="box-label" style={{ marginTop: '0.75rem' }}>Wavelet Level Gains</h3>
+                    <SliderGroup
+                      count={waveletLevelLabels.length}
+                      labels={waveletLevelLabels}
+                      values={waveletSliders}
+                      onChange={(vals) => setWaveletSliders(normalizeWaveletSliders(vals, maxWaveletLevel))}
+                    />
+
+                    <div className="helper-text" style={{ marginTop: '0.6rem' }}>
+                      {waveletLevelLabels.map((_, idx) => (
+                        <div key={`wavelet-level-help-ai-${idx}`}>{describeWaveletLevel(idx + 1, uploadedSampleRate)}</div>
+                      ))}
+                    </div>
+                  </>
+                )}
+
+                <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.75rem', marginBottom: '0.35rem', flexWrap: 'wrap' }}>
+                  <button type="button" className="btn btn-small" onClick={runAiSeparation} disabled={aiLoading}>
+                    {aiLoading ? 'Separating...' : 'Run AI Separation'}
+                  </button>
+                </div>
+
+                <p className="helper-text">
+                  AI sliders are independent from Equalizer sliders. Use Run AI Separation to update comparison outputs.
+                </p>
+
+                {aiError && <p className="helper-text" style={{ color: '#fda4af' }}>{aiError}</p>}
+
+                {!aiLoading && !aiError && aiComponents.length === 0 && (
+                  <p className="helper-text">No separated components yet. Click Run AI Separation.</p>
+                )}
+
+                {!aiLoading && aiComponents.length > 0 && (
+                  <div className="bands-info" style={{ marginTop: '0.25rem' }}>
+                    {aiComponents.map((comp, idx) => (
+                      <div key={comp.id} className="band-info-item" style={{ alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                        <span className="band-info-label">{comp.name}</span>
+                        {activeModeId === 'music' ? (
+                          <>
+                            <span className="band-info-gain">{`${Number(comp.low || 0).toFixed(1)}-${Number(comp.high || 0).toFixed(1)} Hz`}</span>
+                            <span className="band-info-gain">SNR {Number.isFinite(Number(comp.snr)) ? `${Number(comp.snr).toFixed(2)} dB` : '--'}</span>
+                            <span className="band-info-gain">Corr {Number.isFinite(Number(comp.correlation)) ? Number(comp.correlation).toFixed(4) : '--'}</span>
+                            {comp.modelStemUrl && (
+                              <audio
+                                controls
+                                preload="none"
+                                src={comp.modelStemUrl}
+                                style={{ width: '100%', marginTop: '0.35rem' }}
+                              />
+                            )}
+                          </>
+                        ) : (
+                          <span className="band-info-gain">RMS {Number(comp.rms || 0).toFixed(4)}</span>
+                        )}
+                        <button
+                          type="button"
+                          className="btn btn-small"
+                          onClick={() => applyAiSoloToEqualizer(idx)}
+                          title="Apply this component as solo in Equalizer mode"
+                        >
+                          Solo In EQ
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </aside>
@@ -1696,6 +2170,95 @@ function App() {
               </div>
             </div>
           )}
+
+          {equalizerTab === 'ai' && (
+            <div className="row section-row">
+              <div className="section-head">
+                <h2 className="section-title">AI Comparison Results</h2>
+              </div>
+
+              <div className="box chart-box">
+                {aiLoading && <p className="helper-text">Running AI separation and DSP comparison...</p>}
+                {!aiLoading && aiError && <p className="helper-text" style={{ color: '#fda4af' }}>{aiError}</p>}
+
+                {!aiLoading && !aiError && aiComponents.length === 0 && (
+                  <p className="helper-text">Run AI Separation to generate comparison metrics.</p>
+                )}
+
+                {!aiLoading && !aiError && aiComponents.length > 0 && activeModeId === 'music' && (
+                  <div className="bands-info">
+                    <div
+                      className="band-info-item"
+                      style={{
+                        display: 'grid',
+                        gridTemplateColumns: '1.25fr 1fr 1fr 1fr 1fr',
+                        gap: '0.5rem',
+                        paddingTop: 0,
+                        color: 'var(--text-muted)'
+                      }}
+                    >
+                      <span className="band-info-label">Component</span>
+                      <span className="band-info-label">SNR (dB)</span>
+                      <span className="band-info-label">Model RMS</span>
+                      <span className="band-info-label">DSP RMS</span>
+                      <span className="band-info-label">Correlation</span>
+                    </div>
+
+                    {aiComponents.map((comp) => (
+                      <div
+                        key={`ai-result-${comp.id}`}
+                        className="band-info-item"
+                        style={{
+                          display: 'grid',
+                          gridTemplateColumns: '1.25fr 1fr 1fr 1fr 1fr',
+                          gap: '0.5rem',
+                          alignItems: 'center'
+                        }}
+                      >
+                        <span className="band-info-label">{comp.name}</span>
+                        <span className="band-info-gain">{Number.isFinite(Number(comp.snr)) ? Number(comp.snr).toFixed(2) : '--'}</span>
+                        <span className="band-info-gain">{Number.isFinite(Number(comp.modelRms)) ? Number(comp.modelRms).toFixed(4) : '--'}</span>
+                        <span className="band-info-gain">{Number.isFinite(Number(comp.dspRms)) ? Number(comp.dspRms).toFixed(4) : '--'}</span>
+                        <span className="band-info-gain">{Number.isFinite(Number(comp.correlation)) ? Number(comp.correlation).toFixed(4) : '--'}</span>
+                      </div>
+                    ))}
+
+                    {aiComparisonSummary && (
+                      <div
+                        className="band-info-item"
+                        style={{
+                          display: 'grid',
+                          gridTemplateColumns: '1.25fr 1fr 1fr 1fr 1fr',
+                          gap: '0.5rem',
+                          alignItems: 'center',
+                          borderTop: '1px solid var(--border-subtle)',
+                          marginTop: '0.25rem',
+                          paddingTop: '0.65rem'
+                        }}
+                      >
+                        <span className="band-info-label">Average</span>
+                        <span className="band-info-gain">{Number(aiComparisonSummary.avgSNR).toFixed(2)}</span>
+                        <span className="band-info-gain">{Number(aiComparisonSummary.avgModelRms).toFixed(4)}</span>
+                        <span className="band-info-gain">{Number(aiComparisonSummary.avgDspRms).toFixed(4)}</span>
+                        <span className="band-info-gain">{Number(aiComparisonSummary.avgCorrelation).toFixed(4)}</span>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {!aiLoading && !aiError && aiComponents.length > 0 && activeModeId !== 'music' && (
+                  <div className="bands-info">
+                    {aiComponents.map((comp) => (
+                      <div key={`ai-result-${comp.id}`} className="band-info-item">
+                        <span className="band-info-label">{comp.name}</span>
+                        <span className="band-info-gain">RMS {Number(comp.rms || 0).toFixed(4)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </main>
       </div>
     </div>
@@ -1703,3 +2266,5 @@ function App() {
 }
 
 export default App;
+
+

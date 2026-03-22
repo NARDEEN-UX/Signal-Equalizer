@@ -1,6 +1,7 @@
 import axios from 'axios';
 
-const API = axios.create({ baseURL: 'http://localhost:8000' });
+export const API_BASE_URL = 'http://localhost:8000';
+const API = axios.create({ baseURL: API_BASE_URL });
 
 export const uploadAudio = (file) => {
   const formData = new FormData();
@@ -58,16 +59,45 @@ export const processGenericMode = (signal, bands, sampleRate = 44100) => {
   });
 };
 
-export const processMusicMode = (signal, gains, instrumentNames, sampleRate = 44100, method = 'wavelet', wavelet = 'db8', waveletLevel = 6, slidersWavelet = null) => {
+export const processMusicMode = (
+  signal,
+  gains,
+  instrumentNames,
+  sampleRate = 44100,
+  method = 'wavelet',
+  wavelet = 'db8',
+  waveletLevel = 6,
+  slidersWavelet = null,
+  bands = null
+) => {
   return API.post('/api/modes/music/process', {
     signal,
     gains,
     instrument_names: instrumentNames,
     sample_rate: sampleRate,
+    bands: Array.isArray(bands)
+      ? bands.map((b) => ({
+        id: b.id,
+        name: b.name,
+        low: b.low,
+        high: b.high,
+        gain: b.gain
+      }))
+      : null,
     method,
     wavelet,
     wavelet_level: waveletLevel,
     sliders_wavelet: slidersWavelet
+  });
+};
+
+export const separateMusicModeDemucs = (signal, instrumentNames = [], sampleRate = 44100, modelName = 'htdemucs_6s') => {
+  const safeSampleRate = Math.max(1, Math.round(Number(sampleRate) || 44100));
+  return API.post('/api/modes/music/separate-ai', {
+    signal,
+    instrument_names: instrumentNames,
+    sample_rate: safeSampleRate,
+    model_name: modelName
   });
 };
 
