@@ -38,6 +38,9 @@ const DEFAULT_BANDS = [
 const GenericBandBuilder = ({ bands, setBands, maxHz = 20000, isEditable = true }) => {
   const safeBands = bands?.length ? bands : DEFAULT_BANDS;
   const [draftHz, setDraftHz] = React.useState({});
+  const [draftGain, setDraftGain] = React.useState({});
+  const gainRafRef = React.useRef({});
+  const gainPendingRef = React.useRef({});
 
   React.useEffect(() => {
     const bandIds = new Set(safeBands.map((b) => b.id));
@@ -50,6 +53,12 @@ const GenericBandBuilder = ({ bands, setBands, maxHz = 20000, isEditable = true 
       return next;
     });
   }, [safeBands]);
+
+  React.useEffect(() => () => {
+    Object.values(gainRafRef.current).forEach((rafId) => cancelAnimationFrame(rafId));
+    gainRafRef.current = {};
+    gainPendingRef.current = {};
+  }, []);
 
   const addBand = () => {
     if (!isEditable) return;
@@ -102,6 +111,45 @@ const GenericBandBuilder = ({ bands, setBands, maxHz = 20000, isEditable = true 
     );
   };
 
+  const scheduleGainCommit = (id, value) => {
+    gainPendingRef.current[id] = value;
+    if (gainRafRef.current[id]) return;
+
+    gainRafRef.current[id] = requestAnimationFrame(() => {
+      const nextValue = gainPendingRef.current[id];
+      if (typeof nextValue === 'number') {
+        update(id, { gain: nextValue });
+      }
+      setDraftGain((prev) => {
+        if (!(id in prev)) return prev;
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
+      delete gainPendingRef.current[id];
+      delete gainRafRef.current[id];
+    });
+  };
+
+  const flushGainCommit = (id) => {
+    const existingRaf = gainRafRef.current[id];
+    if (existingRaf) {
+      cancelAnimationFrame(existingRaf);
+      delete gainRafRef.current[id];
+    }
+
+    const value = (id in gainPendingRef.current) ? gainPendingRef.current[id] : draftGain[id];
+    if (typeof value !== 'number') return;
+
+    delete gainPendingRef.current[id];
+    update(id, { gain: value });
+    setDraftGain((prev) => {
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
+  };
+
   const draftKey = (id, field) => `${id}:${field}`;
 
   const setDraft = (id, field, value) => {
@@ -134,6 +182,11 @@ const GenericBandBuilder = ({ bands, setBands, maxHz = 20000, isEditable = true 
     return k in draftHz ? draftHz[k] : String(band[field]);
   };
 
+  const getDisplayGain = (bandId, committedGain) => {
+    const gainValue = Number(draftGain[bandId] ?? committedGain);
+    return Number.isFinite(gainValue) ? gainValue : 1;
+  };
+
   const title = isEditable ? 'Custom Bands' : 'Band Controls';
   const subtitle = isEditable 
     ? 'Add subdivisions and control location, width and gain (0 → 2)'
@@ -150,8 +203,10 @@ const GenericBandBuilder = ({ bands, setBands, maxHz = 20000, isEditable = true 
       </div>
 
       <div className="generic-band-list">
-        {safeBands.map((b, idx) => (
-          <div key={b.id} className="generic-band">
+        {safeBands.map((b, idx) => {
+          const safeGainValue = getDisplayGain(b.id, b.gain);
+          return (
+            <div key={b.id} className="generic-band">
             <div className="generic-band-top">
               <div className="generic-band-name">{b.name}</div>
               {isEditable && (
@@ -222,15 +277,23 @@ const GenericBandBuilder = ({ bands, setBands, maxHz = 20000, isEditable = true 
                     min="0"
                     max="2"
                     step="0.01"
-                    value={b.gain}
-                    onChange={(e) => update(b.id, { gain: e.target.value })}
+                    value={safeGainValue}
+                    onChange={(e) => {
+                      const next = Number(e.target.value);
+                      setDraftGain((prev) => ({ ...prev, [b.id]: next }));
+                      scheduleGainCommit(b.id, next);
+                    }}
+                    onPointerUp={() => flushGainCommit(b.id)}
+                    onMouseUp={() => flushGainCommit(b.id)}
+                    onTouchEnd={() => flushGainCommit(b.id)}
                   />
-                  <span className="gain-pill">{Number(b.gain).toFixed(2)}×</span>
+                  <span className="gain-pill">{safeGainValue.toFixed(2)}×</span>
                 </div>
               </label>
             </div>
-          </div>
-        ))}
+            </div>
+          );
+        })}
       </div>
     </div>
   );

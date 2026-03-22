@@ -42,12 +42,31 @@ function mapColor(scale, t) {
   return infernoColor(t);
 }
 
-const SpectrogramViewer = ({ title, times, freqs, magnitudes, normalizationMax = null, colorScale = 'inferno' }) => {
+const SpectrogramViewer = ({
+  title,
+  times,
+  freqs,
+  magnitudes,
+  normalizationMax = null,
+  colorScale = 'inferno',
+  viewWindow: controlledViewWindow = null,
+  onViewWindowChange = null
+}) => {
   const canvasRef = useRef(null);
   const containerRef = useRef(null);
   const [canvasWidth, setCanvasWidth] = React.useState(800);
   const [viewWindow, setViewWindow] = React.useState({ t0: 0, t1: 1, f0: 0, f1: 1 });
   const [dragRect, setDragRect] = React.useState(null);
+  const currentViewWindow = controlledViewWindow || viewWindow;
+
+  const commitViewWindow = (nextWindow) => {
+    if (typeof onViewWindowChange === 'function') {
+      onViewWindowChange(nextWindow);
+    }
+    if (!controlledViewWindow) {
+      setViewWindow(nextWindow);
+    }
+  };
 
   useEffect(() => {
     // Measure container and set canvas width
@@ -73,7 +92,8 @@ const SpectrogramViewer = ({ title, times, freqs, magnitudes, normalizationMax =
   }, []);
 
   useEffect(() => {
-    setViewWindow({ t0: 0, t1: 1, f0: 0, f1: 1 });
+    commitViewWindow({ t0: 0, t1: 1, f0: 0, f1: 1 });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [times, freqs, magnitudes]);
 
   const handleMouseDown = (e) => {
@@ -114,64 +134,62 @@ const SpectrogramViewer = ({ title, times, freqs, magnitudes, normalizationMax =
     const yr0 = y0 / Math.max(1, rect.height);
     const yr1 = y1 / Math.max(1, rect.height);
 
-    setViewWindow((w) => {
-      const tSpan = w.t1 - w.t0;
-      
-      const t0n = w.t0 + xr0 * tSpan;
-      const t1n = w.t0 + xr1 * tSpan;
+    const w = currentViewWindow;
+    const tSpan = w.t1 - w.t0;
+    
+    const t0n = w.t0 + xr0 * tSpan;
+    const t1n = w.t0 + xr1 * tSpan;
 
-      // Translate the current state bounds into true frequencies
-      const fStartIdx = Math.floor(w.f0 * Math.max(0, freqs.length - 1));
-      const fEndIdx = Math.floor(w.f1 * Math.max(0, freqs.length - 1));
-      const lowSel = Number(freqs[Math.max(0, Math.min(freqs.length - 1, fStartIdx))]) || 0;
-      const highSel = Number(freqs[Math.max(0, Math.min(freqs.length - 1, fEndIdx))]) || 1;
-      const minFreqSel = Math.max(1, Math.min(lowSel, highSel));
-      const maxFreqSel = Math.max(minFreqSel + 1, Math.max(lowSel, highSel));
-      const useLogFreq = maxFreqSel > 1000;
+    // Translate the current state bounds into true frequencies
+    const fStartIdx = Math.floor(w.f0 * Math.max(0, freqs.length - 1));
+    const fEndIdx = Math.floor(w.f1 * Math.max(0, freqs.length - 1));
+    const lowSel = Number(freqs[Math.max(0, Math.min(freqs.length - 1, fStartIdx))]) || 0;
+    const highSel = Number(freqs[Math.max(0, Math.min(freqs.length - 1, fEndIdx))]) || 1;
+    const minFreqSel = Math.max(1, Math.min(lowSel, highSel));
+    const maxFreqSel = Math.max(minFreqSel + 1, Math.max(lowSel, highSel));
+    const useLogFreq = maxFreqSel > 1000;
 
-      // Identify the frequency boundary that the user's cursor physically selected
-      const getFreqStrata = (yNorm) => {
-        if (useLogFreq) {
-          const minF = Math.max(1, minFreqSel);
-          const maxF = Math.max(maxFreqSel, minF + 1);
-          const logMin = Math.log10(minF);
-          const logMax = Math.log10(maxF);
-          return Math.pow(10, logMin + (1 - yNorm) * (logMax - logMin));
-        } else {
-          return minFreqSel + (1 - yNorm) * (maxFreqSel - minFreqSel);
-        }
-      };
-
-      const fTop = getFreqStrata(yr0);
-      const fBottom = getFreqStrata(yr1);
-
-      // Now map those true frequencies back down onto a strict 0.0 - 1.0 array fraction
-      const maxAvailableFreq = Number(freqs[freqs.length - 1]) || 1;
-      let nf0 = Math.min(fTop, fBottom) / maxAvailableFreq;
-      let nf1 = Math.max(fTop, fBottom) / maxAvailableFreq;
-
-      let nt0 = Math.max(0, Math.min(1, t0n));
-      let nt1 = Math.max(0, Math.min(1, t1n));
-      if (nt1 - nt0 < 0.02) {
-        const c = (nt0 + nt1) / 2;
-        nt0 = Math.max(0, c - 0.01);
-        nt1 = Math.min(1, c + 0.01);
+    // Identify the frequency boundary that the user's cursor physically selected
+    const getFreqStrata = (yNorm) => {
+      if (useLogFreq) {
+        const minF = Math.max(1, minFreqSel);
+        const maxF = Math.max(maxFreqSel, minF + 1);
+        const logMin = Math.log10(minF);
+        const logMax = Math.log10(maxF);
+        return Math.pow(10, logMin + (1 - yNorm) * (logMax - logMin));
       }
+      return minFreqSel + (1 - yNorm) * (maxFreqSel - minFreqSel);
+    };
 
-      nf0 = Math.max(0, Math.min(1, nf0));
-      nf1 = Math.max(0, Math.min(1, nf1));
-      if (nf1 - nf0 < 0.01) {
-        const c = (nf0 + nf1) / 2;
-        nf0 = Math.max(0, c - 0.005);
-        nf1 = Math.min(1, c + 0.005);
-      }
+    const fTop = getFreqStrata(yr0);
+    const fBottom = getFreqStrata(yr1);
 
-      return { t0: nt0, t1: nt1, f0: nf0, f1: nf1 };
-    });
+    // Now map those true frequencies back down onto a strict 0.0 - 1.0 array fraction
+    const maxAvailableFreq = Number(freqs[freqs.length - 1]) || 1;
+    let nf0 = Math.min(fTop, fBottom) / maxAvailableFreq;
+    let nf1 = Math.max(fTop, fBottom) / maxAvailableFreq;
+
+    let nt0 = Math.max(0, Math.min(1, t0n));
+    let nt1 = Math.max(0, Math.min(1, t1n));
+    if (nt1 - nt0 < 0.02) {
+      const c = (nt0 + nt1) / 2;
+      nt0 = Math.max(0, c - 0.01);
+      nt1 = Math.min(1, c + 0.01);
+    }
+
+    nf0 = Math.max(0, Math.min(1, nf0));
+    nf1 = Math.max(0, Math.min(1, nf1));
+    if (nf1 - nf0 < 0.01) {
+      const c = (nf0 + nf1) / 2;
+      nf0 = Math.max(0, c - 0.005);
+      nf1 = Math.min(1, c + 0.005);
+    }
+
+    commitViewWindow({ t0: nt0, t1: nt1, f0: nf0, f1: nf1 });
   };
 
   const handleResetZoom = () => {
-    setViewWindow({ t0: 0, t1: 1, f0: 0, f1: 1 });
+    commitViewWindow({ t0: 0, t1: 1, f0: 0, f1: 1 });
   };
 
   useEffect(() => {
@@ -239,8 +257,8 @@ const SpectrogramViewer = ({ title, times, freqs, magnitudes, normalizationMax =
     const dbSpan = maxDb - minDb;
     const linearRef = Number(normalizationMax) > 0 ? Number(normalizationMax) : Math.max(maxVal, 1e-8);
 
-    const fStartIdx = Math.floor(viewWindow.f0 * Math.max(0, freqs.length - 1));
-    const fEndIdx = Math.floor(viewWindow.f1 * Math.max(0, freqs.length - 1));
+    const fStartIdx = Math.floor(currentViewWindow.f0 * Math.max(0, freqs.length - 1));
+    const fEndIdx = Math.floor(currentViewWindow.f1 * Math.max(0, freqs.length - 1));
     const lowSel = Number(freqs[Math.max(0, Math.min(freqs.length - 1, fStartIdx))]) || 0;
     const highSel = Number(freqs[Math.max(0, Math.min(freqs.length - 1, fEndIdx))]) || 1;
     const minFreqSel = Math.max(1, Math.min(lowSel, highSel));
@@ -272,7 +290,7 @@ const SpectrogramViewer = ({ title, times, freqs, magnitudes, normalizationMax =
     const imageData = ctx.createImageData(width, height);
 
     for (let x = 0; x < width; x += 1) {
-      const tNorm = viewWindow.t0 + (x / Math.max(1, width - 1)) * (viewWindow.t1 - viewWindow.t0);
+      const tNorm = currentViewWindow.t0 + (x / Math.max(1, width - 1)) * (currentViewWindow.t1 - currentViewWindow.t0);
       const tIdx = Math.min(times.length - 1, Math.floor(tNorm * (times.length - 1)));
       for (let y = 0; y < height; y += 1) {
         const fIdx = yToFIdx[y];
@@ -291,7 +309,7 @@ const SpectrogramViewer = ({ title, times, freqs, magnitudes, normalizationMax =
       }
     }
     ctx.putImageData(imageData, 0, 0);
-  }, [times, freqs, magnitudes, normalizationMax, colorScale, canvasWidth, viewWindow]);
+  }, [times, freqs, magnitudes, normalizationMax, colorScale, canvasWidth, currentViewWindow]);
 
   return (
     <div>

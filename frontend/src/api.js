@@ -1,7 +1,6 @@
 import axios from 'axios';
 
-export const API_BASE_URL = 'http://localhost:8000';
-const API = axios.create({ baseURL: API_BASE_URL });
+const API = axios.create({ baseURL: 'http://localhost:8000' });
 
 export const uploadAudio = (file) => {
   const formData = new FormData();
@@ -45,7 +44,7 @@ export const loadSettings = (filename) => {
 };
 
 // Mode-specific API calls
-export const processGenericMode = (signal, bands, sampleRate = 44100) => {
+export const processGenericMode = (signal, bands, sampleRate = 44100, requestConfig = {}) => {
   return API.post('/api/modes/generic/process', {
     signal,
     bands: bands.map(b => ({
@@ -56,52 +55,23 @@ export const processGenericMode = (signal, bands, sampleRate = 44100) => {
       gain: b.gain
     })),
     sample_rate: sampleRate
-  });
+  }, requestConfig);
 };
 
-export const processMusicMode = (
-  signal,
-  gains,
-  instrumentNames,
-  sampleRate = 44100,
-  method = 'wavelet',
-  wavelet = 'db8',
-  waveletLevel = 6,
-  slidersWavelet = null,
-  bands = null
-) => {
+export const processMusicMode = (signal, gains, instrumentNames, sampleRate = 44100, method = 'wavelet', wavelet = 'db8', waveletLevel = 6, slidersWavelet = null, requestConfig = {}) => {
   return API.post('/api/modes/music/process', {
     signal,
     gains,
     instrument_names: instrumentNames,
     sample_rate: sampleRate,
-    bands: Array.isArray(bands)
-      ? bands.map((b) => ({
-        id: b.id,
-        name: b.name,
-        low: b.low,
-        high: b.high,
-        gain: b.gain
-      }))
-      : null,
     method,
     wavelet,
     wavelet_level: waveletLevel,
     sliders_wavelet: slidersWavelet
-  });
+  }, requestConfig);
 };
 
-export const separateMusicModeDemucs = (signal, instrumentNames = [], sampleRate = 44100, modelName = 'htdemucs_6s') => {
-  const safeSampleRate = Math.max(1, Math.round(Number(sampleRate) || 44100));
-  return API.post('/api/modes/music/separate-ai', {
-    signal,
-    instrument_names: instrumentNames,
-    sample_rate: safeSampleRate,
-    model_name: modelName
-  });
-};
-
-export const processAnimalsMode = (signal, gains, animalNames, sampleRate = 44100, method = 'fft', wavelet = 'sym8', waveletLevel = 6, slidersWavelet = null) => {
+export const processAnimalsMode = (signal, gains, animalNames, sampleRate = 44100, method = 'fft', wavelet = 'sym8', waveletLevel = 6, slidersWavelet = null, requestConfig = {}) => {
   return API.post('/api/modes/animals/process', {
     signal,
     gains,
@@ -111,10 +81,10 @@ export const processAnimalsMode = (signal, gains, animalNames, sampleRate = 4410
     wavelet,
     wavelet_level: waveletLevel,
     sliders_wavelet: slidersWavelet
-  });
+  }, requestConfig);
 };
 
-export const processHumansMode = (signal, gains, voiceNames, sampleRate = 44100, method = 'fft', wavelet = 'sym5', waveletLevel = 6, slidersWavelet = null) => {
+export const processHumansMode = (signal, gains, voiceNames, sampleRate = 44100, method = 'fft', wavelet = 'sym5', waveletLevel = 6, slidersWavelet = null, requestConfig = {}) => {
   return API.post('/api/modes/humans/process', {
     signal,
     gains,
@@ -124,10 +94,10 @@ export const processHumansMode = (signal, gains, voiceNames, sampleRate = 44100,
     wavelet,
     wavelet_level: waveletLevel,
     sliders_wavelet: slidersWavelet
-  });
+  }, requestConfig);
 };
 
-export const processECGMode = (signal, gains, componentNames, sampleRate = 500, method = 'fft', wavelet = 'bior3.5', waveletLevel = 6, slidersWavelet = null) => {
+export const processECGMode = (signal, gains, componentNames, sampleRate = 500, method = 'fft', wavelet = 'bior3.5', waveletLevel = 6, slidersWavelet = null, requestConfig = {}) => {
   return API.post('/api/modes/ecg/process', {
     signal,
     gains,
@@ -137,7 +107,7 @@ export const processECGMode = (signal, gains, componentNames, sampleRate = 500, 
     wavelet,
     wavelet_level: waveletLevel,
     sliders_wavelet: slidersWavelet
-  });
+  }, requestConfig);
 };
 
 // Get default settings for each mode
@@ -241,30 +211,6 @@ export const deleteECGSignal = (filename) => {
   return API.delete(`/api/modes/ecg/signal/${filename}`);
 };
 
-/**
- * Analyze ECG from a signal array already in memory.
- * Call after loadECGSignal or uploadECGSignal returns the signal array.
- * @param {number[]} signal     - raw samples (any sample rate)
- * @param {number}   sampleRate - sample rate of the signal (e.g. 360, 44100)
- */
-export const analyzeECGWithAI = (signal, sampleRate) => {
-  return API.post('/api/modes/ecg/ai-analyze', {
-    signal,
-    sample_rate: sampleRate,
-  });
-};
-
-/**
- * Upload a WAV or CSV file directly for AI analysis.
- * Bypasses frontend state — useful for direct file → diagnosis.
- * @param {File} file - WAV or CSV file
- */
-export const analyzeECGFileWithAI = (file) => {
-  const formData = new FormData();
-  formData.append('signal_file', file);
-  return API.post('/api/modes/ecg/ai-analyze-file', formData);
-};
-
 // ==================== Generic Mode Signal Upload ====================
 
 export const uploadGenericSignal = (file) => {
@@ -284,3 +230,4 @@ export const loadGenericSignal = (filename) => {
 export const deleteGenericSignal = (filename) => {
   return API.delete(`/api/modes/generic/signal/${filename}`);
 };
+

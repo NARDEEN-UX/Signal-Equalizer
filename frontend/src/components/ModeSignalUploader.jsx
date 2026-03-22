@@ -1,13 +1,23 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
-  uploadMusicSignal, listMusicSignals, loadMusicSignal, deleteMusicSignal,
-  uploadAnimalSignal, listAnimalSignals, loadAnimalSignal, deleteAnimalSignal,
-  uploadHumanSignal, listHumanSignals, loadHumanSignal, deleteHumanSignal,
-  uploadECGSignal, listECGSignals, loadECGSignal, deleteECGSignal,
-  uploadGenericSignal, listGenericSignals, loadGenericSignal, deleteGenericSignal,
+  uploadMusicSignal, loadMusicSignal, deleteMusicSignal,
+  uploadAnimalSignal, loadAnimalSignal, deleteAnimalSignal,
+  uploadHumanSignal, loadHumanSignal, deleteHumanSignal,
+  uploadECGSignal, loadECGSignal, deleteECGSignal,
+  uploadGenericSignal, loadGenericSignal, deleteGenericSignal,
   loadSampleGeneric, loadSampleMusic, loadSampleAnimals, loadSampleHuman, loadSampleECG
 } from '../api';
 import { audioBufferToWav } from '../utils/audioUtils';
+
+const SESSION_SIGNALS_BY_MODE = {
+  music: [],
+  animal: [],
+  human: [],
+  ecg: [],
+  generic: []
+};
+
+const MAX_SESSION_CACHED_SAMPLES = 600000;
 
 const ModeSignalUploader = ({ mode, onSignalLoad, onClose }) => {
   const [signals, setSignals] = useState([]);
@@ -18,11 +28,11 @@ const ModeSignalUploader = ({ mode, onSignalLoad, onClose }) => {
 
   // Map mode to API functions
   const apiMap = {
-    music: { upload: uploadMusicSignal, list: listMusicSignals, load: loadMusicSignal, delete: deleteMusicSignal },
-    animal: { upload: uploadAnimalSignal, list: listAnimalSignals, load: loadAnimalSignal, delete: deleteAnimalSignal },
-    human: { upload: uploadHumanSignal, list: listHumanSignals, load: loadHumanSignal, delete: deleteHumanSignal },
-    ecg: { upload: uploadECGSignal, list: listECGSignals, load: loadECGSignal, delete: deleteECGSignal },
-    generic: { upload: uploadGenericSignal, list: listGenericSignals, load: loadGenericSignal, delete: deleteGenericSignal }
+    music: { upload: uploadMusicSignal, load: loadMusicSignal, delete: deleteMusicSignal },
+    animal: { upload: uploadAnimalSignal, load: loadAnimalSignal, delete: deleteAnimalSignal },
+    human: { upload: uploadHumanSignal, load: loadHumanSignal, delete: deleteHumanSignal },
+    ecg: { upload: uploadECGSignal, load: loadECGSignal, delete: deleteECGSignal },
+    generic: { upload: uploadGenericSignal, load: loadGenericSignal, delete: deleteGenericSignal }
   };
 
   // Map mode to sample loaders
@@ -35,25 +45,9 @@ const ModeSignalUploader = ({ mode, onSignalLoad, onClose }) => {
   };
 
   useEffect(() => {
-    loadSignalsList();
+    setSignals(Array.isArray(SESSION_SIGNALS_BY_MODE[mode]) ? [...SESSION_SIGNALS_BY_MODE[mode]] : []);
+    setError('');
   }, [mode]);
-
-  const loadSignalsList = async () => {
-    try {
-      setLoading(true);
-      const api = apiMap[mode];
-      if (!api) return;
-
-      const response = await api.list();
-      setSignals(response.data.signals || []);
-      setError('');
-    } catch (err) {
-      setError('Failed to load signals list: ' + err.message);
-      setSignals([]);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleUpload = async (e) => {
     let file = e.target.files?.[0];
@@ -74,12 +68,46 @@ const ModeSignalUploader = ({ mode, onSignalLoad, onClose }) => {
         await audioCtx.close();
       }
 
-      await api.upload(file);
+      const response = await api.upload(file);
+      const uploaded = response?.data || {};
+      const entryId = uploaded.filename || `${mode}_${Date.now()}.wav`;
+      const sessionEntry = {
+        filename: entryId,
+        size: Number(uploaded.size) || file.size || 0,
+        sample_rate: Number(uploaded.sample_rate) || null,
+        duration: Number(uploaded.duration) || null,
+        samples: Number(uploaded.samples) || null,
+        cachedSignal: null,
+        cachedSampleRate: null
+      };
+
+      const currentSessionList = Array.isArray(SESSION_SIGNALS_BY_MODE[mode]) ? SESSION_SIGNALS_BY_MODE[mode] : [];
+      SESSION_SIGNALS_BY_MODE[mode] = [
+        sessionEntry,
+        ...currentSessionList.filter((s) => s?.filename !== sessionEntry.filename)
+      ];
+      setSignals([...SESSION_SIGNALS_BY_MODE[mode]]);
+
       setSuccess(`Signal "${file.name}" uploaded successfully!`);
       setError('');
 
-      // Reload signals list after upload
-      await loadSignalsList();
+      // Decode in the background and keep an in-memory session cache for instant "Load".
+      decodeSignalForSessionCache(file)
+        .then((decoded) => {
+          if (!decoded) return;
+          SESSION_SIGNALS_BY_MODE[mode] = (SESSION_SIGNALS_BY_MODE[mode] || []).map((item) => {
+            if (item?.filename !== entryId) return item;
+            return {
+              ...item,
+              cachedSignal: decoded.signal,
+              cachedSampleRate: decoded.sampleRate
+            };
+          });
+          setSignals(Array.isArray(SESSION_SIGNALS_BY_MODE[mode]) ? [...SESSION_SIGNALS_BY_MODE[mode]] : []);
+        })
+        .catch(() => {
+          // Cache is optional; fallback to backend load endpoint when unavailable.
+        });
 
       // Clear input
       if (fileInputRef.current) fileInputRef.current.value = '';
@@ -89,6 +117,27 @@ const ModeSignalUploader = ({ mode, onSignalLoad, onClose }) => {
       setSuccess('');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const decodeSignalForSessionCache = async (file) => {
+    const extension = (file?.name || '').toLowerCase();
+    if (extension.endsWith('.csv')) return null;
+
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    try {
+      const buffer = await file.arrayBuffer();
+      const decoded = await audioCtx.decodeAudioData(buffer.slice(0));
+      const channel = decoded.getChannelData(0);
+      if (!channel || channel.length === 0 || channel.length > MAX_SESSION_CACHED_SAMPLES) {
+        return null;
+      }
+      return {
+        signal: Array.from(channel),
+        sampleRate: Number(decoded.sampleRate) || 44100
+      };
+    } finally {
+      await audioCtx.close();
     }
   };
 
@@ -188,6 +237,16 @@ const ModeSignalUploader = ({ mode, onSignalLoad, onClose }) => {
       const api = apiMap[mode];
       if (!api) return;
 
+      const cachedEntry = (SESSION_SIGNALS_BY_MODE[mode] || []).find((s) => s?.filename === filename);
+      if (cachedEntry && Array.isArray(cachedEntry.cachedSignal) && cachedEntry.cachedSignal.length > 0) {
+        onSignalLoad(cachedEntry.cachedSignal, cachedEntry.cachedSampleRate || cachedEntry.sample_rate || 44100, filename);
+        setSuccess(`Signal "${filename}" loaded instantly from session cache.`);
+        setError('');
+        setLoading(false);
+        setTimeout(onClose, 250);
+        return;
+      }
+
       const response = await api.load(filename);
       const signal = response.data.signal;
       const sampleRate = response.data.sample_rate;
@@ -214,10 +273,11 @@ const ModeSignalUploader = ({ mode, onSignalLoad, onClose }) => {
       if (!api) return;
 
       await api.delete(filename);
+      const currentSessionList = Array.isArray(SESSION_SIGNALS_BY_MODE[mode]) ? SESSION_SIGNALS_BY_MODE[mode] : [];
+      SESSION_SIGNALS_BY_MODE[mode] = currentSessionList.filter((s) => s?.filename !== filename);
+      setSignals([...SESSION_SIGNALS_BY_MODE[mode]]);
       setSuccess(`Signal "${filename}" deleted successfully!`);
       setError('');
-
-      await loadSignalsList();
     } catch (err) {
       setError('Failed to delete signal: ' + (err.response?.data?.detail || err.message));
       setSuccess('');
@@ -316,7 +376,7 @@ const ModeSignalUploader = ({ mode, onSignalLoad, onClose }) => {
                 ))}
               </ul>
             ) : (
-              <p className="empty-message">No signals uploaded yet. Upload a file or load a synthetic sample!</p>
+              <p className="empty-message">No signals uploaded in this session yet. Upload a file or load a synthetic sample!</p>
             )}
           </div>
         </div>

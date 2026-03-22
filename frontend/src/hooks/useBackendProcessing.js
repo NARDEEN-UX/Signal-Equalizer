@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   processGenericMode,
   processMusicMode,
@@ -12,26 +12,9 @@ const toNum = (v, fallback = 0) => {
   return Number.isFinite(n) ? n : fallback;
 };
 
-const timeCache = new Map();
-const MAX_TIME_CACHE_ITEMS = 6;
-
 const makeTime = (length, sampleRate) => {
   const sr = Math.max(1, toNum(sampleRate, 44100));
-  const n = Math.max(0, Number(length) || 0);
-  const key = `${n}:${sr}`;
-  const cached = timeCache.get(key);
-  if (cached) return cached;
-
-  const generated = Array.from({ length: n }, (_, i) => i / sr);
-  timeCache.set(key, generated);
-
-  // Keep cache bounded to avoid unbounded memory growth.
-  if (timeCache.size > MAX_TIME_CACHE_ITEMS) {
-    const oldestKey = timeCache.keys().next().value;
-    timeCache.delete(oldestKey);
-  }
-
-  return generated;
+  return Array.from({ length }, (_, i) => i / sr);
 };
 
 const normalizeResponse = (apiData, inputSignal, sampleRate) => {
@@ -81,10 +64,10 @@ export const useBackendProcessing = ({
   processingMethod = 'fft',
   waveletSliders = null
 }) => {
+  const PROCESS_DEBOUNCE_MS = 40;
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const requestSeqRef = useRef(0);
 
   // Serialize bands to a stable string so useEffect doesn't fire on
   // every render due to a new array/object reference.
@@ -104,9 +87,8 @@ export const useBackendProcessing = ({
     }
 
     let cancelled = false;
-    const requestSeq = ++requestSeqRef.current;
-    const signalLength = Array.isArray(signalData) ? signalData.length : 0;
-    const debounceMs = signalLength > 250000 ? 350 : 160;
+    const controller = new AbortController();
+    const requestConfig = { signal: controller.signal };
 
     const run = async () => {
       setLoading(true);
@@ -129,34 +111,37 @@ export const useBackendProcessing = ({
             waveletType,
             waveletLevel,
             waveletSliders,
-            bands
+            requestConfig
           );
         } else if (modeId === 'animal') {
-          response = await processAnimalsMode(signalData, gains, names, sampleRate, method, waveletType, waveletLevel, waveletSliders);
+          response = await processAnimalsMode(signalData, gains, names, sampleRate, method, waveletType, waveletLevel, waveletSliders, requestConfig);
         } else if (modeId === 'human') {
-          response = await processHumansMode(signalData, gains, names, sampleRate, method, waveletType, waveletLevel, waveletSliders);
+          response = await processHumansMode(signalData, gains, names, sampleRate, method, waveletType, waveletLevel, waveletSliders, requestConfig);
         } else if (modeId === 'ecg') {
-          response = await processECGMode(signalData, gains, names, sampleRate, method, waveletType, waveletLevel, waveletSliders);
+          response = await processECGMode(signalData, gains, names, sampleRate, method, waveletType, waveletLevel, waveletSliders, requestConfig);
         } else {
-          response = await processGenericMode(signalData, bands, sampleRate);
+          response = await processGenericMode(signalData, bands, sampleRate, requestConfig);
         }
 
-        if (!cancelled && requestSeq === requestSeqRef.current) {
+        if (!cancelled) {
           setData(normalizeResponse(response?.data || {}, signalData, sampleRate));
         }
       } catch (err) {
-        if (!cancelled && requestSeq === requestSeqRef.current) {
+        const aborted = err?.code === 'ERR_CANCELED' || err?.name === 'CanceledError';
+        if (!cancelled && !aborted) {
           setError(err?.message || 'Backend processing failed');
           if (!useFallback) setData(null);
         }
       } finally {
-        if (!cancelled && requestSeq === requestSeqRef.current) setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     };
 
-    const timer = setTimeout(run, debounceMs);
+    const timer = setTimeout(run, PROCESS_DEBOUNCE_MS);
+
     return () => {
       cancelled = true;
+      controller.abort();
       clearTimeout(timer);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps

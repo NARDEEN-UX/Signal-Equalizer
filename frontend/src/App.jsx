@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useDeferredValue } from 'react';
 import WaveformViewer from './components/WaveformViewer';
 import EqualizerCurve from './components/EqualizerCurve';
 import FFTChart from './components/FFTChart';
@@ -11,12 +11,10 @@ import ModeSignalUploader from './components/ModeSignalUploader';
 import GenericBandBuilder from './components/GenericBandBuilder';
 import BandPresetModal from './components/BandPresetModal';
 import SliderGroup from './components/SliderGroup';
-import ECGAIViewer from './components/ECGAIViewer';
 import './App.css';
 import { useBackendProcessing } from './hooks/useBackendProcessing';
 import { useMockProcessing } from './mock/useMockProcessing';
 import {
-  API_BASE_URL,
   saveSchema,
   loadSchema,
   getGenericDefault,
@@ -27,7 +25,6 @@ import {
   uploadAudio,
   processGenericMode,
   processMusicMode,
-  separateMusicModeDemucs,
   processAnimalsMode,
   processHumansMode,
   processECGMode
@@ -48,12 +45,12 @@ const MODES = [
     id: 'music',
     name: 'Musical Instruments',
     tag: 'Music.wav',
-    description: 'Control Demucs sources inside a musical mix.',
+    description: 'Control individual instruments inside a musical mix.',
     accentClass: 'mode-music',
     icon: '♫',
-    sliderLabels: ['drums', 'bass', 'vocals', 'guitar', 'piano', 'other'],
+    sliderLabels: ['Bass', 'Piano', 'Vocals', 'Violin', 'Others'],
     allowAddSubdivision: false,
-    requirements: ['Demucs drums stem', 'Demucs bass stem', 'Demucs vocals stem', 'Demucs guitar stem', 'Demucs piano stem', 'Demucs other stem']
+    requirements: ['Bass instrument', 'Piano', 'Vocal tracks', 'Violin', 'Other sounds']
   },
   {
     id: 'animal',
@@ -102,7 +99,7 @@ const MODES = [
 
 const LANDING_MODES = [
   { id: 'generic', title: 'Generic Mode', desc: 'Custom frequency bands' },
-  { id: 'music', title: 'Musical Instruments', desc: 'Isolate Demucs stems (drums, bass, vocals, guitar, piano, other)' },
+  { id: 'music', title: 'Musical Instruments', desc: 'Isolate drums, piano, etc.' },
   { id: 'animal', title: 'Animal Sounds', desc: 'Separate mixed animal tracks' },
   { id: 'human', title: 'Human Voices', desc: 'Distinguish overlapping speakers' },
   { id: 'ecg', title: 'ECG Abnormalities', desc: 'Detect cardiac arrhythmias' }
@@ -117,12 +114,11 @@ const DEFAULT_MODE_BANDS = {
     { id: 'b4', name: 'Band 4', low: 3000, high: 8000, gain: 1 }
   ],
   music: [
-    { id: 'music-0', name: 'drums', low: 20, high: 12000, gain: 1.0 },
-    { id: 'music-1', name: 'bass', low: 20, high: 300, gain: 1.0 },
-    { id: 'music-2', name: 'vocals', low: 80, high: 8000, gain: 1.0 },
-    { id: 'music-3', name: 'guitar', low: 80, high: 5000, gain: 1.0 },
-    { id: 'music-4', name: 'piano', low: 27, high: 5000, gain: 1.0 },
-    { id: 'music-5', name: 'other', low: 20, high: 20000, gain: 1.0 }
+    { id: 'music-0', name: 'Bass', low: 20, high: 250, gain: 1.0 },
+    { id: 'music-1', name: 'Piano', low: 27, high: 4186, gain: 1.0 },
+    { id: 'music-2', name: 'Vocals', low: 80, high: 8000, gain: 1.0 },
+    { id: 'music-3', name: 'Violin', low: 196, high: 3520, gain: 1.0 },
+    { id: 'music-4', name: 'Others', low: 20, high: 20000, gain: 1.0 }
   ],
   animal: [
     { id: 'animal-0', name: 'Songbirds', low: 1000, high: 8000, gain: 1.0, examples: 'Sparrow, Canary, Warbler, Finch' },
@@ -257,6 +253,7 @@ const describeWaveletLevel = (level, sampleRate) => {
 };
 
 function App() {
+  const MAX_UI_SIGNAL_SAMPLES = 120000;
   const MIN_PLAYBACK_SAMPLE_RATE = 3000;
   const MAX_PLAYBACK_SAMPLE_RATE = 192000;
 
@@ -266,7 +263,7 @@ function App() {
   const [audiogram, setAudiogram] = useState(false);
   const [showSpec, setShowSpec] = useState(false);
   const [inputSpecColorScale, setInputSpecColorScale] = useState('inferno');
-  const [outputSpecColorScale, setOutputSpecColorScale] = useState('viridis');
+  const [outputSpecColorScale, setOutputSpecColorScale] = useState('inferno');
   const [isPlaying, setIsPlaying] = useState(false);
   const [playbackTime, setPlaybackTime] = useState(0);
   const [playbackRate, setPlaybackRate] = useState(1);
@@ -286,6 +283,7 @@ function App() {
 
   // Unified band configuration for all modes
   const [modeFreqConfig, setModeFreqConfig] = useState(DEFAULT_MODE_BANDS);
+  const [aiModeFreqConfig, setAiModeFreqConfig] = useState({});
 
   // Per-mode wavelet settings - ensure each mode has independent state
   const [modeWaveletTypes, setModeWaveletTypes] = useState(() => {
@@ -330,13 +328,13 @@ function App() {
   const [processingMethod, setProcessingMethod] = useState('fft');
   const [equalizerTab, setEqualizerTab] = useState('equalizer'); // 'equalizer' | 'ai'
   const [aiComponents, setAiComponents] = useState([]);
-  const [aiModeFreqConfig, setAiModeFreqConfig] = useState({});
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState('');
   const [aiComparisonView, setAiComparisonView] = useState('ai'); // 'ai' | 'static'
   // Linked viewer window (0-1 normalized signal range) shared by input and output.
   const [linkedViewWindow, setLinkedViewWindow] = useState({ start: 0, end: 1 });
   const [fftZoomWindow, setFftZoomWindow] = useState({ x: null, y: null });
+  const [specZoomWindow, setSpecZoomWindow] = useState({ t0: 0, t1: 1, f0: 0, f1: 1 });
 
   const audioCtxRef = useRef(null);
   const sourceRef = useRef(null);
@@ -347,6 +345,7 @@ function App() {
   const offsetTimeRef = useRef(0);
   const playbackSampleRateRef = useRef(44100);
   const prevOutputSignalRef = useRef(null);
+  const lastStableBackendDataRef = useRef(null);
   const autoScrollEnabledRef = useRef(true);
   const aiPresetFileInputRef = useRef(null);
 
@@ -391,6 +390,10 @@ function App() {
     return modeFreqBands;
   }, [equalizerTab, aiModeFreqBands, modeFreqBands]);
 
+  // Keep preview effects immediate while backend requests can lag slightly behind.
+  const deferredProcessingBands = useDeferredValue(activeProcessingBands);
+  const deferredWaveletSliders = useDeferredValue(waveletSliders);
+
   const mockSignalData = useMockProcessing({
     modeId: activeModeId,
     freqSliders: activeProcessingBands.map((b) => Number(b.gain) || 1),
@@ -409,27 +412,60 @@ function App() {
   const waveletLevelLabels = makeWaveletLevelLabels(maxWaveletLevel);
   const waveletLevel = maxWaveletLevel;
 
-  const { data: backendSignalData, error: backendProcessingError } = useBackendProcessing({
+  const { data: backendSignalData, loading: backendProcessingLoading, error: backendProcessingError } = useBackendProcessing({
     modeId: activeModeId,
-    freqSliders: activeProcessingBands.map((b) => Number(b.gain) || 1),
-    genericBands: activeProcessingBands,
+    freqSliders: deferredProcessingBands.map((b) => Number(b.gain) || 1),
+    genericBands: deferredProcessingBands,
     waveletType,
     waveletLevel,
     sampleRate: uploadedSampleRate,
     signalData: uploadedSignal || null,
     useFallback: true,
     processingMethod,
-    waveletSliders
+    waveletSliders: deferredWaveletSliders
   });
+
+  useEffect(() => {
+    if (uploadedSignal && backendSignalData) {
+      lastStableBackendDataRef.current = backendSignalData;
+    }
+  }, [uploadedSignal, backendSignalData]);
+
+  useEffect(() => {
+    if (!uploadedSignal) {
+      lastStableBackendDataRef.current = null;
+    }
+  }, [uploadedSignal, activeModeId]);
+
+  const passthroughSignalData = useMemo(() => {
+    if (!uploadedSignal) return null;
+    return {
+      ...(mockSignalData || {}),
+      input_signal: uploadedSignal,
+      output_signal: uploadedSignal
+    };
+  }, [uploadedSignal, mockSignalData]);
 
   // Prefer backend processing when a real uploaded signal exists.
   const signalData = useMemo(() => {
     if (!uploadedSignal) return mockSignalData;
+
     if (backendSignalData) return backendSignalData;
 
-    // Backend unavailable/slow: keep controls responsive with local mock processing.
+    // During backend latency, keep last valid backend output to avoid visual/audio artifacts.
+    if (backendProcessingLoading && lastStableBackendDataRef.current) {
+      return lastStableBackendDataRef.current;
+    }
+
+    // Initial backend run or backend unavailable: show clean passthrough, not fake transformed signal.
+    if (passthroughSignalData) return passthroughSignalData;
+
     return mockSignalData;
-  }, [uploadedSignal, backendSignalData, mockSignalData]);
+  }, [uploadedSignal, backendSignalData, backendProcessingLoading, passthroughSignalData, mockSignalData]);
+
+  useEffect(() => {
+    setSpecZoomWindow({ t0: 0, t1: 1, f0: 0, f1: 1 });
+  }, [activeModeId, uploadedSignal]);
 
   const sharedSpectrogramMax = useMemo(() => {
     const specIn = signalData?.spectrogram?.in;
@@ -1552,6 +1588,8 @@ function App() {
     handleStop();
     // Reset AI Separation state for the current mode whenever a new signal is loaded.
     resetAiSeparationState(activeModeId);
+    // Start with FFT for quick first render after opening a file.
+    setProcessingMethod('fft');
 
     const normalized = normalizeUploadedSignal(signal, sampleRate);
 
@@ -1649,6 +1687,8 @@ function App() {
     handleStop();
     // Reset AI Separation state for the current mode whenever a new signal is loaded.
     resetAiSeparationState(activeModeId);
+    // Start with FFT for quick first render after opening a file.
+    setProcessingMethod('fft');
 
     // Always show selected file name immediately.
     setModeAudioFiles(prev => ({
@@ -1657,24 +1697,7 @@ function App() {
     }));
 
     try {
-      const response = await uploadAudio(file);
-      const backendSignal = response?.data?.signal;
-      const backendSampleRate = response?.data?.audio?.sample_rate;
-
-      if (Array.isArray(backendSignal) && backendSignal.length > 0) {
-        const normalized = normalizeUploadedSignal(backendSignal, backendSampleRate);
-        setModeUploadedSignals(prev => ({
-          ...prev,
-          [activeModeId]: normalized.signal
-        }));
-        setModeUploadedSampleRates(prev => ({
-          ...prev,
-          [activeModeId]: normalized.sampleRate
-        }));
-        return;
-      }
-
-      // Backend truncates large payloads; decode locally when no signal is returned.
+      // Decode locally first so selecting a file updates the UI immediately.
       const decoded = await decodeAudioFile(file);
       setModeUploadedSignals(prev => ({
         ...prev,
@@ -1684,20 +1707,34 @@ function App() {
         ...prev,
         [activeModeId]: decoded.sampleRate || 44100
       }));
+
+      // Keep backend upload in background for compatibility/metadata without blocking UI.
+      uploadAudio(file).catch((uploadError) => {
+        console.warn('Background upload failed after local load:', uploadError);
+      });
     } catch (error) {
-      // If backend is unavailable, still load locally so UI remains usable.
+      // Fallback path: if browser decode fails, try backend decode.
       try {
-        const decoded = await decodeAudioFile(file);
-        setModeUploadedSignals(prev => ({
-          ...prev,
-          [activeModeId]: decoded.signal
-        }));
-        setModeUploadedSampleRates(prev => ({
-          ...prev,
-          [activeModeId]: decoded.sampleRate || 44100
-        }));
-      } catch (decodeError) {
-        console.error('Could not load selected audio file:', decodeError);
+        const response = await uploadAudio(file);
+        const backendSignal = response?.data?.signal;
+        const backendSampleRate = response?.data?.audio?.sample_rate;
+
+        if (Array.isArray(backendSignal) && backendSignal.length > 0) {
+          const normalized = normalizeUploadedSignal(backendSignal, backendSampleRate);
+          setModeUploadedSignals(prev => ({
+            ...prev,
+            [activeModeId]: normalized.signal
+          }));
+          setModeUploadedSampleRates(prev => ({
+            ...prev,
+            [activeModeId]: normalized.sampleRate
+          }));
+          return;
+        }
+
+        throw new Error('Backend did not return decodable signal data');
+      } catch (backendError) {
+        console.error('Could not load selected audio file:', backendError);
         window.alert('Could not load this audio file. Please try WAV/MP3 with a supported codec.');
       }
     }
@@ -2292,7 +2329,16 @@ function App() {
                       <option value="grayscale">Grayscale</option>
                     </select>
                   </div>
-                  <SpectrogramViewer title="" times={signalData.spectrogram.t} freqs={signalData.spectrogram.f} magnitudes={signalData.spectrogram.in} normalizationMax={sharedSpectrogramMax} colorScale={inputSpecColorScale} />
+                  <SpectrogramViewer
+                    title=""
+                    times={signalData.spectrogram.t}
+                    freqs={signalData.spectrogram.f}
+                    magnitudes={signalData.spectrogram.in}
+                    normalizationMax={sharedSpectrogramMax}
+                    colorScale={inputSpecColorScale}
+                    viewWindow={specZoomWindow}
+                    onViewWindowChange={setSpecZoomWindow}
+                  />
                 </div>
                 <div className="box chart-box">
                   <div className="section-head" style={{ marginBottom: '0.4rem' }}>
@@ -2304,7 +2350,16 @@ function App() {
                       <option value="grayscale">Grayscale</option>
                     </select>
                   </div>
-                  <SpectrogramViewer title="" times={signalData.spectrogram.t} freqs={signalData.spectrogram.f} magnitudes={signalData.spectrogram.out} normalizationMax={sharedSpectrogramMax} colorScale={outputSpecColorScale} />
+                  <SpectrogramViewer
+                    title=""
+                    times={signalData.spectrogram.t}
+                    freqs={signalData.spectrogram.f}
+                    magnitudes={signalData.spectrogram.out}
+                    normalizationMax={sharedSpectrogramMax}
+                    colorScale={outputSpecColorScale}
+                    viewWindow={specZoomWindow}
+                    onViewWindowChange={setSpecZoomWindow}
+                  />
                 </div>
               </div>
             )}
@@ -2428,17 +2483,6 @@ function App() {
                     })()}
                   </div>
                 )}
-
-                {!aiLoading && !aiError && aiComponents.length > 0 && activeModeId !== 'music' && (
-                  <div className="bands-info">
-                    {aiComponents.map((comp) => (
-                      <div key={`ai-result-${comp.id}`} className="band-info-item">
-                        <span className="band-info-label">{comp.name}</span>
-                        <span className="band-info-gain">RMS {Number(comp.rms || 0).toFixed(4)}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
               </div>
             </div>
           )}
@@ -2449,5 +2493,3 @@ function App() {
 }
 
 export default App;
-
-
