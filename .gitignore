@@ -10,3 +10,7 @@ __pycache__/
 venv/
 env/
 .env
+
+backend/models/*.pth
+
+backend/models/*.pt
