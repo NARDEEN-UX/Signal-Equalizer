@@ -109,6 +109,26 @@ const LANDING_MODES = [
   { id: 'ecg', title: 'ECG Abnormalities', desc: 'Detect cardiac arrhythmias' }
 ];
 
+const DEFAULT_ECG_AI_STATE = { loading: false, error: null, result: null };
+
+const createDefaultModeUiState = () => ({
+  equalizerTab: 'equalizer',
+  aiComponents: [],
+  aiLoading: false,
+  aiError: '',
+  aiNotice: '',
+  aiComparisonView: 'ai',
+  ecgAiState: { ...DEFAULT_ECG_AI_STATE }
+});
+
+const buildInitialModeUiState = () => {
+  const initial = {};
+  MODES.forEach((mode) => {
+    initial[mode.id] = createDefaultModeUiState();
+  });
+  return initial;
+};
+
 // Default band configurations for each mode
 const DEFAULT_MODE_BANDS = {
   generic: [
@@ -331,13 +351,7 @@ function App() {
   const setWaveletSliders = (newSliders) => updateWaveletSliders(activeModeId, newSliders);
 
   const [processingMethod, setProcessingMethod] = useState('fft');
-  const [equalizerTab, setEqualizerTab] = useState('equalizer'); // 'equalizer' | 'ai'
-  const [aiComponents, setAiComponents] = useState([]);
-  const [aiLoading, setAiLoading] = useState(false);
-  const [aiError, setAiError] = useState('');
-  const [aiNotice, setAiNotice] = useState('');
-  const [aiComparisonView, setAiComparisonView] = useState('ai'); // 'ai' | 'static'
-  const [ecgAiState, setEcgAiState] = useState({ loading: false, error: null, result: null });
+  const [modeUiState, setModeUiState] = useState(() => buildInitialModeUiState());
   // Linked viewer window (0-1 normalized signal range) shared by input and output.
   const [linkedViewWindow, setLinkedViewWindow] = useState({ start: 0, end: 1 });
   const [fftZoomWindow, setFftZoomWindow] = useState({ x: null, y: null });
@@ -353,7 +367,7 @@ function App() {
   const playbackSampleRateRef = useRef(44100);
   const playbackInputSampleRateRef = useRef(44100);
   const prevOutputSignalRef = useRef(null);
-  const lastStableBackendDataRef = useRef(null);
+  const lastStableBackendDataByModeRef = useRef({});
   const autoScrollEnabledRef = useRef(true);
   const aiPresetFileInputRef = useRef(null);
   const aiStemSignalCacheRef = useRef(new Map());
@@ -362,6 +376,70 @@ function App() {
   const isGenericMode = activeModeId === 'generic';
   const activeWaveletBasis = WAVELET_BASIS_MAP[normalizeWaveletName(waveletType, getModeWaveletDefault(activeModeId))] || WAVELET_BASIS_MAP.db4;
   const recommendedWavelet = WAVELET_RECOMMENDATION_BY_MODE[activeModeId] || WAVELET_RECOMMENDATION_BY_MODE.generic;
+
+  const activeModeUiState = modeUiState[activeModeId] || createDefaultModeUiState();
+  const equalizerTab = activeModeUiState.equalizerTab;
+  const aiComponents = Array.isArray(activeModeUiState.aiComponents) ? activeModeUiState.aiComponents : [];
+  const aiLoading = Boolean(activeModeUiState.aiLoading);
+  const aiError = String(activeModeUiState.aiError || '');
+  const aiNotice = String(activeModeUiState.aiNotice || '');
+  const aiComparisonView = activeModeUiState.aiComparisonView === 'static' ? 'static' : 'ai';
+  const ecgAiState = activeModeUiState.ecgAiState || DEFAULT_ECG_AI_STATE;
+
+  const updateModeUiState = (modeId, updater) => {
+    setModeUiState((prev) => {
+      const current = prev[modeId] || createDefaultModeUiState();
+      const nextValue = typeof updater === 'function' ? updater(current) : updater;
+      const next = { ...current, ...(nextValue || {}) };
+      return { ...prev, [modeId]: next };
+    });
+  };
+
+  const updateActiveModeUiState = (updater) => {
+    updateModeUiState(activeModeId, updater);
+  };
+
+  const setEqualizerTab = (valueOrUpdater) => {
+    updateActiveModeUiState((prev) => ({
+      equalizerTab: typeof valueOrUpdater === 'function' ? valueOrUpdater(prev.equalizerTab) : valueOrUpdater
+    }));
+  };
+
+  const setAiComponents = (valueOrUpdater) => {
+    updateActiveModeUiState((prev) => ({
+      aiComponents: typeof valueOrUpdater === 'function' ? valueOrUpdater(prev.aiComponents) : valueOrUpdater
+    }));
+  };
+
+  const setAiLoading = (valueOrUpdater) => {
+    updateActiveModeUiState((prev) => ({
+      aiLoading: typeof valueOrUpdater === 'function' ? valueOrUpdater(prev.aiLoading) : valueOrUpdater
+    }));
+  };
+
+  const setAiError = (valueOrUpdater) => {
+    updateActiveModeUiState((prev) => ({
+      aiError: typeof valueOrUpdater === 'function' ? valueOrUpdater(prev.aiError) : valueOrUpdater
+    }));
+  };
+
+  const setAiNotice = (valueOrUpdater) => {
+    updateActiveModeUiState((prev) => ({
+      aiNotice: typeof valueOrUpdater === 'function' ? valueOrUpdater(prev.aiNotice) : valueOrUpdater
+    }));
+  };
+
+  const setAiComparisonView = (valueOrUpdater) => {
+    updateActiveModeUiState((prev) => ({
+      aiComparisonView: typeof valueOrUpdater === 'function' ? valueOrUpdater(prev.aiComparisonView) : valueOrUpdater
+    }));
+  };
+
+  const setEcgAiState = (valueOrUpdater) => {
+    updateActiveModeUiState((prev) => ({
+      ecgAiState: typeof valueOrUpdater === 'function' ? valueOrUpdater(prev.ecgAiState || DEFAULT_ECG_AI_STATE) : valueOrUpdater
+    }));
+  };
 
   // Get frequency bands for current mode
   const modeFreqBands = modeFreqConfig[activeModeId] || DEFAULT_MODE_BANDS[activeModeId] || [];
@@ -383,13 +461,13 @@ function App() {
   };
 
   const resetAiSeparationState = (modeId = activeModeId) => {
-    setAiLoading(false);
-    setAiError('');
-    setAiNotice('');
-    setAiComponents([]);
-    if (modeId === 'ecg') {
-      setEcgAiState({ loading: false, error: null, result: null });
-    }
+    updateModeUiState(modeId, () => ({
+      aiLoading: false,
+      aiError: '',
+      aiNotice: '',
+      aiComponents: [],
+      ecgAiState: modeId === 'ecg' ? { ...DEFAULT_ECG_AI_STATE } : undefined
+    }));
     aiStemSignalCacheRef.current = new Map();
     setAiModeFreqConfig((prev) => ({
       ...prev,
@@ -441,13 +519,18 @@ function App() {
 
   useEffect(() => {
     if (uploadedSignal && backendSignalData) {
-      lastStableBackendDataRef.current = backendSignalData;
+      lastStableBackendDataByModeRef.current = {
+        ...lastStableBackendDataByModeRef.current,
+        [activeModeId]: backendSignalData
+      };
     }
-  }, [uploadedSignal, backendSignalData]);
+  }, [uploadedSignal, backendSignalData, activeModeId]);
 
   useEffect(() => {
     if (!uploadedSignal) {
-      lastStableBackendDataRef.current = null;
+      const next = { ...lastStableBackendDataByModeRef.current };
+      delete next[activeModeId];
+      lastStableBackendDataByModeRef.current = next;
     }
   }, [uploadedSignal, activeModeId]);
 
@@ -462,20 +545,22 @@ function App() {
 
   // Prefer backend processing when a real uploaded signal exists.
   const signalData = useMemo(() => {
+    const modeStableBackendData = lastStableBackendDataByModeRef.current[activeModeId] || null;
+
     if (!uploadedSignal) return mockSignalData;
 
     if (backendSignalData) return backendSignalData;
 
     // During backend latency, keep last valid backend output to avoid visual/audio artifacts.
-    if (backendProcessingLoading && lastStableBackendDataRef.current) {
-      return lastStableBackendDataRef.current;
+    if (backendProcessingLoading && modeStableBackendData) {
+      return modeStableBackendData;
     }
 
     // Initial backend run or backend unavailable: show clean passthrough, not fake transformed signal.
     if (passthroughSignalData) return passthroughSignalData;
 
     return mockSignalData;
-  }, [uploadedSignal, backendSignalData, backendProcessingLoading, passthroughSignalData, mockSignalData]);
+  }, [uploadedSignal, backendSignalData, backendProcessingLoading, passthroughSignalData, mockSignalData, activeModeId]);
 
   useEffect(() => {
     setSpecZoomWindow({ t0: 0, t1: 1, f0: 0, f1: 1 });
