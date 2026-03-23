@@ -81,7 +81,12 @@ function frequencyToWindow(freq, fs) {
 function buildEqualizedSignal(signal, bands, gains, fs = 44100, maxHz = 20000) {
   if (!signal?.length) return [];
 
-  const activeBands = (bands?.length
+  // Explicitly empty bands means "no EQ bands" -> passthrough signal.
+  if (Array.isArray(bands) && bands.length === 0) {
+    return [...signal];
+  }
+
+  const activeBands = ((Array.isArray(bands) && bands.length > 0)
     ? bands
     : [[80, 180], [180, 300], [300, 3000], [3000, 8000]]
   ).map(([lo, hi]) => {
@@ -432,13 +437,14 @@ export function useMockProcessing({
       return;
     }
     // Use the per-mode band configuration passed from App for *all* modes.
-    const bands = (genericBands?.length
+    const hasExplicitBands = Array.isArray(genericBands);
+    const bands = hasExplicitBands
       ? genericBands.map((b) => [Number(b.low) || 0, Number(b.high) || 0])
-      : [[80, 180], [180, 300], [300, 3000], [3000, 8000]]);
+      : [[80, 180], [180, 300], [300, 3000], [3000, 8000]];
 
-    const gains = (genericBands?.length
+    const gains = hasExplicitBands
       ? genericBands.map((b, i) => toNumberOr(b.gain ?? freqSliders[i], 1))
-      : freqSliders);
+      : freqSliders;
 
     const clampedGains = gains.map((g) => clamp(toNumberOr(g, 1), 0, 2));
     const isUnityGains = clampedGains.every((g) => Math.abs(g - 1) < 1e-9);

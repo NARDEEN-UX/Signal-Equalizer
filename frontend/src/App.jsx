@@ -452,7 +452,7 @@ function App() {
   };
 
   // Get frequency bands for current mode
-  const modeFreqBands = modeFreqConfig[activeModeId] || DEFAULT_MODE_BANDS[activeModeId] || [];
+  const modeFreqBands = modeFreqConfig[activeModeId] ?? DEFAULT_MODE_BANDS[activeModeId] ?? [];
   const aiModeFreqBands = aiModeFreqConfig[activeModeId] || [];
 
   // Update frequency bands for current mode

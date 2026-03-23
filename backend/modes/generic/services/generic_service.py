@@ -135,8 +135,11 @@ class GenericModeService:
     
     def validate_band_config(self, bands: List[dict], max_freq: float = 20000) -> Tuple[bool, str]:
         """Validate band configuration"""
-        if not bands:
-            return False, "At least one band is required"
+        # Empty bands is a valid passthrough configuration (no EQ applied).
+        if bands is None:
+            return False, "Bands payload is required"
+        if len(bands) == 0:
+            return True, "Valid (passthrough)"
         
         for i, band in enumerate(bands):
             if 'low' not in band or 'high' not in band:
