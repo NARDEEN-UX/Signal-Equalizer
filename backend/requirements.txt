@@ -6,8 +6,8 @@ soundfile
 python-multipart
 starlette
 PyWavelets
-<<<<<<< HEAD
 pandas
-=======
 demucs
->>>>>>> feature/music
+torch
+torchaudio
+huggingface_hub
