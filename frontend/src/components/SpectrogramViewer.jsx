@@ -91,10 +91,11 @@ const SpectrogramViewer = ({
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
+  // Only reset zoom when times/freqs change (new signal), not when magnitudes change (processing update)
   useEffect(() => {
     commitViewWindow({ t0: 0, t1: 1, f0: 0, f1: 1 });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [times, freqs, magnitudes]);
+  }, [times, freqs]);
 
   const handleMouseDown = (e) => {
     if (!containerRef.current) return;
