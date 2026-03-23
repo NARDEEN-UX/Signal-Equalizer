@@ -368,6 +368,7 @@ function App() {
   const playbackInputSampleRateRef = useRef(44100);
   const prevOutputSignalRef = useRef(null);
   const lastStableBackendDataByModeRef = useRef({});
+  const loadedDefaultsByModeRef = useRef({});
   const autoScrollEnabledRef = useRef(true);
   const aiPresetFileInputRef = useRef(null);
   const aiStemSignalCacheRef = useRef(new Map());
@@ -1182,6 +1183,10 @@ function App() {
 
   useEffect(() => {
     const loadDefaults = async () => {
+      if (loadedDefaultsByModeRef.current[activeModeId]) {
+        return;
+      }
+
       try {
         let response;
         switch (activeModeId) {
@@ -1253,6 +1258,10 @@ function App() {
           default:
             break;
         }
+        loadedDefaultsByModeRef.current = {
+          ...loadedDefaultsByModeRef.current,
+          [activeModeId]: true
+        };
       } catch (error) {
         console.log('Could not load default settings from backend:', error);
         // Silently fail - use whatever defaults are set
