@@ -1,10 +1,12 @@
 import math
 import os
-import sys
 import tempfile
+import shutil
+import pathlib
+import urllib.request
 import numpy as np
 from scipy.fft import fft, fftfreq
-from scipy.signal import resample_poly
+from scipy.signal import resample_poly, butter, sosfilt, stft, istft, find_peaks
 import time
 from typing import List, Tuple, Optional, Dict, Any
 import pywt
@@ -14,38 +16,91 @@ import soundfile as sf
 class HumansModeService:
     """Service for human voice mode signal processing"""
     
-    # Exact Fundamental Frequency Ranges for voice types
+    # Human mode frequency labels used in DSP controls.
     VOICE_RANGES = {
-        "Male Voice":     [(85, 180)],   # Adult males 85-180 Hz
-        "Female Voice":   [(165, 255)],  # Adult females 165-255 Hz
-        "Young Speaker":  [(250, 450)],  # Children 250-450 Hz
-        "Old Speaker":    [(80, 150)],   # Older adults (typically overlaps male low/mid)
+        "Male": [(85, 180)],
+        "Female": [(165, 300)],
+        "Old": [(80, 150)],
+        "Child": [(220, 420)],
+    }
+
+    # Broader fallback isolation ranges to keep separated stems audible
+    # when AI model loading/inference is unavailable.
+    FALLBACK_VOICE_ISOLATION_RANGES = {
+        "Male": [(80, 250), (250, 900), (900, 1800)],
+        "Female": [(165, 350), (350, 1600), (1600, 3800)],
+        "Old": [(70, 220), (220, 800), (800, 1600)],
+        "Child": [(220, 500), (500, 2200), (2200, 4000)],
+    }
+
+    # Target pitch centers used to map anonymous separated outputs
+    # back to the notebook's fixed speaker classes.
+    VOICE_TARGET_PITCH = {
+        "Male": 120.0,
+        "Female": 220.0,
+        "Old": 105.0,
+        "Child": 280.0,
     }
 
     # Pitch bins (Hz) for heuristic voice classification.
     VOICE_PITCH_BINS = (
-        (140.0, "Old Speaker"),
-        (190.0, "Male Voice"),
-        (260.0, "Female Voice"),
-        (float("inf"), "Young Speaker")
+        (180.0, "Male"),
+        (250.0, "Female"),
+        (float("inf"), "Child")
     )
     PITCH_FMIN = 50.0
     PITCH_FMAX = 500.0
 
+    NOTEBOOK_BANDS = (
+        (20.0, 250.0),
+        (250.0, 800.0),
+        (800.0, 3000.0),
+        (3000.0, 4000.0),
+    )
+    NOTEBOOK_ACTIVE_BAND_THRESHOLD = 0.10
+    # UI-oriented slider hints used to keep AI-separated voice ranges distinct.
+    LABEL_SLIDER_HINTS = {
+        "Male": (70.0, 350.0),
+        "Female": (140.0, 900.0),
+        "Old": (60.0, 280.0),
+        "Child": (180.0, 1200.0),
+    }
+    SEPFORMER_MODEL_DEFAULT = "speechbrain/sepformer-wsj02mix"
+    SEPFORMER_SAMPLE_RATE = 8000
+
     # Canonical mapping with aliases to keep legacy presets compatible.
     VOICE_NAME_ALIASES = {
-        "male voice": "Male Voice",
-        "male": "Male Voice",
-        "voice 1": "Male Voice",
-        "female voice": "Female Voice",
-        "female": "Female Voice",
-        "voice 2": "Female Voice",
-        "young speaker": "Young Speaker",
-        "young": "Young Speaker",
-        "voice 3": "Young Speaker",
-        "old speaker": "Old Speaker",
-        "old": "Old Speaker",
-        "voice 4": "Old Speaker",
+        "male": "Male",
+        "male voice": "Male",
+        "female": "Female",
+        "female voice": "Female",
+        "old": "Old",
+        "old voice": "Old",
+        "child": "Child",
+        "child voice": "Child",
+        "kid": "Child",
+        # legacy aliases
+        "male old": "Male",
+        "male_old": "Male",
+        "old male": "Male",
+        "male young": "Male",
+        "male_young": "Male",
+        "male yound": "Male",
+        "young male": "Male",
+        "female old": "Female",
+        "female_old": "Female",
+        "old female": "Female",
+        "female young": "Female",
+        "female_young": "Female",
+        "female yound": "Female",
+        "young female": "Female",
+        "young speaker": "Child",
+        "young": "Child",
+        "old speaker": "Old",
+        "voice 1": "Male",
+        "voice 2": "Female",
+        "voice 3": "Old",
+        "voice 4": "Child",
     }
 
     # 8-level Human Voice Configuration at 22.05kHz
@@ -59,10 +114,10 @@ class HumansModeService:
     }
 
     def __init__(self):
-        self.default_sample_rate = 22050  # Default SR for voice
-        self._multidecoder_model = None
-        self._multidecoder_model_name = None
-        self._multidecoder_device = "cpu"
+        self.default_sample_rate = 44100
+        self._sepformer_model = None
+        self._sepformer_model_name = None
+        self._sepformer_device = "cpu"
 
     def _canonical_voice_name(self, name: str) -> str:
         raw = str(name or "").strip()
@@ -446,11 +501,11 @@ class HumansModeService:
 
     def _classify_pitch(self, pitch_hz: Optional[float]) -> str:
         if pitch_hz is None or not np.isfinite(pitch_hz):
-            return "Male Voice"
+            return "Male"
         for cutoff, label in self.VOICE_PITCH_BINS:
             if pitch_hz <= cutoff:
                 return label
-        return "Male Voice"
+        return "Male"
 
     def _bandpass_signal(self, signal: np.ndarray, ranges: List[Tuple[float, float]], sample_rate: int) -> np.ndarray:
         data = np.asarray(signal, dtype=np.float32).reshape(-1)
@@ -484,131 +539,590 @@ class HumansModeService:
                     pass
         return None
 
-    def _load_multidecoder_model(self, model_name: str):
-        try:
-            import torch  # type: ignore
-        except Exception as exc:
-            raise RuntimeError("PyTorch is not installed. Install torch/torchaudio/asteroid first.") from exc
+    @staticmethod
+    def _normalize_audio(signal: np.ndarray) -> np.ndarray:
+        data = np.asarray(signal, dtype=np.float32).reshape(-1)
+        peak = float(np.max(np.abs(data))) if data.size else 0.0
+        if peak <= 1e-8:
+            return data
+        return data / peak
 
-        model = None
-        errors = []
-
-        repo_root = os.path.join(os.path.dirname(__file__), "../../../models/multidecoder_dprnn")
-        candidate_paths = [
-            repo_root,
-            os.path.join(repo_root, "Multi-Decoder-DPRNN"),
-            os.path.join(repo_root, "asteroid", "egs", "wsj0-mix-var", "Multi-Decoder-DPRNN")
-        ]
-
-        for repo_path in candidate_paths:
-            if not os.path.isdir(repo_path):
-                continue
-            if not os.path.isfile(os.path.join(repo_path, "model.py")):
-                continue
-            sys.path.insert(0, repo_path)
-            try:
-                from model import MultiDecoderDPRNN  # type: ignore
-                model = MultiDecoderDPRNN.from_pretrained(model_name)
-                break
-            except Exception as exc:
-                errors.append(f"local repo ({repo_path}): {exc}")
-            finally:
-                if sys.path[0] == repo_path:
-                    sys.path.pop(0)
-
-        if model is None:
-            try:
-                from asteroid.models import MultiDecoderDPRNN  # type: ignore
-                model = MultiDecoderDPRNN.from_pretrained(model_name)
-            except Exception as exc:
-                errors.append(f"asteroid.models.MultiDecoderDPRNN: {exc}")
-
-        if model is None:
-            try:
-                from asteroid.models import BaseModel  # type: ignore
-                model = BaseModel.from_pretrained(model_name)
-            except Exception as exc:
-                errors.append(f"asteroid BaseModel: {exc}")
-
-        if model is None:
-            details = "; ".join(errors) if errors else "unknown error"
-            raise RuntimeError(
-                "Could not load MultiDecoderDPRNN. "
-                "Install asteroid and/or clone the Multi-Decoder-DPRNN repo into "
-                "`backend/models/multidecoder_dprnn` so `model.py` is available. "
-                f"Details: {details}"
-            )
-
-        if hasattr(model, "eval"):
-            model.eval()
-
-        device = "cuda" if torch.cuda.is_available() else "cpu"
-        if hasattr(model, "to"):
-            model = model.to(device)
-
-        return model, torch, device
-
-    def _get_multidecoder_runtime(self, model_name: str):
-        if self._multidecoder_model is None or self._multidecoder_model_name != model_name:
-            model, torch_module, device = self._load_multidecoder_model(model_name)
-            self._multidecoder_model = model
-            self._multidecoder_model_name = model_name
-            self._multidecoder_device = device
-            return model, torch_module, device
-
-        import torch  # type: ignore
-        return self._multidecoder_model, torch, self._multidecoder_device
+    def _bandpass_enhance(
+        self,
+        audio: np.ndarray,
+        sample_rate: int,
+        low: float = 80.0,
+        high: float = 3800.0
+    ) -> np.ndarray:
+        data = np.asarray(audio, dtype=np.float32).reshape(-1)
+        if data.size == 0:
+            return data
+        nyquist = max(1.0, sample_rate / 2.0)
+        lo = float(max(20.0, min(low, nyquist * 0.95)))
+        hi = float(max(lo + 10.0, min(high, nyquist * 0.99)))
+        if hi <= lo + 1.0:
+            return self._normalize_audio(data)
+        sos = butter(6, [lo, hi], btype="band", fs=sample_rate, output="sos")
+        filtered = sosfilt(sos, data).astype(np.float32)
+        return self._normalize_audio(filtered)
 
     @staticmethod
-    def _normalize_multidecoder_output(estimated, torch_module) -> List[np.ndarray]:
+    def _collect_source_waveforms(estimated) -> List[np.ndarray]:
         est = estimated
         if hasattr(est, "detach"):
             est = est.detach()
-        if torch_module is not None and hasattr(torch_module, "Tensor") and isinstance(est, torch_module.Tensor):
+        if hasattr(est, "cpu"):
             est = est.cpu()
 
         est_np = np.asarray(est)
+        est_np = np.squeeze(est_np)
+        if est_np.ndim == 1:
+            return [np.asarray(est_np, dtype=np.float32)]
+
         if est_np.ndim == 2:
-            if est_np.shape[0] <= 8:
-                return [np.asarray(est_np[i], dtype=np.float32) for i in range(est_np.shape[0])]
-            return [np.asarray(est_np[0], dtype=np.float32)]
+            if est_np.shape[1] <= 4:
+                return [np.asarray(est_np[:, i], dtype=np.float32) for i in range(est_np.shape[1])]
+            if est_np.shape[0] <= 4:
+                return [np.asarray(est_np[i, :], dtype=np.float32) for i in range(est_np.shape[0])]
+            return [np.asarray(np.mean(est_np, axis=0), dtype=np.float32)]
 
-        if est_np.ndim == 3:
-            # [sources, channels, time] or [channels, sources, time]
-            if est_np.shape[0] <= est_np.shape[1]:
-                src = np.mean(est_np, axis=1)
-            else:
-                src = np.mean(est_np.transpose(1, 0, 2), axis=1)
-            return [np.asarray(src[i], dtype=np.float32) for i in range(src.shape[0])]
+        # Prefer axis of size <= 4 as source axis.
+        candidate_axes = [i for i, dim in enumerate(est_np.shape) if 1 <= dim <= 4]
+        source_axis = candidate_axes[-1] if candidate_axes else int(np.argmin(est_np.shape))
+        src_first = np.moveaxis(est_np, source_axis, 0)
+        sources: List[np.ndarray] = []
+        for i in range(src_first.shape[0]):
+            arr = np.asarray(src_first[i], dtype=np.float32)
+            arr = np.squeeze(arr)
+            if arr.ndim == 0:
+                continue
+            if arr.ndim == 1:
+                sources.append(arr)
+                continue
+            time_axis = int(np.argmax(arr.shape))
+            arr = np.moveaxis(arr, time_axis, -1)
+            flat = arr.reshape(-1, arr.shape[-1])
+            sources.append(np.asarray(np.mean(flat, axis=0), dtype=np.float32))
+        return sources
 
-        raise RuntimeError(f"Unexpected MultiDecoderDPRNN output shape: {est_np.shape}")
+    def _load_sepformer_model(self, model_name: str):
+        try:
+            import torch  # type: ignore
+            import torchaudio  # type: ignore
 
-    def _separate_with_multidecoder(
+            cache_root = os.path.abspath(
+                os.path.join(os.path.dirname(__file__), "../../../models/huggingface_cache")
+            )
+            hub_cache = os.path.join(cache_root, "hub")
+            transformers_cache = os.path.join(cache_root, "transformers")
+            os.makedirs(hub_cache, exist_ok=True)
+            os.makedirs(transformers_cache, exist_ok=True)
+
+            # Keep all model/cache writes inside project workspace to avoid
+            # Windows profile permission issues (e.g. C:\Users\...\ .cache).
+            os.environ["HF_HOME"] = cache_root
+            os.environ["HUGGINGFACE_HUB_CACHE"] = hub_cache
+            os.environ["TRANSFORMERS_CACHE"] = transformers_cache
+            os.environ.setdefault("TORCH_HOME", os.path.join(cache_root, "torch"))
+
+            # SpeechBrain <=0.5.x expects torchaudio backend APIs that were
+            # removed in recent torchaudio releases.
+            if not hasattr(torchaudio, "set_audio_backend"):
+                def _noop_set_audio_backend(*args, **kwargs):
+                    return None
+                torchaudio.set_audio_backend = _noop_set_audio_backend  # type: ignore[attr-defined]
+
+            if not hasattr(torchaudio, "get_audio_backend"):
+                def _noop_get_audio_backend():
+                    return "soundfile"
+                torchaudio.get_audio_backend = _noop_get_audio_backend  # type: ignore[attr-defined]
+
+            if not hasattr(torchaudio, "list_audio_backends"):
+                def _noop_list_audio_backends():
+                    return ["soundfile"]
+                torchaudio.list_audio_backends = _noop_list_audio_backends  # type: ignore[attr-defined]
+
+            try:
+                from speechbrain.pretrained import SepformerSeparation as Separator  # type: ignore
+            except Exception:
+                from speechbrain.inference.separation import SepformerSeparation as Separator  # type: ignore
+
+            self._patch_speechbrain_fetch_copy_mode()
+        except Exception as exc:
+            raise RuntimeError(
+                "SpeechBrain SepFormer is not available. Install torch/torchaudio/speechbrain first."
+            ) from exc
+
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        savedir_name = model_name.replace("/", "_")
+        savedir = os.path.join(
+            os.path.dirname(__file__),
+            "../../../models/sepformer",
+            savedir_name
+        )
+        os.makedirs(savedir, exist_ok=True)
+        source_ref = model_name
+        try:
+            import huggingface_hub  # type: ignore
+
+            source_path = str(model_name or "")
+            if source_path and not os.path.isdir(source_path) and "/" in source_path:
+                local_repo_dir = os.path.abspath(
+                    os.path.join(
+                        os.path.dirname(__file__),
+                        "../../../models/sepformer_repo",
+                        source_path.replace("/", "__")
+                    )
+                )
+                os.makedirs(local_repo_dir, exist_ok=True)
+
+                # Download the repository locally without symlinks to avoid
+                # Windows privilege requirements.
+                if not os.path.exists(os.path.join(local_repo_dir, "hyperparams.yaml")):
+                    huggingface_hub.snapshot_download(
+                        repo_id=source_path,
+                        local_dir=local_repo_dir,
+                        local_dir_use_symlinks=False,
+                        resume_download=True,
+                        cache_dir=os.environ.get("HUGGINGFACE_HUB_CACHE"),
+                    )
+                source_ref = local_repo_dir
+        except Exception:
+            source_ref = model_name
+
+        model = Separator.from_hparams(source=source_ref, savedir=savedir, run_opts={"device": device})
+        return model, torch, device
+
+    def _patch_speechbrain_fetch_copy_mode(self) -> None:
+        try:
+            import huggingface_hub  # type: ignore
+            from speechbrain.pretrained import fetching as sb_fetching  # type: ignore
+            from speechbrain.pretrained import interfaces as sb_interfaces  # type: ignore
+        except Exception:
+            return
+
+        if getattr(sb_fetching, "_sigeq_no_symlink_patch", False):
+            return
+
+        original_fetch = sb_fetching.fetch
+
+        def _copy_fetch(
+            filename,
+            source,
+            savedir="./pretrained_model_checkpoints",
+            overwrite=False,
+            save_filename=None,
+            use_auth_token=False,
+            revision=None,
+            cache_dir=None,
+            silent_local_fetch=False,
+        ):
+            try:
+                return original_fetch(
+                    filename=filename,
+                    source=source,
+                    savedir=savedir,
+                    overwrite=overwrite,
+                    save_filename=save_filename,
+                    use_auth_token=use_auth_token,
+                    revision=revision,
+                    cache_dir=cache_dir,
+                    silent_local_fetch=silent_local_fetch,
+                )
+            except OSError as exc:
+                msg = str(exc).lower()
+                winerr = getattr(exc, "winerror", None)
+                if winerr not in (5, 1314) and "symlink" not in msg and "privilege" not in msg and "access is denied" not in msg:
+                    raise
+
+            if save_filename is None:
+                save_filename = filename
+
+            save_dir_path = pathlib.Path(savedir)
+            save_dir_path.mkdir(parents=True, exist_ok=True)
+            destination = save_dir_path / save_filename
+
+            if destination.exists() and not overwrite:
+                return destination
+
+            if destination.exists():
+                try:
+                    destination.unlink()
+                except Exception:
+                    pass
+
+            source_path = str(source or "")
+            if pathlib.Path(source_path).is_dir():
+                local_src = pathlib.Path(source_path) / filename
+                if not local_src.exists():
+                    raise ValueError(f"File not found in local source directory: {local_src}")
+                shutil.copyfile(str(local_src), str(destination))
+                return destination
+
+            if source_path.startswith("http://") or source_path.startswith("https://"):
+                urllib.request.urlretrieve(f"{source_path}/{filename}", str(destination))
+                return destination
+
+            fetched_file = huggingface_hub.hf_hub_download(
+                repo_id=source,
+                filename=filename,
+                use_auth_token=use_auth_token,
+                revision=revision,
+                cache_dir=cache_dir,
+            )
+            shutil.copyfile(str(fetched_file), str(destination))
+            return destination
+
+        sb_fetching.fetch = _copy_fetch
+        sb_interfaces.fetch = _copy_fetch
+        sb_fetching._sigeq_no_symlink_patch = True
+
+    def _get_sepformer_runtime(self, model_name: str):
+        if self._sepformer_model is None or self._sepformer_model_name != model_name:
+            model, torch_module, device = self._load_sepformer_model(model_name)
+            self._sepformer_model = model
+            self._sepformer_model_name = model_name
+            self._sepformer_device = device
+            return model, torch_module, device
+
+        import torch  # type: ignore
+        return self._sepformer_model, torch, self._sepformer_device
+
+    def _separate_two_with_sepformer(
+        self,
+        signal: np.ndarray,
+        sample_rate: int,
+        model
+    ) -> Tuple[np.ndarray, np.ndarray]:
+        sig = np.asarray(signal, dtype=np.float32).reshape(-1)
+        estimated = None
+
+        # Prefer tensor-based inference to avoid torchaudio/torchcodec file loaders.
+        try:
+            import torch  # type: ignore
+
+            mixture = torch.from_numpy(sig).unsqueeze(0)
+            model_device = getattr(model, "device", "cpu")
+            if model_device:
+                mixture = mixture.to(model_device)
+            with torch.no_grad():
+                estimated = model.separate_batch(mixture)
+        except Exception:
+            estimated = None
+
+        if estimated is None:
+            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
+                tmp_path = tmp.name
+            try:
+                sf.write(tmp_path, sig, int(sample_rate))
+                estimated = model.separate_file(path=tmp_path)
+            finally:
+                try:
+                    os.unlink(tmp_path)
+                except OSError:
+                    pass
+
+        sources = self._collect_source_waveforms(estimated)
+        if len(sources) < 2:
+            if not sources:
+                zero = np.zeros_like(sig, dtype=np.float32)
+                return zero, zero
+            src = self._fit_signal_length(sources[0], len(sig))
+            return self._normalize_audio(src), np.zeros_like(src)
+
+        s1 = self._fit_signal_length(sources[0], len(sig))
+        s2 = self._fit_signal_length(sources[1], len(sig))
+        return self._normalize_audio(s1), self._normalize_audio(s2)
+
+    def _separate_with_sepformer_cascade(
         self,
         signal: np.ndarray,
         sample_rate: int,
         model_name: str
     ) -> List[np.ndarray]:
-        model, torch_module, device = self._get_multidecoder_runtime(model_name)
-        target_sr = self._get_model_sample_rate(model) or sample_rate
+        # Notebook architecture for Human AI mode: SepFormer WSJ02mix 2-speaker separation.
+        model, _, _ = self._get_sepformer_runtime(model_name)
+        target_sr = self.SEPFORMER_SAMPLE_RATE
 
-        working_signal = signal
-        if int(target_sr) != int(sample_rate):
-            working_signal = self._resample_signal(signal, sample_rate, target_sr)
+        working = np.asarray(signal, dtype=np.float32).reshape(-1)
+        if int(sample_rate) != int(target_sr):
+            working = self._resample_signal(working, sample_rate, target_sr)
+        working = self._normalize_audio(working)
 
-        mixture = torch_module.from_numpy(np.asarray(working_signal, dtype=np.float32))
-        if mixture.ndim == 1:
-            mixture = mixture.unsqueeze(0)
+        spk1, spk2 = self._separate_two_with_sepformer(working, target_sr, model)
+        separated = [spk1, spk2]
+        separated = [self._bandpass_enhance(s, target_sr) for s in separated]
 
-        mixture = mixture.to(device)
-        with torch_module.no_grad():
-            estimated = model.separate(mixture)
+        if int(sample_rate) != int(target_sr):
+            separated = [self._resample_signal(s, target_sr, sample_rate) for s in separated]
 
-        sources = self._normalize_multidecoder_output(estimated, torch_module)
-        if int(target_sr) != int(sample_rate):
-            sources = [self._resample_signal(src, target_sr, sample_rate) for src in sources]
+        return [self._fit_signal_length(self._normalize_audio(s), len(signal)) for s in separated]
 
-        return sources
+    def _derive_notebook_slider_range(self, signal: np.ndarray, sample_rate: int, fallback_name: str) -> Tuple[float, float]:
+        data = np.asarray(signal, dtype=np.float32).reshape(-1)
+        if data.size < 32:
+            return self._default_voice_range(fallback_name)
+
+        fft_mag = np.abs(np.fft.rfft(data))
+        freqs = np.fft.rfftfreq(data.size, 1.0 / float(sample_rate))
+        nyquist = float(sample_rate / 2.0)
+
+        energies: List[Tuple[float, float, float]] = []
+        for low, high in self.NOTEBOOK_BANDS:
+            hi = min(float(high), nyquist)
+            lo = float(max(20.0, low))
+            if hi <= lo:
+                energies.append((lo, hi, 0.0))
+                continue
+            mask = (freqs >= lo) & (freqs <= hi)
+            val = float(np.sum(np.square(fft_mag[mask]))) if np.any(mask) else 0.0
+            energies.append((lo, hi, val))
+
+        total = float(sum(v for _, _, v in energies))
+        if not np.isfinite(total) or total <= 1e-12:
+            return self._default_voice_range(fallback_name)
+
+        normalized = [(lo, hi, (v / total)) for lo, hi, v in energies]
+        active = [(lo, hi) for lo, hi, w in normalized if w > self.NOTEBOOK_ACTIVE_BAND_THRESHOLD]
+        if not active:
+            dominant = max(normalized, key=lambda item: item[2])
+            active = [(dominant[0], dominant[1])]
+
+        low = float(min(lo for lo, _ in active))
+        high = float(max(hi for _, hi in active))
+        if high <= low + 1.0:
+            return self._default_voice_range(fallback_name)
+        return low, high
+
+    def _derive_label_aware_slider_range(
+        self,
+        signal: np.ndarray,
+        sample_rate: int,
+        label: str
+    ) -> Tuple[float, float]:
+        canonical = self._canonical_voice_name(label)
+
+        # Base estimate from notebook energy-band logic.
+        base_low, base_high = self._derive_notebook_slider_range(signal, sample_rate, canonical)
+
+        # Percentile spectral estimate keeps range tied to actual separated content.
+        est_low, est_high = self._estimate_frequency_range(signal, sample_rate)
+
+        # Label-specific hints prevent different speakers from collapsing to one broad range.
+        hint_low, hint_high = self.LABEL_SLIDER_HINTS.get(canonical, self._default_voice_range(canonical))
+
+        low = max(float(hint_low), float(min(base_low, est_low)))
+        high = min(float(hint_high), float(max(base_high, est_high)))
+
+        if not np.isfinite(low) or not np.isfinite(high) or high <= low + 20.0:
+            low, high = float(hint_low), float(hint_high)
+
+        return float(low), float(high)
+
+    def _pick_f0_candidates(
+        self,
+        signal: np.ndarray,
+        sample_rate: int,
+        max_candidates: int = 4
+    ) -> List[float]:
+        data = np.asarray(signal, dtype=np.float32).reshape(-1)
+        if data.size < 1024:
+            return []
+
+        n = len(data)
+        window = np.hanning(n)
+        spec = np.abs(np.fft.rfft(data * window))
+        freqs = np.fft.rfftfreq(n, d=1.0 / float(sample_rate))
+
+        band_mask = (freqs >= 70.0) & (freqs <= 350.0)
+        if not np.any(band_mask):
+            return []
+
+        band_spec = spec[band_mask]
+        band_freqs = freqs[band_mask]
+        if band_spec.size < 8:
+            return []
+
+        peak_height = float(np.max(band_spec) * 0.15)
+        min_dist_hz = 20.0
+        hz_per_bin = float((band_freqs[-1] - band_freqs[0]) / max(1, len(band_freqs) - 1))
+        min_dist_bins = max(1, int(round(min_dist_hz / max(1e-6, hz_per_bin))))
+
+        peak_idx, props = find_peaks(band_spec, height=peak_height, distance=min_dist_bins)
+        if peak_idx.size == 0:
+            top_idx = np.argsort(band_spec)[::-1][:max_candidates]
+            return sorted(float(band_freqs[i]) for i in top_idx)
+
+        peak_heights = props.get("peak_heights", np.zeros_like(peak_idx, dtype=float))
+        ranked = sorted(
+            [(float(peak_heights[i]), float(band_freqs[idx])) for i, idx in enumerate(peak_idx)],
+            key=lambda x: x[0],
+            reverse=True
+        )
+
+        selected: List[float] = []
+        for _, f0 in ranked:
+            if all(abs(f0 - s) >= 18.0 for s in selected):
+                selected.append(f0)
+            if len(selected) >= max_candidates:
+                break
+        return sorted(selected)
+
+    def _fallback_separate_by_harmonics(
+        self,
+        signal: np.ndarray,
+        sample_rate: int,
+        labels: List[str]
+    ) -> Optional[Dict[str, np.ndarray]]:
+        data = np.asarray(signal, dtype=np.float32).reshape(-1)
+        if data.size < 1024:
+            return None
+
+        f0_candidates = self._pick_f0_candidates(data, sample_rate, max_candidates=min(4, len(labels)))
+        if len(f0_candidates) < 2:
+            return None
+
+        nperseg = min(2048, max(512, 1 << int(np.floor(np.log2(max(512, min(len(data), 4096)))))))
+        noverlap = int(nperseg * 0.75)
+        if noverlap >= nperseg:
+            noverlap = nperseg // 2
+
+        freqs, _, Zxx = stft(
+            data,
+            fs=float(sample_rate),
+            window="hann",
+            nperseg=nperseg,
+            noverlap=noverlap,
+            boundary="zeros",
+            padded=True
+        )
+        if Zxx.size == 0:
+            return None
+
+        templates = []
+        max_freq = float(min(sample_rate / 2.0, 4000.0))
+        for f0 in f0_candidates:
+            tpl = np.zeros_like(freqs, dtype=np.float32)
+            harmonic = float(f0)
+            while harmonic <= max_freq:
+                bw = max(20.0, harmonic * 0.035)
+                tpl += np.exp(-0.5 * ((freqs - harmonic) / bw) ** 2).astype(np.float32)
+                harmonic += float(f0)
+            templates.append(tpl)
+
+        if not templates:
+            return None
+
+        template_stack = np.stack(templates, axis=0) + 1e-8
+        template_sum = np.sum(template_stack, axis=0, keepdims=True)
+        masks = template_stack / template_sum
+
+        source_signals: List[np.ndarray] = []
+        for k in range(masks.shape[0]):
+            masked = Zxx * masks[k][:, np.newaxis]
+            _, rec = istft(
+                masked,
+                fs=float(sample_rate),
+                window="hann",
+                nperseg=nperseg,
+                noverlap=noverlap,
+                input_onesided=True,
+                boundary=True
+            )
+            rec = self._fit_signal_length(np.asarray(rec, dtype=np.float32), len(data))
+            source_signals.append(self._normalize_audio(rec))
+
+        # Map candidates to the notebook labels via nearest target pitch.
+        remaining = list(range(len(f0_candidates)))
+        assigned: Dict[str, List[int]] = {name: [] for name in labels}
+        for label in labels:
+            target = self.VOICE_TARGET_PITCH.get(label)
+            if target is None or not remaining:
+                continue
+            best_i = min(remaining, key=lambda i: abs(float(f0_candidates[i]) - float(target)))
+            assigned[label].append(best_i)
+            remaining.remove(best_i)
+
+        for i in remaining:
+            nearest = min(labels, key=lambda name: abs(float(f0_candidates[i]) - float(self.VOICE_TARGET_PITCH.get(name, f0_candidates[i]))))
+            assigned[nearest].append(i)
+
+        out: Dict[str, np.ndarray] = {}
+        for label in labels:
+            idxs = assigned.get(label, [])
+            if not idxs:
+                out[label] = np.zeros(len(data), dtype=np.float32)
+                continue
+            stacked = np.stack([source_signals[i] for i in idxs], axis=0)
+            out[label] = np.sum(stacked, axis=0).astype(np.float32)
+            out[label] = self._normalize_audio(out[label])
+
+        return out
+
+    def _match_sources_to_labels(
+        self,
+        sources: List[np.ndarray],
+        labels: List[str],
+        sample_rate: int
+    ) -> Dict[str, np.ndarray]:
+        fitted = [self._fit_signal_length(src, len(sources[0])) for src in sources] if sources else []
+        if not fitted:
+            return {name: np.zeros(1, dtype=np.float32) for name in labels}
+
+        infos = []
+        for src in fitted:
+            pitch = self._estimate_pitch(src, sample_rate)
+            infos.append({
+                "signal": src,
+                "pitch": pitch,
+                "rms": self._rms(src)
+            })
+
+        remaining = set(range(len(infos)))
+        assignments: Dict[str, List[int]] = {name: [] for name in labels}
+
+        # First pass: ensure each label gets a unique best-matching source.
+        for label in labels:
+            target = self.VOICE_TARGET_PITCH.get(label)
+            best_idx = None
+            best_score = float("inf")
+
+            if target is not None:
+                for idx in list(remaining):
+                    pitch = infos[idx]["pitch"]
+                    if pitch is None or not np.isfinite(pitch):
+                        continue
+                    score = abs(float(pitch) - float(target))
+                    if score < best_score:
+                        best_score = score
+                        best_idx = idx
+
+            if best_idx is None and remaining:
+                best_idx = max(remaining, key=lambda i: infos[i]["rms"])
+
+            if best_idx is not None:
+                assignments[label].append(best_idx)
+                remaining.discard(best_idx)
+
+        # Extra sources (if any) are merged into nearest pitch class.
+        for idx in list(remaining):
+            pitch = infos[idx]["pitch"]
+            if pitch is not None and np.isfinite(pitch):
+                label = min(labels, key=lambda name: abs(float(pitch) - self.VOICE_TARGET_PITCH.get(name, float(pitch))))
+            else:
+                label = max(labels, key=lambda name: sum(infos[i]["rms"] for i in assignments[name]) if assignments[name] else 0.0)
+            assignments[label].append(idx)
+
+        output: Dict[str, np.ndarray] = {}
+        base_len = len(fitted[0])
+        for label in labels:
+            idxs = assignments.get(label, [])
+            if not idxs:
+                output[label] = np.zeros(base_len, dtype=np.float32)
+                continue
+            stack = np.stack([infos[i]["signal"] for i in idxs], axis=0)
+            output[label] = np.sum(stack, axis=0).astype(np.float32)
+        return output
 
     def separate_with_ai(
         self,
@@ -624,7 +1138,7 @@ class HumansModeService:
         if input_signal.size == 0:
             raise ValueError("Signal is empty")
 
-        model_key = str(model_name or "JunzheJosephZhu/MultiDecoderDPRNN").strip() or "JunzheJosephZhu/MultiDecoderDPRNN"
+        model_key = str(model_name or self.SEPFORMER_MODEL_DEFAULT).strip() or self.SEPFORMER_MODEL_DEFAULT
         labels = [self._canonical_voice_name(name) for name in (voice_names or list(self.VOICE_RANGES.keys()))]
 
         fallback = False
@@ -632,49 +1146,45 @@ class HumansModeService:
         speakers: List[np.ndarray] = []
 
         try:
-            speakers = self._separate_with_multidecoder(input_signal, sr_int, model_key)
+            speakers = self._separate_with_sepformer_cascade(input_signal, sr_int, model_key)
         except Exception as exc:
             fallback = True
-            warning = f"MultiDecoderDPRNN unavailable ({exc}). Falling back to DSP band isolation."
+            warning = f"SepFormer unavailable ({exc}). Falling back to DSP band isolation."
 
         components = []
         if not fallback and speakers:
-            category_signals: Dict[str, List[np.ndarray]] = {name: [] for name in labels}
-            for speaker in speakers:
-                speaker = self._fit_signal_length(speaker, len(input_signal))
-                pitch = self._estimate_pitch(speaker, sr_int)
-                category = self._classify_pitch(pitch)
-                if category not in category_signals:
-                    category_signals[category] = []
-                category_signals[category].append(speaker)
-
+            matched = self._match_sources_to_labels(speakers, labels, sr_int)
             for name in labels:
-                items = category_signals.get(name, [])
-                if items:
-                    stacked = np.stack(items, axis=0)
-                    combined = np.sum(stacked, axis=0)
-                else:
-                    combined = np.zeros_like(input_signal)
+                combined = self._fit_signal_length(matched.get(name, np.zeros_like(input_signal)), len(input_signal))
                 rms_val = self._rms(combined)
-                low, high = self._estimate_frequency_range(combined, sr_int) if rms_val > 1e-8 else self._default_voice_range(name)
+                low, high = (
+                    self._derive_label_aware_slider_range(combined, sr_int, name)
+                    if rms_val > 1e-8
+                    else self._default_voice_range(name)
+                )
                 components.append({
                     "name": name,
                     "source": name,
-                    "signal": combined.tolist(),
+                    "signal": combined,
                     "low": float(low),
                     "high": float(high),
                     "rms": float(rms_val)
                 })
         else:
+            harmonic_fallback = self._fallback_separate_by_harmonics(input_signal, sr_int, labels)
             for name in labels:
-                ranges = self.VOICE_RANGES.get(name, [(20.0, 20000.0)])
-                filtered = self._bandpass_signal(input_signal, ranges, sr_int)
-                rms_val = self._rms(filtered)
+                if harmonic_fallback is not None and name in harmonic_fallback:
+                    isolated = self._fit_signal_length(harmonic_fallback[name], len(input_signal))
+                else:
+                    ranges = self.FALLBACK_VOICE_ISOLATION_RANGES.get(name) or self.VOICE_RANGES.get(name, [(20.0, 20000.0)])
+                    isolated = self._bandpass_signal(input_signal, ranges, sr_int)
+                isolated = self._normalize_audio(isolated)
+                rms_val = self._rms(isolated)
                 low, high = self._default_voice_range(name)
                 components.append({
                     "name": name,
                     "source": name,
-                    "signal": filtered.tolist(),
+                    "signal": isolated,
                     "low": float(low),
                     "high": float(high),
                     "rms": float(rms_val)

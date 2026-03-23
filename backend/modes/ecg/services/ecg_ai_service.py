@@ -435,12 +435,16 @@ class ECGAIAnalyzer:
             key=lambda x: -x["total_importance"]
         )[:6]
 
-        # Time importance peaks top-5
+        # Time importance peaks
+        # Keep this proportional to duration so longer ECGs are not artificially
+        # limited to only a few highlighted peaks (e.g., 10 s should not cap at 5).
         peaks, _ = find_peaks(cam_tl, height=0.4,
                               distance=int(0.4 * _TARGET_SR))
         if len(peaks) == 0:
-            peaks = np.argsort(cam_tl)[-5:]
-        order = np.argsort(cam_tl[peaks])[::-1][:5]
+            fallback_k = max(3, int(round(duration)))
+            peaks = np.argsort(cam_tl)[-fallback_k:]
+        target_peak_count = max(3, int(round(duration)))
+        order = np.argsort(cam_tl[peaks])[::-1][:target_peak_count]
         time_peaks = [
             {"time_s":     round(float(peaks[order[i]]) / _TARGET_SR, 2),
              "activation": round(float(cam_tl[peaks[order[i]]]) * 100, 1)}

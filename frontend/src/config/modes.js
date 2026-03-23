@@ -8,17 +8,17 @@ export const MODES = [
   {
     id: 'human',
     name: 'Human Voices',
-    tag: '4-speaker mix',
+    tag: '2-speaker AI + DSP bands',
     description: 'Manage multiple human voices in a single recording.',
     accentClass: 'mode-human',
     icon: '👤',
-    sliderLabels: ['Male Voice', 'Female Voice', 'Young Speaker', 'Old Speaker'],
-    freqBands: [(80, 180), (180, 300), (300, 3000), (3000, 8000)],
+    sliderLabels: ['Male', 'Female', 'Old', 'Child'],
+    freqBands: [[85, 180], [165, 300], [80, 150], [220, 420]],
     wavelet: 'haar',
     waveletLevels: 5,
     sampleRate: 44100,
     allowAddSubdivision: false,
-    requirements: ['Male voice', 'Female voice', 'Young speaker', 'Old speaker']
+    requirements: ['Male voice', 'Female voice', 'Old voice features', 'Child voice features']
   },
   {
     id: 'animal',

@@ -3,30 +3,30 @@
   "bands": [
     {
       "id": "human-0",
-      "name": "Male Voice",
+      "name": "Male",
       "low": 85,
       "high": 180,
       "gain": 1.0
     },
     {
       "id": "human-1",
-      "name": "Female Voice",
+      "name": "Female",
       "low": 165,
-      "high": 255,
+      "high": 300,
       "gain": 1.0
     },
     {
       "id": "human-2",
-      "name": "Young Speaker",
-      "low": 250,
-      "high": 450,
+      "name": "Old",
+      "low": 80,
+      "high": 150,
       "gain": 1.0
     },
     {
       "id": "human-3",
-      "name": "Old Speaker",
-      "low": 80,
-      "high": 150,
+      "name": "Child",
+      "low": 220,
+      "high": 420,
       "gain": 1.0
     }
   ],
@@ -35,5 +35,5 @@
   "wavelet": "sym5",
   "wavelet_level": 6,
   "sample_rate": 44100,
-  "description": "Default humans mode configuration with 4 voice types"
+  "description": "Default humans mode configuration (Male, Female, Old, Child)"
 }

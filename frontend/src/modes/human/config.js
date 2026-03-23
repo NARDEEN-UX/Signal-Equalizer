@@ -9,13 +9,13 @@
 export const HUMAN_MODE_CONFIG = {
   id: 'human',
   name: 'Human Voices',
-  sliderLabels: ['Young', 'Old', 'Male', 'Female'],
-  voiceTypes: ['Young', 'Old', 'Male', 'Female', 'Arabic', 'English', 'Spanish', 'French', 'German', 'Chinese', 'Child', 'Adult'],
+  sliderLabels: ['Male', 'Female', 'Old', 'Child'],
+  voiceTypes: ['Male', 'Female', 'Old', 'Child'],
   freqBands: [
-    { min: 200, max: 15000, label: 'Young' },
-    { min: 80, max: 4000, label: 'Old' },
-    { min: 85, max: 255, label: 'Male' },
-    { min: 165, max: 255, label: 'Female' }
+    { min: 85, max: 180, label: 'Male' },
+    { min: 165, max: 300, label: 'Female' },
+    { min: 80, max: 150, label: 'Old' },
+    { min: 220, max: 420, label: 'Child' }
   ],
   wavelet: 'db4',
   waveletLevels: 6,

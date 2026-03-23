@@ -126,7 +126,7 @@ export const processHumansMode = (signal, gains, voiceNames, sampleRate = 44100,
   }, requestConfig);
 };
 
-export const separateHumansModeAI = (signal, voiceNames = [], sampleRate = 44100, modelName = 'JunzheJosephZhu/MultiDecoderDPRNN') => {
+export const separateHumansModeAI = (signal, voiceNames = [], sampleRate = 44100, modelName = 'speechbrain/sepformer-wsj02mix') => {
   const safeSampleRate = Math.max(1, Math.round(Number(sampleRate) || 44100));
   return API.post('/api/modes/humans/separate-ai', {
     signal,
