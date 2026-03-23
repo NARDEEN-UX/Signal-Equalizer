@@ -19,11 +19,43 @@ const SESSION_SIGNALS_BY_MODE = {
 
 const MAX_SESSION_CACHED_SAMPLES = 600000;
 
+function parseNumberList(raw, fallback = []) {
+  if (typeof raw !== 'string') return fallback;
+  const values = raw
+    .split(',')
+    .map((token) => Number(token.trim()))
+    .filter((n) => Number.isFinite(n));
+  return values.length ? values : fallback;
+}
+
+function waveformSample(type, phaseRad) {
+  const wrapped = ((phaseRad + Math.PI) % (2 * Math.PI)) - Math.PI;
+  if (type === 'square') return wrapped >= 0 ? 1 : -1;
+  if (type === 'sawtooth') return wrapped / Math.PI;
+  if (type === 'triangle') return (2 / Math.PI) * Math.asin(Math.sin(wrapped));
+  return Math.sin(wrapped);
+}
+
+function snapFrequencyToBin(freqHz, sampleRate, nperseg = 1024) {
+  const nyquist = Math.max(2, sampleRate / 2);
+  const f = Math.max(1, Math.min(nyquist - 1, Number(freqHz) || 1));
+  const bin = Math.max(1, Math.round((f * nperseg) / sampleRate));
+  return (bin * sampleRate) / nperseg;
+}
+
 const ModeSignalUploader = ({ mode, onSignalLoad, onClose }) => {
   const [signals, setSignals] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [synthDurationSec, setSynthDurationSec] = useState('3');
+  const [synthSampleRate, setSynthSampleRate] = useState('44100');
+  const [synthWaveform, setSynthWaveform] = useState('sine');
+  const [synthFreqs, setSynthFreqs] = useState('440');
+  const [synthAmps, setSynthAmps] = useState('1');
+  const [synthPhaseDeg, setSynthPhaseDeg] = useState('0');
+  const [synthNoiseLevel, setSynthNoiseLevel] = useState('0');
+  const [synthSnapToBins, setSynthSnapToBins] = useState(true);
   const fileInputRef = useRef(null);
 
   // Map mode to API functions
@@ -273,6 +305,73 @@ const ModeSignalUploader = ({ mode, onSignalLoad, onClose }) => {
     }
   };
 
+  const handleGenerateSynthetic = () => {
+    try {
+      const durationSec = Math.max(0.2, Math.min(60, Number(synthDurationSec) || 3));
+      const sampleRate = Math.max(500, Math.min(96000, Math.round(Number(synthSampleRate) || 44100)));
+      const phaseRad = ((Number(synthPhaseDeg) || 0) * Math.PI) / 180;
+      const noiseLevel = Math.max(0, Math.min(1, Number(synthNoiseLevel) || 0));
+      const nyquist = Math.max(2, sampleRate / 2);
+
+      let freqs = parseNumberList(synthFreqs, [440]).map((f) => Math.max(1, Math.min(nyquist - 1, f)));
+      if (synthSnapToBins) {
+        freqs = freqs.map((f) => snapFrequencyToBin(f, sampleRate, 1024));
+      }
+      const ampsRaw = parseNumberList(synthAmps, [1]);
+      const amps = freqs.map((_, i) => {
+        const a = Number.isFinite(ampsRaw[i]) ? ampsRaw[i] : ampsRaw[ampsRaw.length - 1] || 1;
+        return Math.max(0, Math.min(2, a));
+      });
+
+      const sampleCount = Math.max(1, Math.floor(durationSec * sampleRate));
+      const out = new Array(sampleCount);
+
+      const ampSum = amps.reduce((sum, v) => sum + v, 0);
+      const normalizer = ampSum > 1 ? (1 / ampSum) : 1;
+      const fadeSamples = Math.max(1, Math.floor(sampleRate * 0.01)); // 10 ms fade to avoid edge discontinuities
+
+      for (let i = 0; i < sampleCount; i += 1) {
+        const t = i / sampleRate;
+        let v = 0;
+        for (let k = 0; k < freqs.length; k += 1) {
+          const phase = 2 * Math.PI * freqs[k] * t + phaseRad;
+          v += amps[k] * waveformSample(synthWaveform, phase);
+        }
+        v *= normalizer;
+
+        // Apply short fade in/out to reduce spectral smearing from hard boundaries.
+        if (i < fadeSamples) {
+          v *= i / fadeSamples;
+        } else if (i >= sampleCount - fadeSamples) {
+          v *= (sampleCount - 1 - i) / fadeSamples;
+        }
+
+        if (noiseLevel > 0) {
+          v += (Math.random() * 2 - 1) * noiseLevel;
+        }
+        out[i] = Math.max(-1, Math.min(1, v));
+      }
+
+      const fileName = `generic_synth_${synthWaveform}_${Date.now()}.wav`;
+      onSignalLoad(out, sampleRate, fileName);
+      setSuccess(`Synthetic signal generated (${synthWaveform}, ${freqs.length} tone${freqs.length > 1 ? 's' : ''}).`);
+      setError('');
+      setTimeout(onClose, 250);
+    } catch (err) {
+      setError(`Synthetic generation failed: ${err?.message || 'Unknown error'}`);
+      setSuccess('');
+    }
+  };
+
+  const applyPureSinePreset = () => {
+    setSynthWaveform('sine');
+    setSynthFreqs('440');
+    setSynthAmps('1');
+    setSynthPhaseDeg('0');
+    setSynthNoiseLevel('0');
+    setSynthSnapToBins(true);
+  };
+
   const handleDeleteSignal = async (signalEntry) => {
     const storageName = String(signalEntry?.storageName || signalEntry?.filename || '');
     const displayName = String(signalEntry?.filename || storageName || 'signal');
@@ -346,6 +445,62 @@ const ModeSignalUploader = ({ mode, onSignalLoad, onClose }) => {
               </button>
             </div>
           </div>
+
+          {mode === 'generic' && (
+            <div className="upload-section" style={{ marginTop: '0.75rem' }}>
+              <h4>Synthetic Signal Maker (Generic)</h4>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.5rem' }}>
+                <label className="field" style={{ margin: 0 }}>
+                  <span>Duration (sec)</span>
+                  <input className="input" type="number" min="0.2" max="60" step="0.1" value={synthDurationSec} onChange={(e) => setSynthDurationSec(e.target.value)} />
+                </label>
+                <label className="field" style={{ margin: 0 }}>
+                  <span>Sample Rate (Hz)</span>
+                  <input className="input" type="number" min="500" max="96000" step="1" value={synthSampleRate} onChange={(e) => setSynthSampleRate(e.target.value)} />
+                </label>
+                <label className="field" style={{ margin: 0 }}>
+                  <span>Waveform</span>
+                  <select className="select" value={synthWaveform} onChange={(e) => setSynthWaveform(e.target.value)}>
+                    <option value="sine">Sine</option>
+                    <option value="square">Square</option>
+                    <option value="triangle">Triangle</option>
+                    <option value="sawtooth">Sawtooth</option>
+                  </select>
+                </label>
+                <label className="field" style={{ margin: 0 }}>
+                  <span>Global Phase (deg)</span>
+                  <input className="input" type="number" min="-180" max="180" step="1" value={synthPhaseDeg} onChange={(e) => setSynthPhaseDeg(e.target.value)} />
+                </label>
+                <label className="field" style={{ margin: 0 }}>
+                  <span>Frequencies (Hz, CSV)</span>
+                  <input className="input" type="text" value={synthFreqs} onChange={(e) => setSynthFreqs(e.target.value)} placeholder="220,440,880" />
+                </label>
+                <label className="field" style={{ margin: 0 }}>
+                  <span>Amplitudes (CSV)</span>
+                  <input className="input" type="text" value={synthAmps} onChange={(e) => setSynthAmps(e.target.value)} placeholder="1,0.5,0.25" />
+                </label>
+                <label className="field" style={{ margin: 0 }}>
+                  <span>Noise Level (0..1)</span>
+                  <input className="input" type="number" min="0" max="1" step="0.01" value={synthNoiseLevel} onChange={(e) => setSynthNoiseLevel(e.target.value)} />
+                </label>
+                <label className="field" style={{ margin: 0, alignSelf: 'end' }}>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                    <input type="checkbox" checked={synthSnapToBins} onChange={(e) => setSynthSnapToBins(Boolean(e.target.checked))} />
+                    Snap Frequencies To FFT Bins
+                  </span>
+                </label>
+              </div>
+              <div style={{ marginTop: '0.6rem', display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                <button className="btn btn-ghost" onClick={applyPureSinePreset} disabled={loading}>
+                  Pure Sine Preset
+                </button>
+                <button className="btn btn-secondary" onClick={handleGenerateSynthetic} disabled={loading}>
+                  <span className="btn-icon">∿</span> Generate Synthetic Signal
+                </button>
+                <span className="helper-text">Tip: For a pure sine, keep one frequency and one amplitude (e.g. 440 and 1). Amplitudes map 1:1 to frequencies; last amplitude repeats if fewer values are provided.</span>
+              </div>
+            </div>
+          )}
 
           {error && <div className="error-message">{error}</div>}
           {success && <div className="success-message">{success}</div>}

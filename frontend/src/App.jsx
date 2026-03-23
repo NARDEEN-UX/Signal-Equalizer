@@ -18,7 +18,6 @@ import { useMockProcessing } from './mock/useMockProcessing';
 import {
   API_BASE_URL,
   saveSchema,
-  loadSchema,
   getGenericDefault,
   getMusicDefault,
   getAnimalsDefault,
@@ -227,6 +226,11 @@ const makeSignalToken = (signal) => {
   const first = Number(signal[0]) || 0;
   const last = Number(signal[signal.length - 1]) || 0;
   return `${signal.length}:${first}:${last}`;
+};
+
+const isGenericSyntheticName = (name) => {
+  const s = String(name || '').toLowerCase();
+  return s.includes('generic_synth_');
 };
 
 const getModeWaveletDefault = (modeId) => MODE_DEFAULT_WAVELET[modeId] || 'db4';
@@ -1786,56 +1790,6 @@ function App() {
     }
   };
 
-  const handleLoadPreset = () => {
-    loadSchema('equalizer_preset.json').then((res) => {
-      const d = res.data;
-      const currentMode = activeModeId;
-      const presetMode = d.mode;
-      const modeMismatch = Boolean(presetMode) && presetMode !== currentMode;
-
-      if (Array.isArray(d.sliders_freq)) {
-        const gains = d.sliders_freq.map((v) => {
-          const n = Number(v);
-          return Number.isFinite(n) ? Math.max(0, Math.min(2, n)) : 1;
-        });
-
-        // Keep preset loading in the current mode; never force mode switching.
-        setModeFreqConfig((prev) => {
-          const currentBands = Array.isArray(prev[currentMode]) ? prev[currentMode] : [];
-          if (!currentBands.length) return prev;
-          return {
-            ...prev,
-            [currentMode]: currentBands.map((b, i) => ({
-              ...b,
-              gain: Number.isFinite(gains[i]) ? gains[i] : Number(b.gain) || 1
-            }))
-          };
-        });
-      }
-
-      if (currentMode !== 'generic') {
-        const selectedWavelet = normalizeWaveletName(d.wavelet, getModeWaveletDefault(currentMode));
-        setWaveletType(selectedWavelet);
-        setWaveletSliders(normalizeWaveletSliders(d.sliders_wavelet, maxWaveletLevel));
-      }
-
-      if (Array.isArray(d.bands) && d.bands.length && !modeMismatch) {
-        setModeFreqConfig(prev => ({
-          ...prev,
-          [currentMode]: d.bands
-        }));
-      }
-
-      if (modeMismatch) {
-        window.alert(`Preset loaded into current mode (${currentMode}). Preset was saved for ${presetMode}, so band layout was not switched.`);
-      } else {
-        window.alert('Preset loaded. Controls updated.');
-      }
-    }).catch(() => {
-      window.alert('Load failed. Ensure backend is running and preset file exists.');
-    });
-  };
-
   const handleApplyBandPreset = (preset) => {
     if (!preset || !Array.isArray(preset.bands) || !preset.bands.length) return;
 
@@ -1922,6 +1876,29 @@ function App() {
     lastStableBackendDataByModeRef.current = nextStable;
 
     const normalized = normalizeUploadedSignal(signal, sampleRate);
+
+    // Synthetic generic signals are mainly used for waveform audition/comparison.
+    // Force neutral EQ so output playback reflects the generated waveform itself.
+    if (modeId === 'generic' && isGenericSyntheticName(filename)) {
+      setModeFreqConfig((prev) => {
+        const current = Array.isArray(prev.generic) ? prev.generic : [];
+        if (!current.length) return prev;
+        return {
+          ...prev,
+          generic: current.map((b) => ({ ...b, gain: 1 }))
+        };
+      });
+    }
+
+    // Auto-focus any synthetic generic waveform in time-domain view.
+    if (modeId === 'generic' && isGenericSyntheticName(filename)) {
+      const durationSec = normalized.signal.length / Math.max(1, normalized.sampleRate);
+      const windowSec = 0.02; // 20 ms shows multiple cycles around 440 Hz clearly
+      const end = durationSec > 0 ? Math.min(1, windowSec / durationSec) : 1;
+      setLinkedViewWindow({ start: 0, end: Math.max(0.01, end) });
+    } else {
+      setLinkedViewWindow({ start: 0, end: 1 });
+    }
 
     // Store the actual uploaded signal data for current mode
     setModeUploadedSignals(prev => ({
@@ -2349,7 +2326,7 @@ function App() {
                 )}
 
               </div>
-              <button type="button" className="btn btn-small" style={{ marginTop: '0.5rem' }} onClick={handleLoadPreset}>Load preset</button>
+              <button type="button" className="btn btn-small" style={{ marginTop: '0.5rem' }} onClick={() => setBandPresetModalOpen(true)}>Load preset</button>
             </div>
           )}
           {equalizerTab === 'ai' && !isGenericMode && (
