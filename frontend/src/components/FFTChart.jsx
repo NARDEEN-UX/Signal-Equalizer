@@ -65,6 +65,8 @@ const FFTChart = ({ data, audiogram, variant, zoomWindow = null, onZoomWindowCha
     setYWindow(null);
   }, [data, audiogram, controlled]);
 
+  const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+
   const clampWindow = (min, max) => {
     const fullMin = domain.min;
     const fullMax = domain.max;
@@ -72,8 +74,10 @@ const FFTChart = ({ data, audiogram, variant, zoomWindow = null, onZoomWindowCha
     const minSpan = Math.max(fullSpan * 0.002, audiogram ? 10 : 1);
     const span = Math.min(fullSpan, Math.max(minSpan, max - min));
 
-    let nextMin = min;
-    let nextMax = min + span;
+    // Keep the selected midpoint as the center of the new zoom view.
+    const center = (min + max) / 2;
+    let nextMin = center - span / 2;
+    let nextMax = center + span / 2;
 
     if (nextMin < fullMin) {
       nextMin = fullMin;
@@ -94,8 +98,10 @@ const FFTChart = ({ data, audiogram, variant, zoomWindow = null, onZoomWindowCha
     const minSpan = Math.max(0.02, fullSpan * 0.02);
     const span = Math.min(fullSpan, Math.max(minSpan, max - min));
 
-    let nextMin = min;
-    let nextMax = min + span;
+    // Keep the selected midpoint as the center of the new zoom view.
+    const center = (min + max) / 2;
+    let nextMin = center - span / 2;
+    let nextMax = center + span / 2;
 
     if (nextMin < fullMin) {
       nextMin = fullMin;
@@ -123,15 +129,15 @@ const FFTChart = ({ data, audiogram, variant, zoomWindow = null, onZoomWindowCha
     const rawCssY = e.clientY - canvasRect.top;
     const rawCanvasX = rawCssX * ratioX;
     const rawCanvasY = rawCssY * ratioY;
+    const rawWrapX = e.clientX - wrapRect.left;
+    const rawWrapY = e.clientY - wrapRect.top;
 
     const area = chart.chartArea;
-    const canvasX = Math.max(area.left, Math.min(area.right, rawCanvasX));
-    const canvasY = Math.max(area.top, Math.min(area.bottom, rawCanvasY));
-
-    const cssX = canvasX / Math.max(ratioX, 1e-6);
-    const cssY = canvasY / Math.max(ratioY, 1e-6);
-    const drawX = canvasRect.left - wrapRect.left + cssX;
-    const drawY = canvasRect.top - wrapRect.top + cssY;
+    // Keep zoom mapping bounded to plot area, but allow free drag rectangle movement in the wrapper.
+    const canvasX = clamp(rawCanvasX, area.left, area.right);
+    const canvasY = clamp(rawCanvasY, area.top, area.bottom);
+    const drawX = clamp(rawWrapX, 0, wrapRect.width);
+    const drawY = clamp(rawWrapY, 0, wrapRect.height);
 
     return { canvasX, canvasY, drawX, drawY };
   };
@@ -168,6 +174,21 @@ const FFTChart = ({ data, audiogram, variant, zoomWindow = null, onZoomWindowCha
         : d
     );
   };
+
+  useEffect(() => {
+    if (!drag?.active) return undefined;
+
+    const onMove = (evt) => handleMouseMove(evt);
+    const onUp = () => finishDragZoom();
+
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+
+    return () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+  }, [drag]);
 
   const finishDragZoom = () => {
     const chart = chartRef.current;
@@ -284,12 +305,11 @@ const FFTChart = ({ data, audiogram, variant, zoomWindow = null, onZoomWindowCha
       )}
       <div
         className="chart-wrap"
-        style={{ height: 300 }}
+        style={{ height: 300, position: 'relative' }}
         ref={wrapRef}
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={finishDragZoom}
-        onMouseLeave={finishDragZoom}
         onDoubleClick={handleResetZoom}
         title="Drag to select FFT zoom region. Double-click: reset."
       >
