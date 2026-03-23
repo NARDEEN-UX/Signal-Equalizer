@@ -70,9 +70,11 @@ const ModeSignalUploader = ({ mode, onSignalLoad, onClose }) => {
 
       const response = await api.upload(file);
       const uploaded = response?.data || {};
-      const entryId = uploaded.filename || `${mode}_${Date.now()}.wav`;
+      const storageName = uploaded.filename || `${mode}_${Date.now()}.wav`;
+      const displayName = uploaded.original_name || file.name || storageName;
       const sessionEntry = {
-        filename: entryId,
+        storageName,
+        filename: displayName,
         size: Number(uploaded.size) || file.size || 0,
         sample_rate: Number(uploaded.sample_rate) || null,
         duration: Number(uploaded.duration) || null,
@@ -84,11 +86,11 @@ const ModeSignalUploader = ({ mode, onSignalLoad, onClose }) => {
       const currentSessionList = Array.isArray(SESSION_SIGNALS_BY_MODE[mode]) ? SESSION_SIGNALS_BY_MODE[mode] : [];
       SESSION_SIGNALS_BY_MODE[mode] = [
         sessionEntry,
-        ...currentSessionList.filter((s) => s?.filename !== sessionEntry.filename)
+        ...currentSessionList.filter((s) => (s?.storageName || s?.filename) !== sessionEntry.storageName)
       ];
       setSignals([...SESSION_SIGNALS_BY_MODE[mode]]);
 
-      setSuccess(`Signal "${file.name}" uploaded successfully!`);
+      setSuccess(`Signal "${displayName}" uploaded successfully!`);
       setError('');
 
       // Decode in the background and keep an in-memory session cache for instant "Load".
@@ -96,7 +98,8 @@ const ModeSignalUploader = ({ mode, onSignalLoad, onClose }) => {
         .then((decoded) => {
           if (!decoded) return;
           SESSION_SIGNALS_BY_MODE[mode] = (SESSION_SIGNALS_BY_MODE[mode] || []).map((item) => {
-            if (item?.filename !== entryId) return item;
+            const itemStorage = item?.storageName || item?.filename;
+            if (itemStorage !== storageName) return item;
             return {
               ...item,
               cachedSignal: decoded.signal,
@@ -231,28 +234,34 @@ const ModeSignalUploader = ({ mode, onSignalLoad, onClose }) => {
     }
   };
 
-  const handleLoadSignal = async (filename) => {
+  const handleLoadSignal = async (signalEntry) => {
     try {
       setLoading(true);
       const api = apiMap[mode];
       if (!api) return;
 
-      const cachedEntry = (SESSION_SIGNALS_BY_MODE[mode] || []).find((s) => s?.filename === filename);
+      const storageName = String(signalEntry?.storageName || signalEntry?.filename || '');
+      const displayName = String(signalEntry?.filename || storageName || 'signal');
+      if (!storageName) {
+        throw new Error('Missing signal filename');
+      }
+
+      const cachedEntry = (SESSION_SIGNALS_BY_MODE[mode] || []).find((s) => (s?.storageName || s?.filename) === storageName);
       if (cachedEntry && Array.isArray(cachedEntry.cachedSignal) && cachedEntry.cachedSignal.length > 0) {
-        onSignalLoad(cachedEntry.cachedSignal, cachedEntry.cachedSampleRate || cachedEntry.sample_rate || 44100, filename);
-        setSuccess(`Signal "${filename}" loaded instantly from session cache.`);
+        onSignalLoad(cachedEntry.cachedSignal, cachedEntry.cachedSampleRate || cachedEntry.sample_rate || 44100, displayName);
+        setSuccess(`Signal "${displayName}" loaded instantly from session cache.`);
         setError('');
         setLoading(false);
         setTimeout(onClose, 250);
         return;
       }
 
-      const response = await api.load(filename);
+      const response = await api.load(storageName);
       const signal = response.data.signal;
       const sampleRate = response.data.sample_rate;
 
-      onSignalLoad(signal, sampleRate, filename);
-      setSuccess(`Signal "${filename}" loaded successfully!`);
+      onSignalLoad(signal, sampleRate, displayName);
+      setSuccess(`Signal "${displayName}" loaded successfully!`);
       setError('');
 
       setLoading(false);
@@ -264,19 +273,22 @@ const ModeSignalUploader = ({ mode, onSignalLoad, onClose }) => {
     }
   };
 
-  const handleDeleteSignal = async (filename) => {
-    if (!window.confirm(`Are you sure you want to delete "${filename}"?`)) return;
+  const handleDeleteSignal = async (signalEntry) => {
+    const storageName = String(signalEntry?.storageName || signalEntry?.filename || '');
+    const displayName = String(signalEntry?.filename || storageName || 'signal');
+    if (!storageName) return;
+    if (!window.confirm(`Are you sure you want to delete "${displayName}"?`)) return;
 
     try {
       setLoading(true);
       const api = apiMap[mode];
       if (!api) return;
 
-      await api.delete(filename);
+      await api.delete(storageName);
       const currentSessionList = Array.isArray(SESSION_SIGNALS_BY_MODE[mode]) ? SESSION_SIGNALS_BY_MODE[mode] : [];
-      SESSION_SIGNALS_BY_MODE[mode] = currentSessionList.filter((s) => s?.filename !== filename);
+      SESSION_SIGNALS_BY_MODE[mode] = currentSessionList.filter((s) => (s?.storageName || s?.filename) !== storageName);
       setSignals([...SESSION_SIGNALS_BY_MODE[mode]]);
-      setSuccess(`Signal "${filename}" deleted successfully!`);
+      setSuccess(`Signal "${displayName}" deleted successfully!`);
       setError('');
     } catch (err) {
       setError('Failed to delete signal: ' + (err.response?.data?.detail || err.message));
@@ -345,7 +357,7 @@ const ModeSignalUploader = ({ mode, onSignalLoad, onClose }) => {
             ) : signals.length > 0 ? (
               <ul className="signals-list">
                 {signals.map((signal) => (
-                  <li key={signal.filename} className="signal-item">
+                  <li key={signal.storageName || signal.filename} className="signal-item">
                     <div className="signal-info">
                       <strong className="signal-name">{signal.filename}</strong>
                       <div className="signal-details">
@@ -359,14 +371,14 @@ const ModeSignalUploader = ({ mode, onSignalLoad, onClose }) => {
                     <div className="signal-actions">
                       <button
                         className="btn btn-sm btn-load"
-                        onClick={() => handleLoadSignal(signal.filename)}
+                        onClick={() => handleLoadSignal(signal)}
                         disabled={loading}
                       >
                         Load
                       </button>
                       <button
                         className="btn btn-sm btn-delete"
-                        onClick={() => handleDeleteSignal(signal.filename)}
+                        onClick={() => handleDeleteSignal(signal)}
                         disabled={loading}
                       >
                         Delete
