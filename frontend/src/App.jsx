@@ -222,6 +222,13 @@ const normalizeWaveletName = (waveletName, fallback = 'db4') => {
   return fallback;
 };
 
+const makeSignalToken = (signal) => {
+  if (!Array.isArray(signal) || signal.length === 0) return 'none';
+  const first = Number(signal[0]) || 0;
+  const last = Number(signal[signal.length - 1]) || 0;
+  return `${signal.length}:${first}:${last}`;
+};
+
 const getModeWaveletDefault = (modeId) => MODE_DEFAULT_WAVELET[modeId] || 'db4';
 
 const computeMaxWaveletLevel = (signalLength, waveletName, fallback = DEFAULT_WAVELET_LEVEL) => {
@@ -300,6 +307,7 @@ function App() {
   const [modeUploadedSignals, setModeUploadedSignals] = useState({});
   const [modeUploadedSampleRates, setModeUploadedSampleRates] = useState({});
   const [modeAudioFiles, setModeAudioFiles] = useState({});
+  const [modeSignalLoading, setModeSignalLoading] = useState({});
 
   // Get uploaded signal for current mode
   const uploadedSignal = modeUploadedSignals[activeModeId] || null;
@@ -375,6 +383,7 @@ function App() {
 
   const activeMode = MODES.find((m) => m.id === activeModeId) || MODES[0];
   const isGenericMode = activeModeId === 'generic';
+  const isSignalLoading = Boolean(modeSignalLoading[activeModeId]);
   const activeWaveletBasis = WAVELET_BASIS_MAP[normalizeWaveletName(waveletType, getModeWaveletDefault(activeModeId))] || WAVELET_BASIS_MAP.db4;
   const recommendedWavelet = WAVELET_RECOMMENDATION_BY_MODE[activeModeId] || WAVELET_RECOMMENDATION_BY_MODE.generic;
 
@@ -520,9 +529,13 @@ function App() {
 
   useEffect(() => {
     if (uploadedSignal && backendSignalData) {
+      const token = makeSignalToken(uploadedSignal);
       lastStableBackendDataByModeRef.current = {
         ...lastStableBackendDataByModeRef.current,
-        [activeModeId]: backendSignalData
+        [activeModeId]: {
+          token,
+          data: backendSignalData
+        }
       };
     }
   }, [uploadedSignal, backendSignalData, activeModeId]);
@@ -546,7 +559,16 @@ function App() {
 
   // Prefer backend processing when a real uploaded signal exists.
   const signalData = useMemo(() => {
-    const modeStableBackendData = lastStableBackendDataByModeRef.current[activeModeId] || null;
+    const signalToken = makeSignalToken(uploadedSignal);
+    const modeStableEntry = lastStableBackendDataByModeRef.current[activeModeId] || null;
+    const modeStableBackendData = modeStableEntry && modeStableEntry.token === signalToken
+      ? modeStableEntry.data
+      : null;
+
+    // During file transition, hide old visuals until new processed payload is ready.
+    if (isSignalLoading && !backendSignalData) {
+      return null;
+    }
 
     if (!uploadedSignal) return mockSignalData;
 
@@ -561,7 +583,14 @@ function App() {
     if (passthroughSignalData) return passthroughSignalData;
 
     return mockSignalData;
-  }, [uploadedSignal, backendSignalData, backendProcessingLoading, passthroughSignalData, mockSignalData, activeModeId]);
+  }, [uploadedSignal, backendSignalData, backendProcessingLoading, passthroughSignalData, mockSignalData, activeModeId, isSignalLoading]);
+
+  useEffect(() => {
+    if (!isSignalLoading) return;
+    if (backendSignalData || backendProcessingError) {
+      setModeSignalLoading((prev) => ({ ...prev, [activeModeId]: false }));
+    }
+  }, [isSignalLoading, backendSignalData, backendProcessingError, activeModeId]);
 
   useEffect(() => {
     setSpecZoomWindow({ t0: 0, t1: 1, f0: 0, f1: 1 });
@@ -1877,28 +1906,36 @@ function App() {
   };
 
   const handleModeSignalLoad = (signal, sampleRate, filename) => {
+    const modeId = activeModeId;
     // Reset transport to avoid stale offsets from previous files.
     handleStop();
     // Reset AI Separation state for the current mode whenever a new signal is loaded.
-    resetAiSeparationState(activeModeId);
+    resetAiSeparationState(modeId);
     // Start with FFT for quick first render after opening a file.
     setProcessingMethod('fft');
+
+    setModeSignalLoading((prev) => ({ ...prev, [modeId]: true }));
+    setModeUploadedSignals((prev) => ({ ...prev, [modeId]: null }));
+    setModeUploadedSampleRates((prev) => ({ ...prev, [modeId]: Number(sampleRate) || 44100 }));
+    const nextStable = { ...lastStableBackendDataByModeRef.current };
+    delete nextStable[modeId];
+    lastStableBackendDataByModeRef.current = nextStable;
 
     const normalized = normalizeUploadedSignal(signal, sampleRate);
 
     // Store the actual uploaded signal data for current mode
     setModeUploadedSignals(prev => ({
       ...prev,
-      [activeModeId]: normalized.signal
+      [modeId]: normalized.signal
     }));
     setModeUploadedSampleRates(prev => ({
       ...prev,
-      [activeModeId]: normalized.sampleRate
+      [modeId]: normalized.sampleRate
     }));
     // Also update the audioFile name for display (per mode)
     setModeAudioFiles(prev => ({
       ...prev,
-      [activeModeId]: {
+      [modeId]: {
         name: filename,
         size: normalized.signal.length * 4,
         type: 'audio/wav'
@@ -1976,17 +2013,24 @@ function App() {
   };
 
   const handleAudioFileSelect = async (file) => {
+    const modeId = activeModeId;
     // Reset transport so the new file always starts from t=0.
     handleStop();
     // Reset AI Separation state for the current mode whenever a new signal is loaded.
-    resetAiSeparationState(activeModeId);
+    resetAiSeparationState(modeId);
     // Start with FFT for quick first render after opening a file.
     setProcessingMethod('fft');
+
+    setModeSignalLoading((prev) => ({ ...prev, [modeId]: true }));
+    setModeUploadedSignals((prev) => ({ ...prev, [modeId]: null }));
+    const nextStable = { ...lastStableBackendDataByModeRef.current };
+    delete nextStable[modeId];
+    lastStableBackendDataByModeRef.current = nextStable;
 
     // Always show selected file name immediately.
     setModeAudioFiles(prev => ({
       ...prev,
-      [activeModeId]: file
+      [modeId]: file
     }));
 
     try {
@@ -1994,11 +2038,11 @@ function App() {
       const decoded = await decodeAudioFile(file);
       setModeUploadedSignals(prev => ({
         ...prev,
-        [activeModeId]: decoded.signal
+        [modeId]: decoded.signal
       }));
       setModeUploadedSampleRates(prev => ({
         ...prev,
-        [activeModeId]: decoded.sampleRate || 44100
+        [modeId]: decoded.sampleRate || 44100
       }));
 
       // Keep backend upload in background for compatibility/metadata without blocking UI.
@@ -2016,11 +2060,11 @@ function App() {
           const normalized = normalizeUploadedSignal(backendSignal, backendSampleRate);
           setModeUploadedSignals(prev => ({
             ...prev,
-            [activeModeId]: normalized.signal
+            [modeId]: normalized.signal
           }));
           setModeUploadedSampleRates(prev => ({
             ...prev,
-            [activeModeId]: normalized.sampleRate
+            [modeId]: normalized.sampleRate
           }));
           return;
         }
@@ -2028,6 +2072,7 @@ function App() {
         throw new Error('Backend did not return decodable signal data');
       } catch (backendError) {
         console.error('Could not load selected audio file:', backendError);
+        setModeSignalLoading((prev) => ({ ...prev, [modeId]: false }));
         window.alert('Could not load this audio file. Please try WAV/MP3 with a supported codec.');
       }
     }
@@ -2532,6 +2577,12 @@ function App() {
         </aside>
 
         <main className="workspace-right">
+          {isSignalLoading && !signalData && (
+            <div className="box" style={{ marginBottom: '0.8rem' }}>
+              <p className="helper-text">Processing audio... preparing waveform, FFT, and spectrogram for the new file.</p>
+            </div>
+          )}
+
           <div className="row two-boxes">
             <div className="box signal-box">
               <WaveformViewer
