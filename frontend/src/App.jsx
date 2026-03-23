@@ -16,6 +16,7 @@ import './App.css';
 import { useBackendProcessing } from './hooks/useBackendProcessing';
 import { useMockProcessing } from './mock/useMockProcessing';
 import {
+  API_BASE_URL,
   saveSchema,
   loadSchema,
   getGenericDefault,
@@ -26,8 +27,10 @@ import {
   uploadAudio,
   processGenericMode,
   processMusicMode,
+  separateMusicModeDemucs,
   processAnimalsMode,
   processHumansMode,
+  separateHumansModeAI,
   processECGMode
 } from './api';
 
@@ -46,12 +49,12 @@ const MODES = [
     id: 'music',
     name: 'Musical Instruments',
     tag: 'Music.wav',
-    description: 'Control individual instruments inside a musical mix.',
+    description: 'Control Demucs sources inside a musical mix.',
     accentClass: 'mode-music',
     icon: '♫',
-    sliderLabels: ['Bass', 'Piano', 'Vocals', 'Violin', 'Others'],
+    sliderLabels: ['drums', 'bass', 'vocals', 'guitar', 'piano', 'other'],
     allowAddSubdivision: false,
-    requirements: ['Bass instrument', 'Piano', 'Vocal tracks', 'Violin', 'Other sounds']
+    requirements: ['Demucs drums stem', 'Demucs bass stem', 'Demucs vocals stem', 'Demucs guitar stem', 'Demucs piano stem', 'Demucs other stem']
   },
   {
     id: 'animal',
@@ -100,7 +103,7 @@ const MODES = [
 
 const LANDING_MODES = [
   { id: 'generic', title: 'Generic Mode', desc: 'Custom frequency bands' },
-  { id: 'music', title: 'Musical Instruments', desc: 'Isolate drums, piano, etc.' },
+  { id: 'music', title: 'Musical Instruments', desc: 'Isolate Demucs stems (drums, bass, vocals, guitar, piano, other)' },
   { id: 'animal', title: 'Animal Sounds', desc: 'Separate mixed animal tracks' },
   { id: 'human', title: 'Human Voices', desc: 'Distinguish overlapping speakers' },
   { id: 'ecg', title: 'ECG Abnormalities', desc: 'Detect cardiac arrhythmias' }
@@ -115,11 +118,12 @@ const DEFAULT_MODE_BANDS = {
     { id: 'b4', name: 'Band 4', low: 3000, high: 8000, gain: 1 }
   ],
   music: [
-    { id: 'music-0', name: 'Bass', low: 20, high: 250, gain: 1.0 },
-    { id: 'music-1', name: 'Piano', low: 27, high: 4186, gain: 1.0 },
-    { id: 'music-2', name: 'Vocals', low: 80, high: 8000, gain: 1.0 },
-    { id: 'music-3', name: 'Violin', low: 196, high: 3520, gain: 1.0 },
-    { id: 'music-4', name: 'Others', low: 20, high: 20000, gain: 1.0 }
+    { id: 'music-0', name: 'drums', low: 20, high: 12000, gain: 1.0 },
+    { id: 'music-1', name: 'bass', low: 20, high: 300, gain: 1.0 },
+    { id: 'music-2', name: 'vocals', low: 80, high: 8000, gain: 1.0 },
+    { id: 'music-3', name: 'guitar', low: 80, high: 5000, gain: 1.0 },
+    { id: 'music-4', name: 'piano', low: 27, high: 5000, gain: 1.0 },
+    { id: 'music-5', name: 'other', low: 20, high: 20000, gain: 1.0 }
   ],
   animal: [
     { id: 'animal-0', name: 'Songbirds', low: 1000, high: 8000, gain: 1.0, examples: 'Sparrow, Canary, Warbler, Finch' },
@@ -331,6 +335,7 @@ function App() {
   const [aiComponents, setAiComponents] = useState([]);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState('');
+  const [aiNotice, setAiNotice] = useState('');
   const [aiComparisonView, setAiComparisonView] = useState('ai'); // 'ai' | 'static'
   // Linked viewer window (0-1 normalized signal range) shared by input and output.
   const [linkedViewWindow, setLinkedViewWindow] = useState({ start: 0, end: 1 });
@@ -377,6 +382,7 @@ function App() {
   const resetAiSeparationState = (modeId = activeModeId) => {
     setAiLoading(false);
     setAiError('');
+    setAiNotice('');
     setAiComponents([]);
     setAiModeFreqConfig((prev) => ({
       ...prev,
@@ -630,6 +636,7 @@ function App() {
 
     setAiLoading(true);
     setAiError('');
+    setAiNotice('');
 
     try {
       const sr = Number(uploadedSampleRate) || (activeModeId === 'ecg' ? 500 : 44100);
@@ -664,6 +671,68 @@ function App() {
           };
         });
         setAiModeFreqConfig((prev) => ({ ...prev, music: autoBands }));
+
+        const extracted = autoBands.map((band, idx) => {
+          const modelComp = rawComponents[idx] || {};
+          const modelSignal = Array.isArray(modelComp?.signal) ? modelComp.signal : [];
+          const relativeStemUrl = String(modelComp?.stem_url || '');
+          const modelStemUrl = relativeStemUrl
+            ? (relativeStemUrl.startsWith('http') ? relativeStemUrl : `${API_BASE_URL}${relativeStemUrl}`)
+            : '';
+
+          return {
+            id: band.id,
+            name: band.name,
+            low: band.low,
+            high: band.high,
+            modelRms: Number.isFinite(Number(modelComp?.rms)) ? Number(modelComp.rms) : computeRms(modelSignal),
+            modelStemUrl,
+            stemFilename: String(modelComp?.stem_filename || ''),
+            source: String(modelComp?.source || band.name),
+            modelSignal,
+            compareAi: null,
+            compareStatic: null
+          };
+        });
+
+        setAiComponents(extracted);
+        return;
+      }
+
+      if (activeModeId === 'human') {
+        const aiResponse = await separateHumansModeAI(inputSignal, [], srInt, 'JunzheJosephZhu/MultiDecoderDPRNN');
+        const rawComponents = Array.isArray(aiResponse?.data?.components) ? aiResponse.data.components : [];
+        if (!rawComponents.length) {
+          throw new Error('AI voice separation returned no components for this file.');
+        }
+
+        const warning = String(aiResponse?.data?.warning || '');
+        if (warning) {
+          setAiNotice(warning);
+        }
+
+        const previousBands = Array.isArray(aiModeFreqBands) && aiModeFreqBands.length
+          ? aiModeFreqBands
+          : modeFreqBands;
+        const gainByName = (Array.isArray(previousBands) ? previousBands : []).reduce((acc, band) => {
+          acc[String(band?.name || '').toLowerCase()] = Number(band?.gain) || 1;
+          return acc;
+        }, {});
+
+        const autoBands = rawComponents.map((comp, idx) => {
+          const name = String(comp?.name || `voice-${idx + 1}`);
+          const key = name.toLowerCase();
+          const low = Math.max(0, Number(comp?.low) || 20);
+          const high = Math.max(low + 1, Number(comp?.high) || 20000);
+          return {
+            id: `human-${idx}`,
+            name,
+            low,
+            high,
+            gain: Number.isFinite(gainByName[key]) ? gainByName[key] : 1
+          };
+        });
+        setAiModeFreqConfig((prev) => ({ ...prev, human: autoBands }));
 
         const extracted = autoBands.map((band, idx) => {
           const modelComp = rawComponents[idx] || {};
@@ -744,8 +813,10 @@ function App() {
 
   const runAiComparison = async () => {
     const inputSignal = signalData?.input_signal;
-    if (activeModeId !== 'music') {
-      setAiError('AI comparison is only available for Music mode.');
+    const isMusic = activeModeId === 'music';
+    const isHuman = activeModeId === 'human';
+    if (!isMusic && !isHuman) {
+      setAiError('AI comparison is only available for Music and Human modes.');
       return;
     }
     if (!Array.isArray(aiComponents) || aiComponents.length === 0) {
@@ -781,6 +852,19 @@ function App() {
 
       const aiRequests = aiBands.map((_, idx) => {
         const oneHot = aiBands.map((band, i) => (i === idx ? (Number(band?.gain) || 1) : 0));
+        if (isHuman) {
+          return processHumansMode(
+            inputSignal,
+            oneHot,
+            aiNames,
+            srInt,
+            method,
+            waveletType,
+            maxWaveletLevel,
+            aiWaveletSliders,
+            aiBands
+          );
+        }
         return processMusicMode(
           inputSignal,
           oneHot,
@@ -802,6 +886,19 @@ function App() {
       const staticNames = staticBands.map((b) => b.name);
       const staticRequests = staticBands.map((_, idx) => {
         const oneHot = staticBands.map((band, i) => (i === idx ? (Number(band?.gain) || 1) : 0));
+        if (isHuman) {
+          return processHumansMode(
+            inputSignal,
+            oneHot,
+            staticNames,
+            srInt,
+            method,
+            waveletType,
+            maxWaveletLevel,
+            aiWaveletSliders,
+            staticBands
+          );
+        }
         return processMusicMode(
           inputSignal,
           oneHot,
@@ -860,7 +957,7 @@ function App() {
   };
 
   const aiBandsComparisonSummary = useMemo(() => {
-    if (activeModeId !== 'music' || !Array.isArray(aiComponents) || aiComponents.length === 0) {
+    if ((activeModeId !== 'music' && activeModeId !== 'human') || !Array.isArray(aiComponents) || aiComponents.length === 0) {
       return null;
     }
     const items = aiComponents
@@ -882,7 +979,7 @@ function App() {
   }, [activeModeId, aiComponents]);
 
   const staticBandsComparisonSummary = useMemo(() => {
-    if (activeModeId !== 'music' || !Array.isArray(aiComponents) || aiComponents.length === 0) {
+    if ((activeModeId !== 'music' && activeModeId !== 'human') || !Array.isArray(aiComponents) || aiComponents.length === 0) {
       return null;
     }
     const items = aiComponents
@@ -2084,11 +2181,17 @@ function App() {
                 <p className="helper-text">
                   {activeModeId === 'music'
                     ? 'Run Demucs separation, extract stem frequency ranges into AI sliders, then compare model stems against DSP isolation using FFT/Wavelet.'
-                    : 'Run component separation for the current mode and inspect each isolated track.'}
+                    : activeModeId === 'human'
+                      ? 'Run AI voice separation to classify speakers into male/female/young/old, then compare model stems against DSP isolation.'
+                      : 'Run component separation for the current mode and inspect each isolated track.'}
                 </p>
 
-                {activeModeId === 'music' && aiModeFreqBands.length === 0 && (
-                  <p className="helper-text">Run AI Separation once to extract Demucs stem ranges into the AI sliders.</p>
+                {(activeModeId === 'music' || activeModeId === 'human') && aiModeFreqBands.length === 0 && (
+                  <p className="helper-text">
+                    {activeModeId === 'music'
+                      ? 'Run AI Separation once to extract Demucs stem ranges into the AI sliders.'
+                      : 'Run AI Separation once to extract voice ranges into the AI sliders.'}
+                  </p>
                 )}
 
                 {aiModeFreqBands.length > 0 && (
@@ -2175,6 +2278,7 @@ function App() {
                 </p>
 
                 {aiError && <p className="helper-text" style={{ color: '#fda4af' }}>{aiError}</p>}
+                {aiNotice && <p className="helper-text">{aiNotice}</p>}
 
                 {!aiLoading && !aiError && aiComponents.length === 0 && (
                   <p className="helper-text">No separated components yet. Click AI Separation.</p>
@@ -2185,7 +2289,7 @@ function App() {
                     {aiComponents.map((comp, idx) => (
                       <div key={comp.id} className="band-info-item" style={{ alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
                         <span className="band-info-label">{comp.name}</span>
-                        {activeModeId === 'music' ? (
+                        {(activeModeId === 'music' || activeModeId === 'human') ? (
                           <>
                             <span className="band-info-gain">{`${Number(comp.low || 0).toFixed(1)}-${Number(comp.high || 0).toFixed(1)} Hz`}</span>
                             {(() => {
@@ -2383,7 +2487,7 @@ function App() {
             <div className="row section-row">
               <div className="section-head">
                 <h2 className="section-title">AI Comparison Results</h2>
-                {activeModeId === 'music' && (
+                {(activeModeId === 'music' || activeModeId === 'human') && (
                   <div className="segmented-control">
                     <button
                       type="button"
@@ -2411,7 +2515,7 @@ function App() {
                   <p className="helper-text">Run AI Separation, then click Compare to generate metrics.</p>
                 )}
 
-                {!aiLoading && !aiError && aiComponents.length > 0 && activeModeId === 'music' && (
+                {!aiLoading && !aiError && aiComponents.length > 0 && (activeModeId === 'music' || activeModeId === 'human') && (
                   <div className="bands-info">
                     <div
                       className="band-info-item"

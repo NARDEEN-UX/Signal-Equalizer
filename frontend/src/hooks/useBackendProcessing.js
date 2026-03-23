@@ -111,12 +111,24 @@ export const useBackendProcessing = ({
             waveletType,
             waveletLevel,
             waveletSliders,
+            bands,
             requestConfig
           );
         } else if (modeId === 'animal') {
           response = await processAnimalsMode(signalData, gains, names, sampleRate, method, waveletType, waveletLevel, waveletSliders, requestConfig);
         } else if (modeId === 'human') {
-          response = await processHumansMode(signalData, gains, names, sampleRate, method, waveletType, waveletLevel, waveletSliders, requestConfig);
+          response = await processHumansMode(
+            signalData,
+            gains,
+            names,
+            sampleRate,
+            method,
+            waveletType,
+            waveletLevel,
+            waveletSliders,
+            bands,
+            requestConfig
+          );
         } else if (modeId === 'ecg') {
           response = await processECGMode(signalData, gains, names, sampleRate, method, waveletType, waveletLevel, waveletSliders, requestConfig);
         } else {
