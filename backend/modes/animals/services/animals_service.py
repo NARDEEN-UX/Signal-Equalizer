@@ -313,9 +313,8 @@ class AnimalModeSeparator:
         """Compute spectrogram for visualization."""
         from scipy.signal import spectrogram
         f, t, Sxx = spectrogram(signal_data, sample_rate, window='hann', nperseg=1024, noverlap=768)
-        ref = max(float(np.max(Sxx)), 1e-12)
-        Sxx_db = 10 * np.log10(np.maximum(Sxx, 1e-12) / ref)
-        Sxx_db = np.maximum(Sxx_db, -80.0)
+        Sxx_db = 10 * np.log10(np.maximum(Sxx, 1e-12))
+        Sxx_db = np.clip(Sxx_db, -120.0, 0.0)
         freq_step = max(1, len(f) // 100)
         time_step = max(1, len(t) // 100)
         return {

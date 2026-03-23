@@ -19,7 +19,6 @@ function normalizeBandRange(low, high, maxHz) {
   safeLow = clamp(safeLow, 0, Math.max(0, maxLimit - MIN_BAND_WIDTH_HZ));
   safeHigh = clamp(safeHigh, safeLow + MIN_BAND_WIDTH_HZ, maxLimit);
 
-  // If user pushes low to the ceiling, pin to a valid last band [max-1, max].
   if (safeHigh <= safeLow) {
     safeLow = Math.max(0, maxLimit - MIN_BAND_WIDTH_HZ);
     safeHigh = maxLimit;
@@ -28,19 +27,30 @@ function normalizeBandRange(low, high, maxHz) {
   return { low: safeLow, high: safeHigh };
 }
 
-const DEFAULT_BANDS = [
-  { id: 'b1', name: 'Band 1', low: 80, high: 180, gain: 1 },
-  { id: 'b2', name: 'Band 2', low: 180, high: 300, gain: 1 },
-  { id: 'b3', name: 'Band 3', low: 300, high: 3000, gain: 1 },
-  { id: 'b4', name: 'Band 4', low: 3000, high: 8000, gain: 1 }
-];
+function nextBandOrdinal(bands) {
+  let maxNum = 0;
+  (Array.isArray(bands) ? bands : []).forEach((b) => {
+    const name = String(b?.name || '').trim();
+    const m = /^band\s+(\d+)$/i.exec(name);
+    if (m) {
+      const n = Number(m[1]);
+      if (Number.isFinite(n)) maxNum = Math.max(maxNum, n);
+    }
+  });
+  return maxNum > 0 ? maxNum + 1 : ((Array.isArray(bands) ? bands.length : 0) + 1);
+}
 
-const GenericBandBuilder = ({ bands, setBands, maxHz = 20000, isEditable = true, allowReorder = true }) => {
-  const safeBands = bands?.length ? bands : DEFAULT_BANDS;
+const GenericBandBuilder = ({
+  bands,
+  setBands,
+  maxHz = 20000,
+  isEditable = true,
+  allowReorder = true
+}) => {
+  const safeBands = Array.isArray(bands) ? bands : [];
   const [draftHz, setDraftHz] = React.useState({});
   const [draftGain, setDraftGain] = React.useState({});
-  const [dragIndex, setDragIndex] = React.useState(null);
-  const [dropIndex, setDropIndex] = React.useState(null);
+  const [draggingBandId, setDraggingBandId] = React.useState(null);
   const gainRafRef = React.useRef({});
   const gainPendingRef = React.useRef({});
 
@@ -64,10 +74,10 @@ const GenericBandBuilder = ({ bands, setBands, maxHz = 20000, isEditable = true,
 
   const addBand = () => {
     if (!isEditable) return;
-    const nextIdx = safeBands.length + 1;
+    const nextIdx = nextBandOrdinal(safeBands);
     const id = `b${Date.now()}`;
     const maxLimit = Math.max(MIN_BAND_WIDTH_HZ, toFiniteNumber(maxHz, 20000));
-    const lastHigh = toFiniteNumber(safeBands[safeBands.length - 1]?.high, 2000);
+    const lastHigh = toFiniteNumber(safeBands[safeBands.length - 1]?.high, 80);
     const proposedLow = clamp(lastHigh, 0, Math.max(0, maxLimit - MIN_BAND_WIDTH_HZ));
     const proposedHigh = Math.min(maxLimit, proposedLow + 500);
     const range = normalizeBandRange(proposedLow, proposedHigh, maxLimit);
@@ -87,60 +97,23 @@ const GenericBandBuilder = ({ bands, setBands, maxHz = 20000, isEditable = true,
     if (!allowReorder) return;
     const newIndex = index + direction;
     if (newIndex < 0 || newIndex >= safeBands.length) return;
-    const newBands = [...safeBands];
-    const temp = newBands[index];
-    newBands[index] = newBands[newIndex];
-    newBands[newIndex] = temp;
-    setBands(newBands);
-  };
-
-  const reorderBands = (fromIndex, toIndex) => {
-    if (!allowReorder) return;
-    if (fromIndex == null || toIndex == null || fromIndex === toIndex) return;
-    if (fromIndex < 0 || toIndex < 0) return;
-    if (fromIndex >= safeBands.length || toIndex >= safeBands.length) return;
-
     const next = [...safeBands];
-    const [moved] = next.splice(fromIndex, 1);
-    next.splice(toIndex, 0, moved);
+    const temp = next[index];
+    next[index] = next[newIndex];
+    next[newIndex] = temp;
     setBands(next);
   };
 
-  const handleDragStart = (index) => (e) => {
+  const moveBandToIndex = (sourceId, targetIndex) => {
     if (!allowReorder) return;
-    e.stopPropagation();
-    setDragIndex(index);
-    setDropIndex(index);
-    e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('text/plain', String(index));
-  };
-
-  const handleDragHandleEnd = () => {
-    clearDragState();
-  };
-
-  const handleDragOver = (index) => (e) => {
-    if (!allowReorder) return;
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-    setDropIndex(index);
-
-    // Live preview: shift cards while dragging to show final landing position.
-    if (dragIndex == null || index === dragIndex) return;
-    reorderBands(dragIndex, index);
-    setDragIndex(index);
-  };
-
-  const handleDrop = (index) => (e) => {
-    if (!allowReorder) return;
-    e.preventDefault();
-    setDragIndex(null);
-    setDropIndex(null);
-  };
-
-  const clearDragState = () => {
-    setDragIndex(null);
-    setDropIndex(null);
+    const fromIndex = safeBands.findIndex((b) => b.id === sourceId);
+    if (fromIndex < 0 || targetIndex < 0 || targetIndex >= safeBands.length || fromIndex === targetIndex) {
+      return;
+    }
+    const reordered = [...safeBands];
+    const [moved] = reordered.splice(fromIndex, 1);
+    reordered.splice(targetIndex, 0, moved);
+    setBands(reordered);
   };
 
   const update = (id, patch) => {
@@ -240,9 +213,9 @@ const GenericBandBuilder = ({ bands, setBands, maxHz = 20000, isEditable = true,
   };
 
   const title = isEditable ? 'Custom Bands' : 'Band Controls';
-  const subtitle = isEditable 
-    ? 'Add subdivisions and control location, width and gain (0 → 2)'
-    : 'Adjust individual band gains (0 → 2)';
+  const subtitle = isEditable
+    ? 'Add subdivisions and control location, width and gain (0 -> 2)'
+    : 'Adjust individual band gains (0 -> 2)';
   const lockFrequencyRange = !isEditable;
 
   return (
@@ -256,128 +229,143 @@ const GenericBandBuilder = ({ bands, setBands, maxHz = 20000, isEditable = true,
       </div>
 
       <div className="generic-band-list">
+        {safeBands.length === 0 && (
+          <div className="helper-text" style={{ marginTop: '0.3rem' }}>
+            No bands configured. Use Add band to start.
+          </div>
+        )}
         {safeBands.map((b, idx) => {
           const safeGainValue = getDisplayGain(b.id, b.gain);
           return (
             <div
               key={b.id}
-              className={`generic-band ${dragIndex === idx ? 'dragging' : ''} ${dropIndex === idx && dragIndex !== idx ? 'drop-target' : ''}`}
-              onDragOver={handleDragOver(idx)}
-              onDrop={handleDrop(idx)}
+              className="generic-band"
+              draggable={allowReorder && safeBands.length > 1}
+              onDragStart={(e) => {
+                if (!allowReorder) return;
+                setDraggingBandId(b.id);
+                e.dataTransfer.effectAllowed = 'move';
+                e.dataTransfer.setData('text/plain', b.id);
+              }}
+              onDragOver={(e) => {
+                if (!allowReorder) return;
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'move';
+              }}
+              onDrop={(e) => {
+                if (!allowReorder) return;
+                e.preventDefault();
+                const draggedId = e.dataTransfer.getData('text/plain') || draggingBandId;
+                moveBandToIndex(draggedId, idx);
+                setDraggingBandId(null);
+              }}
+              onDragEnd={() => setDraggingBandId(null)}
+              style={{ opacity: draggingBandId === b.id ? 0.6 : 1 }}
             >
-            <div className="generic-band-top">
-              <div className="generic-band-name">{b.name}</div>
-              {(allowReorder || isEditable) && (
-                <div style={{ display: 'flex', gap: '4px' }}>
-                  {allowReorder && (
-                    <>
-                      <button
-                        type="button"
-                        className="icon-btn"
-                        onClick={() => moveBand(idx, -1)}
-                        disabled={idx === 0}
-                        title="Move Up"
-                        style={{ opacity: idx === 0 ? 0.3 : 1, cursor: idx === 0 ? 'not-allowed' : 'pointer' }}
-                      >
-                        ↑
-                      </button>
-                      <button
-                        type="button"
-                        className="icon-btn"
-                        onClick={() => moveBand(idx, 1)}
-                        disabled={idx === safeBands.length - 1}
-                        title="Move Down"
-                        style={{ opacity: idx === safeBands.length - 1 ? 0.3 : 1, cursor: idx === safeBands.length - 1 ? 'not-allowed' : 'pointer' }}
-                      >
-                        ↓
-                      </button>
-                    </>
-                  )}
-                  {isEditable && (
-                    <button type="button" className="icon-btn" onClick={() => removeBand(b.id)} title="Remove">🗑</button>
-                  )}
-                  {allowReorder && (
-                    <span
-                      className="generic-band-drag-hint"
-                      title="Drag up/down to reorder"
-                      draggable={safeBands.length > 1}
-                      onDragStart={handleDragStart(idx)}
-                      onDragEnd={handleDragHandleEnd}
-                    >
-                      ⋮⋮
-                    </span>
-                  )}
+              <div className="generic-band-top">
+                <div className="generic-band-name" title={allowReorder ? 'Drag to reorder' : ''}>
+                  {allowReorder ? ':: ' : ''}{b.name}
                 </div>
-              )}
-            </div>
+                {(allowReorder || isEditable) && (
+                  <div style={{ display: 'flex', gap: '4px' }}>
+                    {allowReorder && (
+                      <>
+                        <button
+                          type="button"
+                          className="icon-btn"
+                          onClick={() => moveBand(idx, -1)}
+                          disabled={idx === 0}
+                          title="Move Up"
+                          style={{ opacity: idx === 0 ? 0.3 : 1, cursor: idx === 0 ? 'not-allowed' : 'pointer' }}
+                        >
+                          ^
+                        </button>
+                        <button
+                          type="button"
+                          className="icon-btn"
+                          onClick={() => moveBand(idx, 1)}
+                          disabled={idx === safeBands.length - 1}
+                          title="Move Down"
+                          style={{ opacity: idx === safeBands.length - 1 ? 0.3 : 1, cursor: idx === safeBands.length - 1 ? 'not-allowed' : 'pointer' }}
+                        >
+                          v
+                        </button>
+                      </>
+                    )}
+                    {isEditable && (
+                      <button type="button" className="icon-btn" onClick={() => removeBand(b.id)} title="Remove">Delete</button>
+                    )}
+                  </div>
+                )}
+              </div>
 
-            <div className="generic-band-grid">
-              <label className="field">
-                <span>Low (Hz)</span>
-                <input
-                  type="number"
-                  value={getDisplayHz(b, 'low')}
-                  min={0}
-                  max={maxHz}
-                  onChange={(e) => {
-                    if (!lockFrequencyRange) setDraft(b.id, 'low', e.target.value);
-                  }}
-                  onBlur={() => {
-                    if (!lockFrequencyRange) commitDraftHz(b.id, 'low', Number(b.low));
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.currentTarget.blur();
-                    }
-                  }}
-                  readOnly={lockFrequencyRange}
-                  disabled={lockFrequencyRange}
-                />
-              </label>
-              <label className="field">
-                <span>High (Hz)</span>
-                <input
-                  type="number"
-                  value={getDisplayHz(b, 'high')}
-                  min={0}
-                  max={maxHz}
-                  onChange={(e) => {
-                    if (!lockFrequencyRange) setDraft(b.id, 'high', e.target.value);
-                  }}
-                  onBlur={() => {
-                    if (!lockFrequencyRange) commitDraftHz(b.id, 'high', Number(b.high));
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.currentTarget.blur();
-                    }
-                  }}
-                  readOnly={lockFrequencyRange}
-                  disabled={lockFrequencyRange}
-                />
-              </label>
-              <label className="field gain-field">
-                <span>Gain</span>
-                <div className="gain-row">
+              <div className="generic-band-grid">
+                <label className="field">
+                  <span>Low (Hz)</span>
                   <input
-                    type="range"
-                    min="0"
-                    max="2"
-                    step="0.01"
-                    value={safeGainValue}
+                    type="number"
+                    value={getDisplayHz(b, 'low')}
+                    min={0}
+                    max={maxHz}
                     onChange={(e) => {
-                      const next = Number(e.target.value);
-                      setDraftGain((prev) => ({ ...prev, [b.id]: next }));
-                      scheduleGainCommit(b.id, next);
+                      if (!lockFrequencyRange) setDraft(b.id, 'low', e.target.value);
                     }}
-                    onPointerUp={() => flushGainCommit(b.id)}
-                    onMouseUp={() => flushGainCommit(b.id)}
-                    onTouchEnd={() => flushGainCommit(b.id)}
+                    onBlur={() => {
+                      if (!lockFrequencyRange) commitDraftHz(b.id, 'low', Number(b.low));
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.currentTarget.blur();
+                      }
+                    }}
+                    readOnly={lockFrequencyRange}
+                    disabled={lockFrequencyRange}
                   />
-                  <span className="gain-pill">{safeGainValue.toFixed(2)}×</span>
-                </div>
-              </label>
-            </div>
+                </label>
+                <label className="field">
+                  <span>High (Hz)</span>
+                  <input
+                    type="number"
+                    value={getDisplayHz(b, 'high')}
+                    min={0}
+                    max={maxHz}
+                    onChange={(e) => {
+                      if (!lockFrequencyRange) setDraft(b.id, 'high', e.target.value);
+                    }}
+                    onBlur={() => {
+                      if (!lockFrequencyRange) commitDraftHz(b.id, 'high', Number(b.high));
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.currentTarget.blur();
+                      }
+                    }}
+                    readOnly={lockFrequencyRange}
+                    disabled={lockFrequencyRange}
+                  />
+                </label>
+                <label className="field gain-field">
+                  <span>Gain</span>
+                  <div className="gain-row">
+                    <input
+                      type="range"
+                      min="0"
+                      max="2"
+                      step="0.01"
+                      value={safeGainValue}
+                      onChange={(e) => {
+                        const next = Number(e.target.value);
+                        setDraftGain((prev) => ({ ...prev, [b.id]: next }));
+                        scheduleGainCommit(b.id, next);
+                      }}
+                      onPointerUp={() => flushGainCommit(b.id)}
+                      onMouseUp={() => flushGainCommit(b.id)}
+                      onTouchEnd={() => flushGainCommit(b.id)}
+                    />
+                    <span className="gain-pill">{safeGainValue.toFixed(2)}x</span>
+                  </div>
+                </label>
+              </div>
             </div>
           );
         })}
@@ -387,4 +375,3 @@ const GenericBandBuilder = ({ bands, setBands, maxHz = 20000, isEditable = true,
 };
 
 export default GenericBandBuilder;
-

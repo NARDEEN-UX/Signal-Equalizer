@@ -599,7 +599,7 @@ function App() {
   const sharedSpectrogramMax = useMemo(() => {
     const specIn = signalData?.spectrogram?.in;
     if (!specIn) return null;
-    let maxVal = 1e-8;
+    let maxVal = -Infinity;
 
     const scan = (matrix) => {
       if (!Array.isArray(matrix)) return;
@@ -608,18 +608,18 @@ function App() {
         if (Array.isArray(row)) {
           for (let c = 0; c < row.length; c += 1) {
             const v = Number(row[c]);
-            if (!Number.isNaN(v) && v > maxVal) maxVal = v;
+            if (Number.isFinite(v) && v > maxVal) maxVal = v;
           }
         } else {
           const v = Number(row);
-          if (!Number.isNaN(v) && v > maxVal) maxVal = v;
+          if (Number.isFinite(v) && v > maxVal) maxVal = v;
         }
       }
     };
 
     scan(specIn);
 
-    if (!(maxVal > 0)) {
+    if (!Number.isFinite(maxVal)) {
       return null;
     }
 

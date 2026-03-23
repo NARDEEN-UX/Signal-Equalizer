@@ -84,7 +84,9 @@ class SignalProcessor:
     def compute_spectrogram(signal_data, sample_rate=44100):
         """Compute spectrogram of signal"""
         f, t, Sxx = scipy_signal.spectrogram(signal_data, sample_rate)
-        return f, t, 10 * np.log10(Sxx + 1e-10)  # Convert to dB
+        Sxx_db = 10 * np.log10(np.maximum(Sxx, 1e-12))
+        Sxx_db = np.clip(Sxx_db, -120.0, 0.0)
+        return f, t, Sxx_db
 
 
 class AudiogramScale:

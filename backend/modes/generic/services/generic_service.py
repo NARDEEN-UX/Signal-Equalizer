@@ -118,10 +118,9 @@ class GenericModeService:
             mode='psd'
         )
 
-        # Standard log-power spectrogram: 10*log10(S/ref), clipped to 80 dB below peak.
-        ref = max(float(np.max(Sxx)), 1e-12)
-        Sxx_db = 10 * np.log10(np.maximum(Sxx, 1e-12) / ref)
-        Sxx_db = np.maximum(Sxx_db, -80.0)
+        # Absolute log-power scale keeps inter-request intensity comparisons meaningful.
+        Sxx_db = 10 * np.log10(np.maximum(Sxx, 1e-12))
+        Sxx_db = np.clip(Sxx_db, -120.0, 0.0)
         freq_step = max(1, len(f) // 100)
         time_step = max(1, len(t) // 100)
         f_ds = f[::freq_step]

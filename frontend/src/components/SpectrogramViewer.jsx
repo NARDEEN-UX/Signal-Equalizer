@@ -249,14 +249,89 @@ const SpectrogramViewer = ({
     }
 
     // Support both:
-    // - dB matrices from backend (typically <= 0, often negative)
+    // - dB matrices from backend (typically <= 0)
     // - linear magnitude matrices from mock/fallback paths (>= 0)
     const isDbInput = minVal < -1 || maxVal > 10;
 
-    const minDb = -80;
-    const maxDb = 0;
-    const dbSpan = maxDb - minDb;
-    const linearRef = Number(normalizationMax) > 0 ? Number(normalizationMax) : Math.max(maxVal, 1e-8);
+    const normalizedAnchor = Number(normalizationMax);
+    const linearRef = normalizedAnchor > 0 ? normalizedAnchor : Math.max(maxVal, 1e-8);
+
+    // Keep input/output comparable while preserving visible contrast.
+    // For dB matrices, anchor to the shared input peak (if provided) with slight headroom.
+    const dbAnchor = Number.isFinite(normalizedAnchor)
+      ? normalizedAnchor
+      : (Number.isFinite(maxVal) ? maxVal : 0);
+    // A tighter display range makes EQ changes (typically a few dB) clearly visible.
+    const displayRangeDb = 60;
+    const maxDb = isDbInput
+      ? Math.min(0, dbAnchor + 6)
+      : 0;
+    const minDb = isDbInput
+      ? Math.max(-140, maxDb - displayRangeDb)
+      : -120;
+    const dbSpan = Math.max(1e-6, maxDb - minDb);
+
+    const timeCount = isFreqByTime ? cols : (isTimeByFreq ? rows : cols);
+    let effectiveTimeStart = 0;
+    let effectiveTimeCount = Math.max(1, timeCount);
+
+    // scipy spectrogram output can include a trailing low-energy column from edge effects;
+    // skipping that final bin removes the false dark stripe at the right border.
+    if (effectiveTimeCount > 2) {
+      const firstTime = 0;
+      const secondTime = 1;
+      const prevTime = effectiveTimeCount - 2;
+      const lastTime = effectiveTimeCount - 1;
+      let firstSum = 0;
+      let secondSum = 0;
+      let prevSum = 0;
+      let lastSum = 0;
+      let samples = 0;
+      const sampleStep = Math.max(1, Math.floor(freqs.length / 48));
+      for (let fIdx = 0; fIdx < freqs.length; fIdx += sampleStep) {
+        const firstRaw = getMag(fIdx, firstTime);
+        const secondRaw = getMag(fIdx, secondTime);
+        const prevRaw = getMag(fIdx, prevTime);
+        const lastRaw = getMag(fIdx, lastTime);
+        const firstDb = isDbInput
+          ? (Number.isFinite(firstRaw) ? firstRaw : minDb)
+          : 20 * Math.log10(Math.max(firstRaw, 1e-12) / linearRef);
+        const secondDb = isDbInput
+          ? (Number.isFinite(secondRaw) ? secondRaw : minDb)
+          : 20 * Math.log10(Math.max(secondRaw, 1e-12) / linearRef);
+        const prevDb = isDbInput
+          ? (Number.isFinite(prevRaw) ? prevRaw : minDb)
+          : 20 * Math.log10(Math.max(prevRaw, 1e-12) / linearRef);
+        const lastDb = isDbInput
+          ? (Number.isFinite(lastRaw) ? lastRaw : minDb)
+          : 20 * Math.log10(Math.max(lastRaw, 1e-12) / linearRef);
+        firstSum += firstDb;
+        secondSum += secondDb;
+        prevSum += prevDb;
+        lastSum += lastDb;
+        samples += 1;
+      }
+      const firstMean = samples ? (firstSum / samples) : minDb;
+      const secondMean = samples ? (secondSum / samples) : minDb;
+      const prevMean = samples ? (prevSum / samples) : minDb;
+      const lastMean = samples ? (lastSum / samples) : minDb;
+
+      // Trim likely leading edge artifact.
+      if (firstMean <= (minDb + 2) && firstMean < (secondMean - 8)) {
+        effectiveTimeStart = 1;
+        effectiveTimeCount -= 1;
+      }
+
+      // Trim likely trailing edge artifact.
+      if (lastMean <= (minDb + 2) && lastMean < (prevMean - 8)) {
+        effectiveTimeCount -= 1;
+      }
+
+      if (effectiveTimeCount < 1) {
+        effectiveTimeStart = 0;
+        effectiveTimeCount = 1;
+      }
+    }
 
     const fStartIdx = Math.floor(currentViewWindow.f0 * Math.max(0, freqs.length - 1));
     const fEndIdx = Math.floor(currentViewWindow.f1 * Math.max(0, freqs.length - 1));
@@ -292,7 +367,8 @@ const SpectrogramViewer = ({
 
     for (let x = 0; x < width; x += 1) {
       const tNorm = currentViewWindow.t0 + (x / Math.max(1, width - 1)) * (currentViewWindow.t1 - currentViewWindow.t0);
-      const tIdx = Math.min(times.length - 1, Math.floor(tNorm * (times.length - 1)));
+      const tLocalIdx = Math.min(effectiveTimeCount - 1, Math.floor(tNorm * Math.max(0, effectiveTimeCount - 1)));
+      const tIdx = Math.min(timeCount - 1, effectiveTimeStart + tLocalIdx);
       for (let y = 0; y < height; y += 1) {
         const fIdx = yToFIdx[y];
         const raw = getMag(fIdx, tIdx);

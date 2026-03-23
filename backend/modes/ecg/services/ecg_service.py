@@ -234,9 +234,8 @@ class ECGModeService:
         seg_len = min(256, len(signal) // 4) if len(signal) >= 16 else max(4, len(signal))
         overlap = int(seg_len * 0.75)
         f, t, Sxx = spectrogram(signal, sample_rate, window='hann', nperseg=seg_len, noverlap=overlap)
-        ref = max(float(np.max(Sxx)), 1e-12)
-        Sxx_db = 10 * np.log10(np.maximum(Sxx, 1e-12) / ref)
-        Sxx_db = np.maximum(Sxx_db, -80.0)
+        Sxx_db = 10 * np.log10(np.maximum(Sxx, 1e-12))
+        Sxx_db = np.clip(Sxx_db, -120.0, 0.0)
         freq_step = max(1, len(f) // 50)
         time_step = max(1, len(t) // 50)
         return {
