@@ -231,3 +231,12 @@ export const deleteGenericSignal = (filename) => {
   return API.delete(`/api/modes/generic/signal/${filename}`);
 };
 
+// ==================== ECG AI Analysis ====================
+
+export const analyzeECGWithAI = (signal, sampleRate = 360) => {
+  return API.post('/api/modes/ecg/ai-analyze', {
+    signal,
+    sample_rate: sampleRate
+  });
+};
+

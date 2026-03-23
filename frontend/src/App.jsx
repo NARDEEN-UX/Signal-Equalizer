@@ -11,6 +11,7 @@ import ModeSignalUploader from './components/ModeSignalUploader';
 import GenericBandBuilder from './components/GenericBandBuilder';
 import BandPresetModal from './components/BandPresetModal';
 import SliderGroup from './components/SliderGroup';
+import ECGAIViewer from './components/ECGAIViewer';
 import './App.css';
 import { useBackendProcessing } from './hooks/useBackendProcessing';
 import { useMockProcessing } from './mock/useMockProcessing';
