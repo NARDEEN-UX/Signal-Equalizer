@@ -1156,6 +1156,7 @@ function App() {
     // Apply researched per-mode default wavelet basis before any backend defaults arrive.
     if (activeModeId === 'generic') {
       setProcessingMethod('fft');
+      setEqualizerTab('equalizer');
       return;
     }
     const modeDefault = getModeWaveletDefault(activeModeId);
@@ -2104,18 +2105,20 @@ function App() {
       <div className="workspace-tabs">
         <button
           type="button"
-          className={`workspace-tab ${equalizerTab === 'equalizer' ? 'active' : ''}`}
+          className={`workspace-tab ${(equalizerTab === 'equalizer' || isGenericMode) ? 'active' : ''}`}
           onClick={() => setEqualizerTab('equalizer')}
         >
           Equalizer Mode
         </button>
-        <button
-          type="button"
-          className={`workspace-tab ${equalizerTab === 'ai' ? 'active' : ''}`}
-          onClick={() => setEqualizerTab('ai')}
-        >
-          AI Separation
-        </button>
+        {!isGenericMode && (
+          <button
+            type="button"
+            className={`workspace-tab ${equalizerTab === 'ai' ? 'active' : ''}`}
+            onClick={() => setEqualizerTab('ai')}
+          >
+            AI Separation
+          </button>
+        )}
       </div>
 
       <ModeModal
@@ -2147,7 +2150,7 @@ function App() {
 
       <div className="workspace-body">
         <aside className="workspace-left">
-          {equalizerTab === 'equalizer' && (
+          {(equalizerTab === 'equalizer' || isGenericMode) && (
             <div className="box equalizer-box">
               <div className="box-head">
                 <h2 className="box-title">Equalizer Controls</h2>
@@ -2295,7 +2298,7 @@ function App() {
               <button type="button" className="btn btn-small" style={{ marginTop: '0.5rem' }} onClick={handleLoadPreset}>Load preset</button>
             </div>
           )}
-          {equalizerTab === 'ai' && (
+          {equalizerTab === 'ai' && !isGenericMode && (
             <>
               {activeModeId === 'ecg' ? (
                 <div className="box ai-box">

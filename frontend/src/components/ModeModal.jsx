@@ -1,6 +1,10 @@
 import React, { useEffect } from 'react';
 
 const ModeModal = ({ open, modes, activeModeId, onClose, onSelect }) => {
+  const visibleModes = Array.isArray(modes)
+    ? modes.filter((m) => m?.id !== 'ai-music')
+    : [];
+
   useEffect(() => {
     if (!open) return;
     const onKey = (e) => {
@@ -24,7 +28,7 @@ const ModeModal = ({ open, modes, activeModeId, onClose, onSelect }) => {
         </div>
 
         <div className="modal-list">
-          {modes.map((m) => {
+          {visibleModes.map((m) => {
             const active = m.id === activeModeId;
             return (
               <button
