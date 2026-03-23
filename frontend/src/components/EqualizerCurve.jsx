@@ -39,6 +39,7 @@ const EqualizerCurve = ({ labels, values, onChange }) => {
   const baseY = PAD.top + chartHeight;
 
   const n = values.length;
+  const isDenseLabels = n > 5;
   const xs = Array.from({ length: n }, (_, i) =>
     PAD.left + (chartWidth / Math.max(1, n - 1)) * i
   );
@@ -133,12 +134,13 @@ const EqualizerCurve = ({ labels, values, onChange }) => {
             />
             <text
               x={x}
-              y={height - 14}
-              textAnchor="middle"
+              y={height - 12}
+              textAnchor={isDenseLabels ? 'end' : 'middle'}
               className="equalizer-label"
               fill="var(--text-secondary)"
+              transform={isDenseLabels ? `rotate(-28 ${x} ${height - 12})` : undefined}
             >
-              {labels[i]} {values[i].toFixed(2)}×
+              {labels[i] ?? `Band ${i + 1}`}
             </text>
           </g>
         ))}
