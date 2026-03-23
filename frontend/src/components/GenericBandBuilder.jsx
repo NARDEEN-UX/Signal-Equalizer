@@ -35,10 +35,12 @@ const DEFAULT_BANDS = [
   { id: 'b4', name: 'Band 4', low: 3000, high: 8000, gain: 1 }
 ];
 
-const GenericBandBuilder = ({ bands, setBands, maxHz = 20000, isEditable = true }) => {
+const GenericBandBuilder = ({ bands, setBands, maxHz = 20000, isEditable = true, allowReorder = true }) => {
   const safeBands = bands?.length ? bands : DEFAULT_BANDS;
   const [draftHz, setDraftHz] = React.useState({});
   const [draftGain, setDraftGain] = React.useState({});
+  const [dragIndex, setDragIndex] = React.useState(null);
+  const [dropIndex, setDropIndex] = React.useState(null);
   const gainRafRef = React.useRef({});
   const gainPendingRef = React.useRef({});
 
@@ -82,7 +84,7 @@ const GenericBandBuilder = ({ bands, setBands, maxHz = 20000, isEditable = true 
   };
 
   const moveBand = (index, direction) => {
-    if (!isEditable) return;
+    if (!allowReorder) return;
     const newIndex = index + direction;
     if (newIndex < 0 || newIndex >= safeBands.length) return;
     const newBands = [...safeBands];
@@ -90,6 +92,55 @@ const GenericBandBuilder = ({ bands, setBands, maxHz = 20000, isEditable = true 
     newBands[index] = newBands[newIndex];
     newBands[newIndex] = temp;
     setBands(newBands);
+  };
+
+  const reorderBands = (fromIndex, toIndex) => {
+    if (!allowReorder) return;
+    if (fromIndex == null || toIndex == null || fromIndex === toIndex) return;
+    if (fromIndex < 0 || toIndex < 0) return;
+    if (fromIndex >= safeBands.length || toIndex >= safeBands.length) return;
+
+    const next = [...safeBands];
+    const [moved] = next.splice(fromIndex, 1);
+    next.splice(toIndex, 0, moved);
+    setBands(next);
+  };
+
+  const handleDragStart = (index) => (e) => {
+    if (!allowReorder) return;
+    e.stopPropagation();
+    setDragIndex(index);
+    setDropIndex(index);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', String(index));
+  };
+
+  const handleDragHandleEnd = () => {
+    clearDragState();
+  };
+
+  const handleDragOver = (index) => (e) => {
+    if (!allowReorder) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setDropIndex(index);
+
+    // Live preview: shift cards while dragging to show final landing position.
+    if (dragIndex == null || index === dragIndex) return;
+    reorderBands(dragIndex, index);
+    setDragIndex(index);
+  };
+
+  const handleDrop = (index) => (e) => {
+    if (!allowReorder) return;
+    e.preventDefault();
+    setDragIndex(null);
+    setDropIndex(null);
+  };
+
+  const clearDragState = () => {
+    setDragIndex(null);
+    setDropIndex(null);
   };
 
   const update = (id, patch) => {
@@ -168,6 +219,7 @@ const GenericBandBuilder = ({ bands, setBands, maxHz = 20000, isEditable = true 
   };
 
   const commitDraftHz = (id, field, fallbackValue) => {
+    if (!isEditable) return;
     const k = draftKey(id, field);
     const raw = draftHz[k];
     if (raw == null) return;
@@ -191,6 +243,7 @@ const GenericBandBuilder = ({ bands, setBands, maxHz = 20000, isEditable = true 
   const subtitle = isEditable 
     ? 'Add subdivisions and control location, width and gain (0 → 2)'
     : 'Adjust individual band gains (0 → 2)';
+  const lockFrequencyRange = !isEditable;
 
   return (
     <div className="generic-builder">
@@ -206,32 +259,54 @@ const GenericBandBuilder = ({ bands, setBands, maxHz = 20000, isEditable = true 
         {safeBands.map((b, idx) => {
           const safeGainValue = getDisplayGain(b.id, b.gain);
           return (
-            <div key={b.id} className="generic-band">
+            <div
+              key={b.id}
+              className={`generic-band ${dragIndex === idx ? 'dragging' : ''} ${dropIndex === idx && dragIndex !== idx ? 'drop-target' : ''}`}
+              onDragOver={handleDragOver(idx)}
+              onDrop={handleDrop(idx)}
+            >
             <div className="generic-band-top">
               <div className="generic-band-name">{b.name}</div>
-              {isEditable && (
+              {(allowReorder || isEditable) && (
                 <div style={{ display: 'flex', gap: '4px' }}>
-                  <button 
-                    type="button" 
-                    className="icon-btn" 
-                    onClick={() => moveBand(idx, -1)} 
-                    disabled={idx === 0} 
-                    title="Move Up"
-                    style={{ opacity: idx === 0 ? 0.3 : 1, cursor: idx === 0 ? 'not-allowed' : 'pointer' }}
-                  >
-                    ↑
-                  </button>
-                  <button 
-                    type="button" 
-                    className="icon-btn" 
-                    onClick={() => moveBand(idx, 1)} 
-                    disabled={idx === safeBands.length - 1} 
-                    title="Move Down"
-                    style={{ opacity: idx === safeBands.length - 1 ? 0.3 : 1, cursor: idx === safeBands.length - 1 ? 'not-allowed' : 'pointer' }}
-                  >
-                    ↓
-                  </button>
-                  <button type="button" className="icon-btn" onClick={() => removeBand(b.id)} title="Remove">🗑</button>
+                  {allowReorder && (
+                    <>
+                      <button
+                        type="button"
+                        className="icon-btn"
+                        onClick={() => moveBand(idx, -1)}
+                        disabled={idx === 0}
+                        title="Move Up"
+                        style={{ opacity: idx === 0 ? 0.3 : 1, cursor: idx === 0 ? 'not-allowed' : 'pointer' }}
+                      >
+                        ↑
+                      </button>
+                      <button
+                        type="button"
+                        className="icon-btn"
+                        onClick={() => moveBand(idx, 1)}
+                        disabled={idx === safeBands.length - 1}
+                        title="Move Down"
+                        style={{ opacity: idx === safeBands.length - 1 ? 0.3 : 1, cursor: idx === safeBands.length - 1 ? 'not-allowed' : 'pointer' }}
+                      >
+                        ↓
+                      </button>
+                    </>
+                  )}
+                  {isEditable && (
+                    <button type="button" className="icon-btn" onClick={() => removeBand(b.id)} title="Remove">🗑</button>
+                  )}
+                  {allowReorder && (
+                    <span
+                      className="generic-band-drag-hint"
+                      title="Drag up/down to reorder"
+                      draggable={safeBands.length > 1}
+                      onDragStart={handleDragStart(idx)}
+                      onDragEnd={handleDragHandleEnd}
+                    >
+                      ⋮⋮
+                    </span>
+                  )}
                 </div>
               )}
             </div>
@@ -244,13 +319,19 @@ const GenericBandBuilder = ({ bands, setBands, maxHz = 20000, isEditable = true 
                   value={getDisplayHz(b, 'low')}
                   min={0}
                   max={maxHz}
-                  onChange={(e) => setDraft(b.id, 'low', e.target.value)}
-                  onBlur={() => commitDraftHz(b.id, 'low', Number(b.low))}
+                  onChange={(e) => {
+                    if (!lockFrequencyRange) setDraft(b.id, 'low', e.target.value);
+                  }}
+                  onBlur={() => {
+                    if (!lockFrequencyRange) commitDraftHz(b.id, 'low', Number(b.low));
+                  }}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') {
                       e.currentTarget.blur();
                     }
                   }}
+                  readOnly={lockFrequencyRange}
+                  disabled={lockFrequencyRange}
                 />
               </label>
               <label className="field">
@@ -260,13 +341,19 @@ const GenericBandBuilder = ({ bands, setBands, maxHz = 20000, isEditable = true 
                   value={getDisplayHz(b, 'high')}
                   min={0}
                   max={maxHz}
-                  onChange={(e) => setDraft(b.id, 'high', e.target.value)}
-                  onBlur={() => commitDraftHz(b.id, 'high', Number(b.high))}
+                  onChange={(e) => {
+                    if (!lockFrequencyRange) setDraft(b.id, 'high', e.target.value);
+                  }}
+                  onBlur={() => {
+                    if (!lockFrequencyRange) commitDraftHz(b.id, 'high', Number(b.high));
+                  }}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') {
                       e.currentTarget.blur();
                     }
                   }}
+                  readOnly={lockFrequencyRange}
+                  disabled={lockFrequencyRange}
                 />
               </label>
               <label className="field gain-field">

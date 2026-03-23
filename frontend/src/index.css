@@ -1194,6 +1194,17 @@ body {
   border: 1px solid var(--border);
   border-radius: 12px;
   padding: 0.85rem;
+  transition: border-color 120ms ease, background-color 120ms ease, transform 120ms ease, opacity 120ms ease;
+}
+
+.generic-band.dragging {
+  opacity: 0.45;
+  transform: scale(0.99);
+}
+
+.generic-band.drop-target {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, rgba(255, 255, 255, 0.02));
 }
 
 .generic-band-top {
@@ -1207,6 +1218,25 @@ body {
 .generic-band-name {
   font-size: 0.92rem;
   font-weight: 800;
+}
+
+.generic-band-drag-hint {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  border: 1px dashed var(--border);
+  border-radius: 6px;
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  line-height: 1;
+  user-select: none;
+  cursor: grab;
+}
+
+.generic-band.dragging .generic-band-drag-hint {
+  cursor: grabbing;
 }
 
 .generic-band-grid {
