@@ -56,13 +56,13 @@ export const HUMAN_MODE_CONFIG = {
   id: 'human',
   name: 'Human Voices',
   description: 'Manage multiple human voices in a single recording',
-  sliderLabels: ['Male Voice', 'Female Voice', 'Young Speaker', 'Old Speaker'],
-  voiceTypes: ['Male', 'Female', 'Young', 'Old', 'Baritone', 'Soprano'],
+  sliderLabels: ['Male Old', 'Male Young', 'Female Old', 'Female Young'],
+  voiceTypes: ['Male Old', 'Male Young', 'Female Old', 'Female Young'],
   bands: [
-    { id: 'human-0', name: 'Voice 1', low: 80, high: 8000, gain: 1.0 },
-    { id: 'human-1', name: 'Voice 2', low: 80, high: 8000, gain: 1.0 },
-    { id: 'human-2', name: 'Voice 3', low: 80, high: 8000, gain: 1.0 },
-    { id: 'human-3', name: 'Voice 4', low: 80, high: 8000, gain: 1.0 }
+    { id: 'human-0', name: 'Male Old', low: 85, high: 120, gain: 1.0 },
+    { id: 'human-1', name: 'Male Young', low: 120, high: 180, gain: 1.0 },
+    { id: 'human-2', name: 'Female Old', low: 150, high: 220, gain: 1.0 },
+    { id: 'human-3', name: 'Female Young', low: 200, high: 300, gain: 1.0 }
   ],
   wavelet: 'db4',
   waveletLevels: 6,

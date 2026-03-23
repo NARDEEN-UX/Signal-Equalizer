@@ -106,7 +106,7 @@ async def get_voice_types():
     }
 
 
-@router.post("/separate-ai", response_model=HumansAISeparationResponse)
+@router.post("/separate-ai", response_model=HumansAISeparationResponse, response_model_exclude_none=True)
 async def separate_humans_ai(request: HumansAISeparationRequest):
     """
     Run AI voice separation and return components aligned to requested labels.
@@ -130,7 +130,10 @@ async def separate_humans_ai(request: HumansAISeparationRequest):
 
         output_components = []
         for idx, component in enumerate(result["components"]):
-            stem_signal = np.asarray(component.get("signal", []), dtype=np.float32)
+            raw_signal = component.get("signal")
+            stem_signal = np.asarray(raw_signal if raw_signal is not None else [], dtype=np.float32).reshape(-1)
+            if stem_signal.size == 0:
+                stem_signal = np.zeros_like(signal, dtype=np.float32)
             source_name = str(component.get("name", f"voice_{idx}"))
             safe_name = _safe_stem_slug(source_name)
             stem_filename = f"{idx:02d}_{safe_name}.wav"
@@ -144,8 +147,7 @@ async def separate_humans_ai(request: HumansAISeparationRequest):
                 "high": float(component.get("high", 20000.0)),
                 "rms": float(component.get("rms", 0.0)),
                 "stem_filename": stem_filename,
-                "stem_url": f"/api/modes/humans/ai-stems/{job_id}/{stem_filename}",
-                "signal": stem_signal.tolist()
+                "stem_url": f"/api/modes/humans/ai-stems/{job_id}/{stem_filename}"
             })
 
         return {

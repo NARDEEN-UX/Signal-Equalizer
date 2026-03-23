@@ -10,4 +10,5 @@ pandas
 demucs
 torch
 torchaudio
-huggingface_hub
+speechbrain==0.5.15
+huggingface_hub==0.19.4

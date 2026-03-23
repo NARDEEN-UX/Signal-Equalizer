@@ -11,7 +11,7 @@ import ModeSignalUploader from './components/ModeSignalUploader';
 import GenericBandBuilder from './components/GenericBandBuilder';
 import BandPresetModal from './components/BandPresetModal';
 import SliderGroup from './components/SliderGroup';
-import ECGAIViewer from './components/ECGAIViewer';
+import ECGAIViewer, { ECGAIComparisonGraphs } from './components/ECGAIViewer';
 import './App.css';
 import { useBackendProcessing } from './hooks/useBackendProcessing';
 import { useMockProcessing } from './mock/useMockProcessing';
@@ -70,13 +70,13 @@ const MODES = [
   {
     id: 'human',
     name: 'Human Voices',
-    tag: '4-speaker mix',
+    tag: '2-speaker AI + DSP bands',
     description: 'Manage multiple human voices in a single recording.',
     accentClass: 'mode-human',
     icon: '⌁',
-    sliderLabels: ['Male Voice', 'Female Voice', 'Young Speaker', 'Old Speaker'],
+    sliderLabels: ['Male', 'Female', 'Old', 'Child'],
     allowAddSubdivision: false,
-    requirements: ['Male voice', 'Female voice', 'Young speaker', 'Old speaker']
+    requirements: ['Male voice', 'Female voice', 'Old voice features', 'Child voice features']
   },
   {
     id: 'ecg',
@@ -133,10 +133,10 @@ const DEFAULT_MODE_BANDS = {
     { id: 'animal-4', name: 'Insects', low: 600, high: 20000, gain: 1.0, examples: 'Cricket, Cicada, Bee, Grasshopper' }
   ],
   human: [
-    { id: 'human-0', name: 'Male Voice', low: 85, high: 180, gain: 1 },
-    { id: 'human-1', name: 'Female Voice', low: 165, high: 255, gain: 1 },
-    { id: 'human-2', name: 'Young Speaker', low: 250, high: 450, gain: 1 },
-    { id: 'human-3', name: 'Old Speaker', low: 80, high: 150, gain: 1 }
+    { id: 'human-0', name: 'Male', low: 85, high: 180, gain: 1 },
+    { id: 'human-1', name: 'Female', low: 165, high: 300, gain: 1 },
+    { id: 'human-2', name: 'Old', low: 80, high: 150, gain: 1 },
+    { id: 'human-3', name: 'Child', low: 220, high: 420, gain: 1 }
   ],
   ecg: [
     { id: 'ecg-0', name: 'Normal Sinus', low: 0.5, high: 3, gain: 1 },
@@ -337,6 +337,7 @@ function App() {
   const [aiError, setAiError] = useState('');
   const [aiNotice, setAiNotice] = useState('');
   const [aiComparisonView, setAiComparisonView] = useState('ai'); // 'ai' | 'static'
+  const [ecgAiState, setEcgAiState] = useState({ loading: false, error: null, result: null });
   // Linked viewer window (0-1 normalized signal range) shared by input and output.
   const [linkedViewWindow, setLinkedViewWindow] = useState({ start: 0, end: 1 });
   const [fftZoomWindow, setFftZoomWindow] = useState({ x: null, y: null });
@@ -350,10 +351,12 @@ function App() {
   const rafRef = useRef(null);
   const offsetTimeRef = useRef(0);
   const playbackSampleRateRef = useRef(44100);
+  const playbackInputSampleRateRef = useRef(44100);
   const prevOutputSignalRef = useRef(null);
   const lastStableBackendDataRef = useRef(null);
   const autoScrollEnabledRef = useRef(true);
   const aiPresetFileInputRef = useRef(null);
+  const aiStemSignalCacheRef = useRef(new Map());
 
   const activeMode = MODES.find((m) => m.id === activeModeId) || MODES[0];
   const isGenericMode = activeModeId === 'generic';
@@ -384,6 +387,10 @@ function App() {
     setAiError('');
     setAiNotice('');
     setAiComponents([]);
+    if (modeId === 'ecg') {
+      setEcgAiState({ loading: false, error: null, result: null });
+    }
+    aiStemSignalCacheRef.current = new Map();
     setAiModeFreqConfig((prev) => ({
       ...prev,
       [modeId]: []
@@ -626,6 +633,36 @@ function App() {
     return -1;
   };
 
+  const decodeAudioArrayBuffer = async (arrayBuffer) => {
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    try {
+      const decoded = await audioCtx.decodeAudioData(arrayBuffer.slice(0));
+      const channel = decoded.getChannelData(0);
+      return Array.from(channel, (v) => Number(v) || 0);
+    } finally {
+      await audioCtx.close();
+    }
+  };
+
+  const loadModelSignalFromStemUrl = async (stemUrl) => {
+    const url = String(stemUrl || '').trim();
+    if (!url) return [];
+
+    const cached = aiStemSignalCacheRef.current.get(url);
+    if (Array.isArray(cached) && cached.length > 0) {
+      return cached;
+    }
+
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`Failed to load AI stem (${response.status})`);
+    }
+    const arrayBuffer = await response.arrayBuffer();
+    const signal = await decodeAudioArrayBuffer(arrayBuffer);
+    aiStemSignalCacheRef.current.set(url, signal);
+    return signal;
+  };
+
   const runAiSeparation = async () => {
     const inputSignal = signalData?.input_signal;
     if (!Array.isArray(inputSignal) || inputSignal.length === 0) {
@@ -700,7 +737,7 @@ function App() {
       }
 
       if (activeModeId === 'human') {
-        const aiResponse = await separateHumansModeAI(inputSignal, [], srInt, 'JunzheJosephZhu/MultiDecoderDPRNN');
+        const aiResponse = await separateHumansModeAI(inputSignal, ['Male', 'Female'], srInt, 'speechbrain/sepformer-wsj02mix');
         const rawComponents = Array.isArray(aiResponse?.data?.components) ? aiResponse.data.components : [];
         if (!rawComponents.length) {
           throw new Error('AI voice separation returned no components for this file.');
@@ -916,8 +953,25 @@ function App() {
         Array.isArray(resp?.data?.output_signal) ? resp.data.output_signal : []
       ));
 
+      const resolvedModelSignals = await Promise.all(
+        aiComponents.map(async (comp) => {
+          const existing = Array.isArray(comp?.modelSignal) ? comp.modelSignal : [];
+          if (existing.length > 0) return existing;
+
+          const stemUrl = String(comp?.modelStemUrl || '');
+          if (!stemUrl) return [];
+
+          try {
+            return await loadModelSignalFromStemUrl(stemUrl);
+          } catch (stemErr) {
+            console.warn('Could not decode AI stem for comparison:', stemErr);
+            return [];
+          }
+        })
+      );
+
       const updated = aiComponents.map((comp, idx) => {
-        const modelSignal = Array.isArray(comp?.modelSignal) ? comp.modelSignal : [];
+        const modelSignal = Array.isArray(resolvedModelSignals[idx]) ? resolvedModelSignals[idx] : [];
         const aiDspSignal = Array.isArray(aiDspSignals[idx]) ? aiDspSignals[idx] : [];
         const compareAi = computeComparisonMetrics(modelSignal, aiDspSignal);
 
@@ -931,6 +985,7 @@ function App() {
 
         return {
           ...comp,
+          modelSignal,
           compareAi,
           compareStatic,
           staticBandName: staticIndex >= 0 ? String(staticBands[staticIndex]?.name || '') : ''
@@ -1137,6 +1192,61 @@ function App() {
     }
   };
 
+  const estimateSampleRateFromTime = (timeAxis) => {
+    if (!Array.isArray(timeAxis) || timeAxis.length < 2) return 44100;
+    const diffs = [];
+    const limit = Math.min(timeAxis.length, 2000);
+    for (let i = 1; i < limit; i += 1) {
+      const d = Number(timeAxis[i]) - Number(timeAxis[i - 1]);
+      if (Number.isFinite(d) && d > 0) diffs.push(d);
+    }
+    if (!diffs.length) return 44100;
+    diffs.sort((a, b) => a - b);
+    const median = diffs[Math.floor(diffs.length / 2)] || (1 / 44100);
+    return 1 / Math.max(1e-9, median);
+  };
+
+  const buildPlaybackBuffer = (ctx, signal, desiredSampleRate) => {
+    const src = Array.isArray(signal) ? signal : [];
+    if (!src.length) return null;
+
+    const safeDesired = Math.max(1, Number(desiredSampleRate) || 44100);
+    const playbackSampleRate = Math.max(
+      MIN_PLAYBACK_SAMPLE_RATE,
+      Math.min(MAX_PLAYBACK_SAMPLE_RATE, Math.round(safeDesired) || 44100)
+    );
+
+    playbackInputSampleRateRef.current = safeDesired;
+    playbackSampleRateRef.current = playbackSampleRate;
+
+    const ratio = playbackSampleRate / safeDesired;
+    const targetLength = Math.max(1, Math.round(src.length * ratio));
+
+    const buffer = ctx.createBuffer(1, targetLength, playbackSampleRate);
+    const out = buffer.getChannelData(0);
+
+    if (targetLength === src.length) {
+      for (let i = 0; i < targetLength; i += 1) {
+        out[i] = Number(src[i]) || 0;
+      }
+      return buffer;
+    }
+
+    const denom = Math.max(1, targetLength - 1);
+    const srcLast = Math.max(0, src.length - 1);
+    for (let i = 0; i < targetLength; i += 1) {
+      const srcPos = (i / denom) * srcLast;
+      const i0 = Math.floor(srcPos);
+      const i1 = Math.min(srcLast, i0 + 1);
+      const t = srcPos - i0;
+      const v0 = Number(src[i0]) || 0;
+      const v1 = Number(src[i1]) || 0;
+      out[i] = v0 + (v1 - v0) * t;
+    }
+
+    return buffer;
+  };
+
   const handlePlay = () => {
     if (!signalData?.output_signal || !signalData?.time) return;
 
@@ -1153,25 +1263,16 @@ function App() {
 
     stopAudio();
 
-    const dt = signalData.time[1] - signalData.time[0] || 1 / 44100;
-    const desiredSampleRate = 1 / dt;
-    const playbackSampleRate = Math.max(
-      MIN_PLAYBACK_SAMPLE_RATE,
-      Math.min(MAX_PLAYBACK_SAMPLE_RATE, Math.round(desiredSampleRate) || 44100)
-    );
-    playbackSampleRateRef.current = playbackSampleRate;
+    const desiredSampleRate = estimateSampleRateFromTime(signalData.time);
 
     let buffer;
     try {
-      buffer = ctx.createBuffer(1, signalData.output_signal.length, playbackSampleRate);
+      buffer = buildPlaybackBuffer(ctx, signalData.output_signal, desiredSampleRate);
+      if (!buffer) return;
     } catch (error) {
       console.error('Failed to create playback buffer:', error);
       window.alert('Playback failed for this file. Try reloading or using a shorter file.');
       return;
-    }
-    const data = buffer.getChannelData(0);
-    for (let i = 0; i < data.length; i += 1) {
-      data[i] = signalData.output_signal[i];
     }
 
     const source = ctx.createBufferSource();
@@ -1296,13 +1397,12 @@ function App() {
     if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null; }
 
     // Create new buffer with new signal
-    const sr = playbackSampleRateRef.current;
+    const desiredSr = playbackInputSampleRateRef.current || estimateSampleRateFromTime(signalData?.time);
     let buffer;
     try {
-      buffer = ctx.createBuffer(1, newSignal.length, sr);
+      buffer = buildPlaybackBuffer(ctx, newSignal, desiredSr);
+      if (!buffer) return;
     } catch { return; }
-    const bufData = buffer.getChannelData(0);
-    for (let i = 0; i < bufData.length; i++) bufData[i] = newSignal[i];
 
     const source = ctx.createBufferSource();
     source.buffer = buffer;
@@ -2121,6 +2221,7 @@ function App() {
                   <ECGAIViewer
                     signal={modeUploadedSignals['ecg'] || null}
                     sampleRate={modeUploadedSampleRates['ecg'] || 360}
+                    onStateChange={setEcgAiState}
                   />
                 </div>
               ) : (
@@ -2182,7 +2283,7 @@ function App() {
                   {activeModeId === 'music'
                     ? 'Run Demucs separation, extract stem frequency ranges into AI sliders, then compare model stems against DSP isolation using FFT/Wavelet.'
                     : activeModeId === 'human'
-                      ? 'Run AI voice separation to classify speakers into male/female/young/old, then compare model stems against DSP isolation.'
+                      ? 'Run SepFormer 2-speaker separation (Male/Female), then compare model stems against DSP isolation.'
                       : 'Run component separation for the current mode and inspect each isolated track.'}
                 </p>
 
@@ -2318,6 +2419,7 @@ function App() {
                           className="btn btn-small"
                           onClick={() => applyAiSoloToEqualizer(idx)}
                           title="Apply this component as solo in Equalizer mode"
+                          disabled={activeModeId === 'human' && !['male', 'female'].includes(String(comp?.name || '').toLowerCase())}
                         >
                           Solo In EQ
                         </button>
@@ -2486,7 +2588,7 @@ function App() {
           {equalizerTab === 'ai' && (
             <div className="row section-row">
               <div className="section-head">
-                <h2 className="section-title">AI Comparison Results</h2>
+                <h2 className="section-title">AI Output Graphs</h2>
                 {(activeModeId === 'music' || activeModeId === 'human') && (
                   <div className="segmented-control">
                     <button
@@ -2507,16 +2609,39 @@ function App() {
                 )}
               </div>
 
-              <div className="box chart-box">
-                {aiLoading && <p className="helper-text">Running AI comparison...</p>}
-                {!aiLoading && aiError && <p className="helper-text" style={{ color: '#fda4af' }}>{aiError}</p>}
+              {activeModeId === 'ecg' ? (
+                <div style={{ width: '100%' }}>
+                  {ecgAiState.loading && (
+                    <p className="helper-text">Running ECG AI diagnosis...</p>
+                  )}
 
-                {!aiLoading && !aiError && aiComponents.length === 0 && (
-                  <p className="helper-text">Run AI Separation, then click Compare to generate metrics.</p>
-                )}
+                  {!ecgAiState.loading && ecgAiState.error && (
+                    <p className="helper-text" style={{ color: '#fda4af' }}>{ecgAiState.error}</p>
+                  )}
 
-                {!aiLoading && !aiError && aiComponents.length > 0 && (activeModeId === 'music' || activeModeId === 'human') && (
-                  <div className="bands-info">
+                  {!ecgAiState.loading && !ecgAiState.error && !ecgAiState.result && (
+                    <p className="helper-text">Run AI Diagnosis from ECG AI Diagnosis to show explainability graphs here.</p>
+                  )}
+
+                  {!ecgAiState.loading && !ecgAiState.error && ecgAiState.result && (
+                    <ECGAIComparisonGraphs
+                      result={ecgAiState.result}
+                      signal={modeUploadedSignals['ecg'] || null}
+                      sampleRate={modeUploadedSampleRates['ecg'] || 360}
+                    />
+                  )}
+                </div>
+              ) : (
+                <div className="box chart-box">
+                  {aiLoading && <p className="helper-text">Running AI comparison...</p>}
+                  {!aiLoading && aiError && <p className="helper-text" style={{ color: '#fda4af' }}>{aiError}</p>}
+
+                  {!aiLoading && !aiError && aiComponents.length === 0 && (
+                    <p className="helper-text">Run AI Separation, then click Compare to generate metrics.</p>
+                  )}
+
+                  {!aiLoading && !aiError && aiComponents.length > 0 && (activeModeId === 'music' || activeModeId === 'human') && (
+                    <div className="bands-info">
                     <div
                       className="band-info-item"
                       style={{
@@ -2586,9 +2711,10 @@ function App() {
                         </div>
                       );
                     })()}
-                  </div>
-                )}
-              </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </main>

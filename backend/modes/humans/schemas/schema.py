@@ -65,7 +65,7 @@ class HumansAISeparationRequest(BaseModel):
     signal: List[float]
     sample_rate: int = 44100
     voice_names: List[str] = Field(default_factory=list, description="Optional subset of target voice labels")
-    model_name: str = Field(default="JunzheJosephZhu/MultiDecoderDPRNN", description="Asteroid model identifier")
+    model_name: str = Field(default="speechbrain/sepformer-wsj02mix", description="SpeechBrain SepFormer model identifier")
 
 
 class HumansAISeparationResponse(BaseModel):
