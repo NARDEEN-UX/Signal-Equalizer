@@ -65,7 +65,7 @@ export const useBackendProcessing = ({
   waveletSliders = null
 }) => {
   const PROCESS_DEBOUNCE_MS = 40;
-  const [data, setData] = useState(null);
+  const [result, setResult] = useState({ modeId: null, signalToken: null, data: null });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
@@ -78,10 +78,13 @@ export const useBackendProcessing = ({
   );
 
   const waveletSlidersKey = JSON.stringify(waveletSliders);
+  const signalToken = Array.isArray(signalData) && signalData.length > 0
+    ? `${signalData.length}:${toNum(signalData[0], 0)}:${toNum(signalData[signalData.length - 1], 0)}`
+    : 'none';
 
   useEffect(() => {
     if (!Array.isArray(signalData) || signalData.length === 0) {
-      setData(null);
+      setResult((prev) => ({ ...prev, modeId, signalToken: 'none', data: null }));
       setLoading(false);
       return;
     }
@@ -136,13 +139,19 @@ export const useBackendProcessing = ({
         }
 
         if (!cancelled) {
-          setData(normalizeResponse(response?.data || {}, signalData, sampleRate));
+          setResult({
+            modeId,
+            signalToken,
+            data: normalizeResponse(response?.data || {}, signalData, sampleRate)
+          });
         }
       } catch (err) {
         const aborted = err?.code === 'ERR_CANCELED' || err?.name === 'CanceledError';
         if (!cancelled && !aborted) {
           setError(err?.message || 'Backend processing failed');
-          if (!useFallback) setData(null);
+          if (!useFallback) {
+            setResult({ modeId, signalToken, data: null });
+          }
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -158,6 +167,8 @@ export const useBackendProcessing = ({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [modeId, bandsKey, sampleRate, signalData, useFallback, waveletType, waveletLevel, processingMethod, waveletSlidersKey]);
+
+  const data = (result.modeId === modeId && result.signalToken === signalToken) ? result.data : null;
 
   return { data, loading, error };
 };
