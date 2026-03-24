@@ -84,9 +84,9 @@ const MODES = [
     description: 'Control magnitude of arrhythmia components (normal + 3 types).',
     accentClass: 'mode-ecg',
     icon: '♡',
-    sliderLabels: ['Normal Sinus', 'Atrial Fibrillation', 'Ventricular Tachycardia', 'Heart Block'],
+    sliderLabels: ['Normal', 'AFib', 'VTach', 'HeartBlock'],
     allowAddSubdivision: false,
-    requirements: ['Normal sinus rhythm (0.5–3 Hz)', 'Atrial fibrillation (5–50 Hz)', 'Ventricular tachycardia (3–5 Hz)', 'Heart block (0.05–0.5 Hz)']
+    requirements: ['Normal (2.2-15.5 Hz)', 'AFib (0.0-179.4 Hz)', 'VTach (2.2-3.3 Hz)', 'HeartBlock (2.2-31.0 Hz)']
   },
   {
     id: 'ai-music',
@@ -158,10 +158,10 @@ const DEFAULT_MODE_BANDS = {
     { id: 'human-3', name: 'Child', low: 220, high: 420, gain: 1 }
   ],
   ecg: [
-    { id: 'ecg-0', name: 'Normal Sinus', low: 0.5, high: 3, gain: 1 },
-    { id: 'ecg-1', name: 'Atrial Fibrillation', low: 5, high: 50, gain: 1 },
-    { id: 'ecg-2', name: 'Ventricular Tachycardia', low: 3, high: 5, gain: 1 },
-    { id: 'ecg-3', name: 'Heart Block', low: 0.05, high: 0.5, gain: 1 }
+    { id: 'ecg-0', name: 'Normal', low: 2.2, high: 15.5, gain: 1 },
+    { id: 'ecg-1', name: 'AFib', low: 0.0, high: 179.4, gain: 1 },
+    { id: 'ecg-2', name: 'VTach', low: 2.2, high: 3.3, gain: 1 },
+    { id: 'ecg-3', name: 'HeartBlock', low: 2.2, high: 31.0, gain: 1 }
   ]
 };
 
