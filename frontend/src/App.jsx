@@ -51,9 +51,9 @@ const MODES = [
     description: 'Control Demucs sources inside a musical mix.',
     accentClass: 'mode-music',
     icon: '♫',
-    sliderLabels: ['drums', 'bass', 'vocals', 'guitar', 'piano', 'other'],
+    sliderLabels: ['drums', 'bass', 'guitar', 'piano', 'vocals', 'other'],
     allowAddSubdivision: false,
-    requirements: ['Demucs drums stem', 'Demucs bass stem', 'Demucs vocals stem', 'Demucs guitar stem', 'Demucs piano stem', 'Demucs other stem']
+    requirements: ['Demucs drums stem', 'Demucs bass stem', 'Demucs guitar stem', 'Demucs piano stem', 'Demucs vocals stem', 'Demucs other stem']
   },
   {
     id: 'animal',
@@ -73,9 +73,9 @@ const MODES = [
     description: 'Manage multiple human voices in a single recording.',
     accentClass: 'mode-human',
     icon: '⌁',
-    sliderLabels: ['Male', 'Female', 'Old', 'Child'],
+    sliderLabels: ['Children Voices (Pre-Puberty)', 'French Audio (FLEURS Dataset)', 'Spanish Audio (FLEURS Dataset)', 'All Female Actors (Even Numbers)', 'All Male Actors (Odd Numbers)'],
     allowAddSubdivision: false,
-    requirements: ['Male voice', 'Female voice', 'Old voice features', 'Child voice features']
+    requirements: ['Children Voices (220-300 and 350-600 Hz)', 'French Audio suggested band (128.12-685.94 Hz)', 'Spanish Audio suggested band (128.12-1792.19 Hz)', 'All Female Actors suggested band (205.96-1444.01 Hz)', 'All Male Actors suggested band (112.08-1322.75 Hz)']
   },
   {
     id: 'ecg',
@@ -137,12 +137,12 @@ const DEFAULT_MODE_BANDS = {
     { id: 'b4', name: 'Band 4', low: 3000, high: 8000, gain: 1 }
   ],
   music: [
-    { id: 'music-0', name: 'drums', low: 30, high: 180, gain: 1.0 },
-    { id: 'music-1', name: 'bass', low: 180, high: 350, gain: 1.0 },
-    { id: 'music-2', name: 'vocals', low: 350, high: 3000, gain: 1.0 },
-    { id: 'music-3', name: 'guitar', low: 3000, high: 6000, gain: 1.0 },
-    { id: 'music-4', name: 'piano', low: 6000, high: 10000, gain: 1.0 },
-    { id: 'music-5', name: 'other', low: 10000, high: 18000, gain: 1.0 }
+    { id: 'music-0', name: 'drums', low: 20, high: 500, ranges: [[20, 200], [200, 500]], gain: 1.0 },
+    { id: 'music-1', name: 'bass', low: 30, high: 300, ranges: [[30, 150], [150, 300]], gain: 1.0 },
+    { id: 'music-2', name: 'guitar', low: 80, high: 1200, ranges: [[80, 600], [600, 1200]], gain: 1.0 },
+    { id: 'music-3', name: 'piano', low: 28, high: 4186, ranges: [[28, 500], [500, 4186]], gain: 1.0 },
+    { id: 'music-4', name: 'vocals', low: 85, high: 3400, ranges: [[85, 1000], [1000, 3400]], gain: 1.0 },
+    { id: 'music-5', name: 'other', low: 200, high: 8000, ranges: [[200, 2000], [2000, 8000]], gain: 1.0 }
   ],
   animal: [
     { id: 'animal-0', name: 'Frog', low: 1084.5, high: 2509.3, gain: 1.0 },
@@ -151,10 +151,11 @@ const DEFAULT_MODE_BANDS = {
     { id: 'animal-3', name: 'Cat', low: 708.0, high: 3620.9, gain: 1.0 }
   ],
   human: [
-    { id: 'human-0', name: 'Male', low: 85, high: 180, gain: 1 },
-    { id: 'human-1', name: 'Female', low: 165, high: 300, gain: 1 },
-    { id: 'human-2', name: 'Old', low: 80, high: 150, gain: 1 },
-    { id: 'human-3', name: 'Child', low: 220, high: 420, gain: 1 }
+    { id: 'human-0', name: 'Children Voices (Pre-Puberty)', low: 220, high: 600, ranges: [[220, 300], [350, 600]], gain: 1 },
+    { id: 'human-1', name: 'French Audio (FLEURS Dataset)', low: 128.12, high: 685.94, ranges: [[128.12, 685.94]], gain: 1 },
+    { id: 'human-2', name: 'Spanish Audio (FLEURS Dataset)', low: 128.12, high: 1792.19, ranges: [[128.12, 1792.19]], gain: 1 },
+    { id: 'human-3', name: 'All Female Actors (Even Numbers)', low: 205.96, high: 1444.01, ranges: [[205.96, 1444.01]], gain: 1 },
+    { id: 'human-4', name: 'All Male Actors (Odd Numbers)', low: 112.08, high: 1322.75, ranges: [[112.08, 1322.75]], gain: 1 }
   ],
   ecg: [
     { id: 'ecg-0', name: 'Normal', low: 2.2, high: 15.5, gain: 1 },

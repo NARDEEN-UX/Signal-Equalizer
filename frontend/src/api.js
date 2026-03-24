@@ -71,6 +71,7 @@ export const processMusicMode = (signal, gains, instrumentNames, sampleRate = 44
         name: b.name,
         low: b.low,
         high: b.high,
+        ranges: Array.isArray(b.ranges) ? b.ranges : undefined,
         gain: b.gain
       }))
       : null,
@@ -116,6 +117,7 @@ export const processHumansMode = (signal, gains, voiceNames, sampleRate = 44100,
         name: b.name,
         low: b.low,
         high: b.high,
+        ranges: Array.isArray(b.ranges) ? b.ranges : undefined,
         gain: b.gain
       }))
       : null,

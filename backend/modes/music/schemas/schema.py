@@ -19,6 +19,7 @@ class MusicBandConfig(BaseModel):
     name: str
     low: float = Field(ge=0, description="Lower frequency bound in Hz")
     high: float = Field(gt=0, description="Upper frequency bound in Hz")
+    ranges: Optional[List[tuple]] = Field(default=None, description="Optional list of (low, high) sub-ranges")
     gain: float = Field(ge=0, le=2, default=1.0)
 
 

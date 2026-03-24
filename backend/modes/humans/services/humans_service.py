@@ -18,35 +18,38 @@ class HumansModeService:
     
     # Human mode frequency labels used in DSP controls.
     VOICE_RANGES = {
-        "Male": [(85, 180)],
-        "Female": [(165, 300)],
-        "Old": [(80, 150)],
-        "Child": [(220, 420)],
+        "Children Voices (Pre-Puberty)": [(220, 300), (350, 600)],
+        "French Audio (FLEURS Dataset)": [(128.12, 685.94)],
+        "Spanish Audio (FLEURS Dataset)": [(128.12, 1792.19)],
+        "All Female Actors (Even Numbers)": [(205.96, 1444.01)],
+        "All Male Actors (Odd Numbers)": [(112.08, 1322.75)],
     }
 
     # Broader fallback isolation ranges to keep separated stems audible
     # when AI model loading/inference is unavailable.
     FALLBACK_VOICE_ISOLATION_RANGES = {
-        "Male": [(80, 250), (250, 900), (900, 1800)],
-        "Female": [(165, 350), (350, 1600), (1600, 3800)],
-        "Old": [(70, 220), (220, 800), (800, 1600)],
-        "Child": [(220, 500), (500, 2200), (2200, 4000)],
+        "Children Voices (Pre-Puberty)": [(220, 300), (350, 600), (600, 1400)],
+        "French Audio (FLEURS Dataset)": [(120, 700), (700, 1400)],
+        "Spanish Audio (FLEURS Dataset)": [(120, 1800)],
+        "All Female Actors (Even Numbers)": [(200, 1450)],
+        "All Male Actors (Odd Numbers)": [(110, 1325)],
     }
 
     # Target pitch centers used to map anonymous separated outputs
     # back to the notebook's fixed speaker classes.
     VOICE_TARGET_PITCH = {
-        "Male": 120.0,
-        "Female": 220.0,
-        "Old": 105.0,
-        "Child": 280.0,
+        "Children Voices (Pre-Puberty)": 260.0,
+        "French Audio (FLEURS Dataset)": 210.0,
+        "Spanish Audio (FLEURS Dataset)": 230.0,
+        "All Female Actors (Even Numbers)": 220.0,
+        "All Male Actors (Odd Numbers)": 125.0,
     }
 
     # Pitch bins (Hz) for heuristic voice classification.
     VOICE_PITCH_BINS = (
-        (180.0, "Male"),
-        (250.0, "Female"),
-        (float("inf"), "Child")
+        (170.0, "All Male Actors (Odd Numbers)"),
+        (250.0, "All Female Actors (Even Numbers)"),
+        (float("inf"), "Children Voices (Pre-Puberty)")
     )
     PITCH_FMIN = 50.0
     PITCH_FMAX = 500.0
@@ -60,47 +63,70 @@ class HumansModeService:
     NOTEBOOK_ACTIVE_BAND_THRESHOLD = 0.10
     # UI-oriented slider hints used to keep AI-separated voice ranges distinct.
     LABEL_SLIDER_HINTS = {
-        "Male": (70.0, 350.0),
-        "Female": (140.0, 900.0),
-        "Old": (60.0, 280.0),
-        "Child": (180.0, 1200.0),
+        "Children Voices (Pre-Puberty)": (220.0, 600.0),
+        "French Audio (FLEURS Dataset)": (128.12, 685.94),
+        "Spanish Audio (FLEURS Dataset)": (128.12, 1792.19),
+        "All Female Actors (Even Numbers)": (205.96, 1444.01),
+        "All Male Actors (Odd Numbers)": (112.08, 1322.75),
     }
     SEPFORMER_MODEL_DEFAULT = "speechbrain/sepformer-wsj02mix"
     SEPFORMER_SAMPLE_RATE = 8000
 
     # Canonical mapping with aliases to keep legacy presets compatible.
     VOICE_NAME_ALIASES = {
-        "male": "Male",
-        "male voice": "Male",
-        "female": "Female",
-        "female voice": "Female",
-        "old": "Old",
-        "old voice": "Old",
-        "child": "Child",
-        "child voice": "Child",
-        "kid": "Child",
-        # legacy aliases
-        "male old": "Male",
-        "male_old": "Male",
-        "old male": "Male",
-        "male young": "Male",
-        "male_young": "Male",
-        "male yound": "Male",
-        "young male": "Male",
-        "female old": "Female",
-        "female_old": "Female",
-        "old female": "Female",
-        "female young": "Female",
-        "female_young": "Female",
-        "female yound": "Female",
-        "young female": "Female",
-        "young speaker": "Child",
-        "young": "Child",
-        "old speaker": "Old",
-        "voice 1": "Male",
-        "voice 2": "Female",
-        "voice 3": "Old",
-        "voice 4": "Child",
+        "children voices (pre-puberty)": "Children Voices (Pre-Puberty)",
+        "children voices": "Children Voices (Pre-Puberty)",
+        "children": "Children Voices (Pre-Puberty)",
+        "child": "Children Voices (Pre-Puberty)",
+        "child voice": "Children Voices (Pre-Puberty)",
+        "kid": "Children Voices (Pre-Puberty)",
+        "kid voices": "Children Voices (Pre-Puberty)",
+        "french audio (fleurs dataset)": "French Audio (FLEURS Dataset)",
+        "french audio": "French Audio (FLEURS Dataset)",
+        "french": "French Audio (FLEURS Dataset)",
+        "spanish audio (fleurs dataset)": "Spanish Audio (FLEURS Dataset)",
+        "spanish audio": "Spanish Audio (FLEURS Dataset)",
+        "spanish": "Spanish Audio (FLEURS Dataset)",
+        "all female actors (even numbers)": "All Female Actors (Even Numbers)",
+        "all female actors": "All Female Actors (Even Numbers)",
+        "female actors": "All Female Actors (Even Numbers)",
+        "all male actors (odd numbers)": "All Male Actors (Odd Numbers)",
+        "all male actors": "All Male Actors (Odd Numbers)",
+        "male actors": "All Male Actors (Odd Numbers)",
+        "male": "All Male Actors (Odd Numbers)",
+        "male voice": "All Male Actors (Odd Numbers)",
+        "man voice": "All Male Actors (Odd Numbers)",
+        "man": "All Male Actors (Odd Numbers)",
+        "female": "All Female Actors (Even Numbers)",
+        "female voice": "All Female Actors (Even Numbers)",
+        "old": "All Male Actors (Odd Numbers)",
+        "old voice": "All Male Actors (Odd Numbers)",
+        "old man voice": "All Male Actors (Odd Numbers)",
+        "old man": "All Male Actors (Odd Numbers)",
+        "spanish woman voice": "Spanish Audio (FLEURS Dataset)",
+        "spanish woman": "Spanish Audio (FLEURS Dataset)",
+        "young": "Children Voices (Pre-Puberty)",
+        "young speaker": "Children Voices (Pre-Puberty)",
+        "female old": "All Female Actors (Even Numbers)",
+        "female_old": "All Female Actors (Even Numbers)",
+        "old female": "All Female Actors (Even Numbers)",
+        "female young": "All Female Actors (Even Numbers)",
+        "female_young": "All Female Actors (Even Numbers)",
+        "female yound": "All Female Actors (Even Numbers)",
+        "young female": "All Female Actors (Even Numbers)",
+        "male old": "All Male Actors (Odd Numbers)",
+        "male_old": "All Male Actors (Odd Numbers)",
+        "old male": "All Male Actors (Odd Numbers)",
+        "male young": "All Male Actors (Odd Numbers)",
+        "male_young": "All Male Actors (Odd Numbers)",
+        "male yound": "All Male Actors (Odd Numbers)",
+        "young male": "All Male Actors (Odd Numbers)",
+        "old speaker": "All Male Actors (Odd Numbers)",
+        "voice 1": "All Male Actors (Odd Numbers)",
+        "voice 2": "All Female Actors (Even Numbers)",
+        "voice 3": "Spanish Audio (FLEURS Dataset)",
+        "voice 4": "French Audio (FLEURS Dataset)",
+        "voice 5": "Children Voices (Pre-Puberty)",
     }
 
     # 8-level Human Voice Configuration at 22.05kHz
@@ -303,12 +329,27 @@ class HumansModeService:
     def _get_frequency_ranges_from_bands(self, bands: List[Dict]) -> List[List[Tuple[float, float]]]:
         ranges = []
         for band in bands:
-            if isinstance(band, dict) and 'low' in band and 'high' in band:
+            if not isinstance(band, dict):
+                ranges.append([(20.0, 20000.0)])
+                continue
+
+            sub_ranges = []
+            raw_ranges = band.get('ranges')
+            if isinstance(raw_ranges, list):
+                for item in raw_ranges:
+                    if isinstance(item, (list, tuple)) and len(item) >= 2:
+                        low = float(item[0])
+                        high = float(item[1])
+                        if high > low:
+                            sub_ranges.append((low, high))
+
+            if not sub_ranges and 'low' in band and 'high' in band:
                 low = float(band.get('low', 20))
                 high = float(band.get('high', 20000))
-                ranges.append([(low, high)])
-            else:
-                ranges.append([(20.0, 20000.0)])
+                if high > low:
+                    sub_ranges.append((low, high))
+
+            ranges.append(sub_ranges or [(20.0, 20000.0)])
         return ranges
 
     def _resolve_frequency_ranges(
@@ -500,11 +541,11 @@ class HumansModeService:
 
     def _classify_pitch(self, pitch_hz: Optional[float]) -> str:
         if pitch_hz is None or not np.isfinite(pitch_hz):
-            return "Male"
+            return "All Male Actors (Odd Numbers)"
         for cutoff, label in self.VOICE_PITCH_BINS:
             if pitch_hz <= cutoff:
                 return label
-        return "Male"
+        return "All Male Actors (Odd Numbers)"
 
     def _bandpass_signal(self, signal: np.ndarray, ranges: List[Tuple[float, float]], sample_rate: int) -> np.ndarray:
         data = np.asarray(signal, dtype=np.float32).reshape(-1)

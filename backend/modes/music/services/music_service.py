@@ -16,12 +16,12 @@ class MusicModeService:
 
     # DSP fallback ranges aligned with standard Demucs stems.
     INSTRUMENT_RANGES = {
-        "drums": [(30, 180)],
-        "bass": [(180, 350)],
-        "vocals": [(350, 3000)],
-        "guitar": [(3000, 6000)],
-        "piano": [(6000, 10000)],
-        "other": [(10000, 18000)]
+        "drums": [(20, 200), (200, 500)],
+        "bass": [(30, 150), (150, 300)],
+        "guitar": [(80, 600), (600, 1200)],
+        "piano": [(28, 500), (500, 4186)],
+        "vocals": [(85, 1000), (1000, 3400)],
+        "other": [(200, 2000), (2000, 8000)]
     }
     DEMUCS_SOURCE_ORDER = ("drums", "bass", "vocals", "guitar", "piano", "other")
 
@@ -139,7 +139,7 @@ class MusicModeService:
 
     def _compute_level_gains_from_ranges(
         self,
-        freq_ranges: List[Tuple[float, float]],
+        freq_ranges: List[List[Tuple[float, float]]],
         gains: List[float],
         level: int,
         sample_rate: float,
@@ -150,9 +150,11 @@ class MusicModeService:
         for lv in range(1, level + 1):
             lv_low, lv_high = self._detail_level_band(lv, sample_rate)
             matched = []
-            for (low, high), gain in zip(freq_ranges, gains):
-                if self._ranges_overlap(lv_low, lv_high, float(low), float(high)):
-                    matched.append(self._clamp_gain(gain))
+            for sub_ranges, gain in zip(freq_ranges, gains):
+                for low, high in sub_ranges:
+                    if self._ranges_overlap(lv_low, lv_high, float(low), float(high)):
+                        matched.append(self._clamp_gain(gain))
+                        break
 
             base_gain = self._combine_overlap_gains(matched)
             if sliders_wavelet is not None and lv - 1 < len(sliders_wavelet):
@@ -165,7 +167,7 @@ class MusicModeService:
     def _compute_music_wavelet_coeffs(
         self,
         signal: np.ndarray,
-        freq_ranges: List[Tuple[float, float]],
+        freq_ranges: List[List[Tuple[float, float]]],
         gains: List[float],
         wavelet: str,
         level: int,
@@ -205,15 +207,30 @@ class MusicModeService:
 
         return input_detail_coeffs, output_detail_coeffs, reconstructed
 
-    def _get_frequency_ranges_from_bands(self, bands: List[Dict]) -> List[Tuple[float, float]]:
+    def _get_frequency_ranges_from_bands(self, bands: List[Dict]) -> List[List[Tuple[float, float]]]:
         ranges = []
         for band in bands:
-            if isinstance(band, dict) and 'low' in band and 'high' in band:
+            if not isinstance(band, dict):
+                ranges.append([(20.0, 20000.0)])
+                continue
+
+            sub_ranges = []
+            raw_ranges = band.get('ranges')
+            if isinstance(raw_ranges, list):
+                for item in raw_ranges:
+                    if isinstance(item, (list, tuple)) and len(item) >= 2:
+                        low = float(item[0])
+                        high = float(item[1])
+                        if high > low:
+                            sub_ranges.append((low, high))
+
+            if not sub_ranges and 'low' in band and 'high' in band:
                 low = float(band.get('low', 20))
                 high = float(band.get('high', 20000))
-                ranges.append((low, high))
-            else:
-                ranges.append((20, 20000))
+                if high > low:
+                    sub_ranges.append((low, high))
+
+            ranges.append(sub_ranges or [(20.0, 20000.0)])
         return ranges
 
     def _resolve_frequency_ranges(
@@ -221,14 +238,14 @@ class MusicModeService:
         instrument_names: List[str],
         bands: Optional[List[Dict]],
         count: int
-    ) -> List[Tuple[float, float]]:
+    ) -> List[List[Tuple[float, float]]]:
         if bands:
             ranges = self._get_frequency_ranges_from_bands(bands)
         else:
             ranges = self._get_frequency_ranges(instrument_names)
 
         if len(ranges) < count:
-            ranges.extend([(20.0, 20000.0)] * (count - len(ranges)))
+            ranges.extend([[(20.0, 20000.0)]] * (count - len(ranges)))
         return ranges[:count]
 
     @staticmethod
@@ -238,23 +255,20 @@ class MusicModeService:
             return "other"
         return key
 
-    def _get_frequency_ranges(self, instrument_names: List[str]) -> List[Tuple[float, float]]:
+    def _get_frequency_ranges(self, instrument_names: List[str]) -> List[List[Tuple[float, float]]]:
         ranges = []
         for name in instrument_names:
             canonical = self._canonical_instrument_name(name)
             if canonical in self.INSTRUMENT_RANGES:
-                sub_ranges = self.INSTRUMENT_RANGES[canonical]
-                min_freq = min(r[0] for r in sub_ranges)
-                max_freq = max(r[1] for r in sub_ranges)
-                ranges.append((min_freq, max_freq))
+                ranges.append(list(self.INSTRUMENT_RANGES[canonical]))
             else:
-                ranges.append((20, 20000))
+                ranges.append([(20.0, 20000.0)])
         return ranges
 
     def _apply_instrument_equalization(
         self,
         signal: np.ndarray,
-        freq_ranges: List[Tuple[float, float]],
+        freq_ranges: List[List[Tuple[float, float]]],
         gains: List[float],
         sample_rate: float
     ) -> np.ndarray:
@@ -264,12 +278,17 @@ class MusicModeService:
 
         mask_rows = []
         gain_rows = []
-        for freq_range, gain in zip(freq_ranges, gains):
-            low, high = float(freq_range[0]), float(freq_range[1])
-            if high <= low:
-                continue
-            mask_rows.append((abs_freqs >= low) & (abs_freqs < high))
-            gain_rows.append(self._clamp_gain(gain))
+        for sub_ranges, gain in zip(freq_ranges, gains):
+            mask = np.zeros(len(freqs), dtype=bool)
+            for low, high in sub_ranges:
+                low_f = float(low)
+                high_f = float(high)
+                if high_f <= low_f:
+                    continue
+                mask |= (abs_freqs >= low_f) & (abs_freqs < high_f)
+            if np.any(mask):
+                mask_rows.append(mask)
+                gain_rows.append(self._clamp_gain(gain))
 
         if mask_rows:
             mask_matrix = np.vstack(mask_rows)
