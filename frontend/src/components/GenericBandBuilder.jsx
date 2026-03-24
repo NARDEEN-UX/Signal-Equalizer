@@ -240,13 +240,6 @@ const GenericBandBuilder = ({
             <div
               key={b.id}
               className="generic-band"
-              draggable={allowReorder && safeBands.length > 1}
-              onDragStart={(e) => {
-                if (!allowReorder) return;
-                setDraggingBandId(b.id);
-                e.dataTransfer.effectAllowed = 'move';
-                e.dataTransfer.setData('text/plain', b.id);
-              }}
               onDragOver={(e) => {
                 if (!allowReorder) return;
                 e.preventDefault();
@@ -259,11 +252,21 @@ const GenericBandBuilder = ({
                 moveBandToIndex(draggedId, idx);
                 setDraggingBandId(null);
               }}
-              onDragEnd={() => setDraggingBandId(null)}
               style={{ opacity: draggingBandId === b.id ? 0.6 : 1 }}
             >
               <div className="generic-band-top">
-                <div className="generic-band-name" title={allowReorder ? 'Drag to reorder' : ''}>
+                <div
+                  className="generic-band-name"
+                  title={allowReorder ? 'Drag to reorder' : ''}
+                  draggable={allowReorder && safeBands.length > 1}
+                  onDragStart={(e) => {
+                    if (!allowReorder) return;
+                    setDraggingBandId(b.id);
+                    e.dataTransfer.effectAllowed = 'move';
+                    e.dataTransfer.setData('text/plain', b.id);
+                  }}
+                  onDragEnd={() => setDraggingBandId(null)}
+                >
                   {allowReorder ? ':: ' : ''}{b.name}
                 </div>
                 {(allowReorder || isEditable) && (
