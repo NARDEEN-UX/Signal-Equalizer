@@ -35,66 +35,121 @@ Every slider interaction immediately re-processes the signal through the backend
 
 ## Five Modes
 
+
+
 ### ⟟ Generic Mode
-> Build your own equalizer with fully custom frequency bands.
+> *Build your own equalizer — no fixed bands, no limitations.*
+
+Generic mode is a blank canvas. You define the frequency bands yourself: set the low and high cutoff in Hz, name the band, and control its gain. This makes it suitable for equalizing any kind of audio signal — speech recordings, environmental audio, synthesized tones, whatever you need.
+
+**How to use it:**
+1. Click **Add band** to create a new frequency range
+2. Enter the **Low Hz** and **High Hz** boundaries
+3. Drag the **Gain slider** (0× = silence, 1× = unchanged, 2× = boost)
+4. Drag the band label to reorder bands in the list
+5. The equalizer curve at the top of the left panel updates instantly
 
 ![Generic Mode](screenshots/generic_mode.png)
 
-Add as many bands as you need, set the Hz range for each, and control gain from 0× (silent) to 2× (doubled). Drag sliders on the equalizer curve to see which frequencies you're targeting. Useful for any audio signal where you want precise, custom frequency control.
+*The left panel shows the custom band builder with 4 default bands. The center and right panels show the input/output waveforms and live FFT spectrum.*
+
+**Video Demo:**  
+![Generic Mode Video Demo](screenshots/videos/Generic.mp4)
 
 ---
 
 ### ♫ Musical Instruments
-> Balance the individual stems of a music mix.
+> *Boost a guitar, cut the bass, isolate vocals — one slider each.*
+
+Musical Instruments mode maps 6 sliders to the natural frequency footprint of each instrument family in a mix. It's designed for audio that contains multiple layered sources (a full band recording, a produced track, a synthesized mix). Processing can run through either the **FFT** path or the **Wavelet** path — select in the Equalizer Controls panel.
+
+| Band | Frequency Range | What it targets |
+|------|----------------|----------------|
+| Drums | 20 – 12,000 Hz | Kick, snare, hi-hat, percussion |
+| Bass | 20 – 300 Hz | Bass guitar, sub-bass |
+| Vocals | 80 – 8,000 Hz | Lead and backing vocals |
+| Guitar | 80 – 5,000 Hz | Electric and acoustic guitar |
+| Piano | 27 – 5,000 Hz | Piano and keyboards |
+| Other | 20 – 20,000 Hz | Everything else in the mix |
+
+**AI Separation:** Switch to the **AI Separation** tab to run Demucs — an AI model that separates the audio into 6 individual stems. Download each stem as a WAV file and compare against the DSP band-filtered result.
 
 ![Music Mode](screenshots/music_mode.png)
 
-Six bands map directly to the natural frequency range of each instrument family — **Drums**, **Bass**, **Vocals**, **Guitar**, **Piano**, and **Other**. Boost or mute any source component in the mix using both FFT and wavelet processing paths.
+*The equalizer curve shows 6 bands across the full spectrum. Default wavelet basis is `db8`, optimized for harmonic instruments.*
+
+**Video Demo:**  
+![Music Mode Video Demo](screenshots/videos/music_mode_demo.webp)
 
 ---
 
 ### ❖ Animal Sounds
-> Separate animal vocalizations by species-accurate frequency ranges.
+> *Isolate or suppress specific animal vocalizations by frequency.*
+
+Animal Sounds mode uses scientifically-determined vocalization ranges for 5 animal families. Each slider targets the natural call frequency of that group, so you can boost one animal type while attenuating others — useful for wildlife audio analysis, bioacoustic research, or just exploring how animal sounds overlap.
+
+| Band | Frequency Range | Examples |
+|------|----------------|----------|
+| Songbirds | 1,000 – 8,000 Hz | Sparrow, canary, warbler, finch |
+| Canines | 150 – 2,000 Hz | Dog, wolf, hyena, fox |
+| Felines | 48 – 10,000 Hz | Cat, lion, tiger, leopard |
+| Large Mammals | 5 – 500 Hz | Elephant, whale, horse, cattle |
+| Insects | 600 – 20,000 Hz | Cricket, cicada, bee, grasshopper |
+
+**Processing:** Supports both FFT and Wavelet paths. Default wavelet basis is `sym8`, well-suited to bioacoustic textures. Adjust wavelet level gains in the Wavelet tab for finer multi-scale control.
 
 ![Animal Mode](screenshots/animal_mode.png)
 
-| Group | Frequency Range |
-|-------|----------------|
-| Songbirds | 1,000 – 8,000 Hz |
-| Canines | 150 – 2,000 Hz |
-| Felines | 48 – 10,000 Hz |
-| Large Mammals | 5 – 500 Hz |
-| Insects | 600 – 20,000 Hz |
+*The FFT chart clearly shows the synthetic signal's frequency content. Bands overlap intentionally because real animal vocalizations share frequency space — the gain sliders let you tilt the balance toward any group.*
+
+**Video Demo:**  
+![Animal Mode Video Demo](screenshots/videos/Animal.mp4)
 
 ---
 
 ### ⌁ Human Voices
-> Distinguish overlapping speakers by fundamental frequency range.
+> *Separate overlapping speakers by their fundamental speaking frequency.*
+
+Human Voices mode targets the fundamental frequency range of four voice categories. It's useful when you have a recording with multiple overlapping speakers and want to attenuate or isolate one group — for example, reduce child voices while keeping adult speech, or compare male vs. female frequency content.
+
+| Band | Frequency Range | Typical speaker |
+|------|----------------|----------------|
+| Male | 85 – 180 Hz | Adult male voices |
+| Female | 165 – 300 Hz | Adult female voices |
+| Old | 80 – 150 Hz | Elderly voices (slightly lower register) |
+| Child | 220 – 420 Hz | Children's voices (higher fundamental) |
+
+**AI Separation:** The **AI Separation** tab runs SpeechBrain's SepFormer model — a deep learning model trained for 2-speaker separation. Outputs 2 separated speaker streams as downloadable WAV files. Default wavelet basis is `sym5`, optimized for speech formants.
 
 ![Human Mode](screenshots/human_mode.png)
 
-| Voice Type | Range |
-|-----------|-------|
-| Male | 85 – 180 Hz |
-| Female | 165 – 300 Hz |
-| Old | 80 – 150 Hz |
-| Child | 220 – 420 Hz |
+*Male and Female bands overlap in the mid-range — this is intentional, as pitch ranges overlap in real speech. Adjust gains to tilt the balance toward one group.*
+
+**Video Demo:**  
+![Human Mode Video Demo](screenshots/videos/human_mode_demo.webp)
 
 ---
 
 ### ♡ ECG Abnormalities
-> Process cardiac signals and isolate arrhythmia components.
+> *Process cardiac signals and isolate arrhythmia components by frequency.*
+
+ECG mode is the only non-audio mode. It operates at **500 Hz sampling rate** (cardiac signals, not audio) and targets the characteristic frequency signatures of four cardiac rhythm types. Each band isolates a component of the heart's electrical activity, letting you boost or suppress specific arrhythmia signatures.
+
+| Band | Frequency Range | What it isolates |
+|------|----------------|-----------------|
+| Normal | 2.2 – 15.5 Hz | Normal sinus rhythm |
+| AFib | 0 – 179.4 Hz | Atrial fibrillation signature |
+| VTach | 2.2 – 3.3 Hz | Ventricular tachycardia |
+| HeartBlock | 2.2 – 31.0 Hz | Heart block / conduction delay |
+
+**AI Diagnosis:** The **AI Separation** tab runs a ResNet-based arrhythmia classifier. It returns per-class probability scores (Normal / AFib / VTach / HeartBlock) along with a **GradCAM explainability heatmap** showing which parts of the signal drove the model's decision. Default wavelet basis is `bior3.5`, which is well-suited for ECG waveform morphology.
 
 ![ECG Mode](screenshots/ecg_mode.png)
 
-Operates at 500 Hz (cardiac, not audio). Each band targets a specific heart rhythm component:
+*The characteristic irregular ECG signal is visible in the waveform viewers. The FFT shows energy concentrated at low frequencies (0–250 Hz), reflecting cardiac signal characteristics.*
 
-| Component | Range | Meaning |
-|-----------|-------|---------|
-| Normal | 2.2 – 15.5 Hz | Regular heartbeat |
-| AFib | 0 – 179.4 Hz | Atrial fibrillation |
-| VTach | 2.2 – 3.3 Hz | Ventricular tachycardia |
-| HeartBlock | 2.2 – 31.0 Hz | Conduction delay |
+**Video Demo:**  
+![ECG Mode Video Demo](screenshots/videos/ECG.mp4)
 
 ---
 
@@ -105,6 +160,7 @@ Operates at 500 Hz (cardiac, not audio). Each band targets a specific heart rhyt
 Every mode shows the frequency spectrum of both the input and processed output — live, side by side. You can immediately see how your equalization affects the signal in the frequency domain. Toggle **Audiogram scale** to switch between linear and logarithmic display.
 
 ![FFT Comparison](screenshots/fft_comparison.png)
+![FFT Comparison Audiogram](screenshots/fft_comparison2.png)
 
 ---
 
@@ -176,14 +232,6 @@ Switch between all five modes at any time without losing work — each mode has 
 **Save & Load Settings** — Export your equalizer configuration as JSON (bands, gains, wavelet basis, wavelet level). Load it back later. Preset schemas for the frontend layout can be saved and restored separately.
 
 **Export** — Download the processed output signal as a WAV file.
-
----
-
-## 🎬 Video Demo
-
-> End-to-end walkthrough — landing page → mode selection → signal loading → live visualization
-
-![Overview Demo](screenshots/videos/overview_demo.webp)
 
 ---
 
