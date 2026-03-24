@@ -79,7 +79,7 @@ Musical Instruments mode maps 6 sliders to the natural frequency footprint of ea
 *The equalizer curve shows 6 bands across the full spectrum. Default wavelet basis is `db8`, optimized for harmonic instruments.*
 
 **Video Demo:**  
-![Music Mode Video Demo](screenshots/videos/music_mode_demo.webp)
+![Music Mode Video Demo](screenshots/videos/Music.mp4)
 
 ---
 
