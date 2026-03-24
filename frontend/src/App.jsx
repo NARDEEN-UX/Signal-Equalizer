@@ -1211,7 +1211,7 @@ function App() {
       // Signal will be null, graphs will show empty from useMockProcessing
     }
     // Also reset playback when switching modes
-    handleStop();
+    resetPlayback();
   }, [activeModeId]);
 
   useEffect(() => {
@@ -1306,6 +1306,7 @@ function App() {
 
   const stopAudio = () => {
     if (sourceRef.current) {
+      sourceRef.current.onended = null;
       try {
         sourceRef.current.stop();
       } catch {
@@ -1473,11 +1474,14 @@ function App() {
     // Capture current playback time before stopping audio
     if (audioCtxRef.current && sourceRef.current) {
       const elapsed = (audioCtxRef.current.currentTime - startTimeRef.current) * playbackRate;
-      setPlaybackTime(Math.min(elapsed, durationRef.current));
+      const pausedAt = Math.min(offsetTimeRef.current + elapsed, durationRef.current);
+      setPlaybackTime(pausedAt);
+      offsetTimeRef.current = pausedAt;
     }
 
     // Stop the audio source
     if (sourceRef.current) {
+      sourceRef.current.onended = null;
       try {
         sourceRef.current.stop();
       } catch {
@@ -1491,6 +1495,20 @@ function App() {
   };
 
   const handleStop = () => {
+    let stoppedAt = playbackTime;
+    if (audioCtxRef.current && sourceRef.current) {
+      const elapsed = (audioCtxRef.current.currentTime - startTimeRef.current) * playbackRate;
+      stoppedAt = Math.min(offsetTimeRef.current + elapsed, durationRef.current);
+    }
+
+    stopAudio();
+    setIsPlaying(false);
+    const safeStoppedAt = Number.isFinite(stoppedAt) ? Math.max(0, stoppedAt) : 0;
+    setPlaybackTime(safeStoppedAt);
+    offsetTimeRef.current = safeStoppedAt;
+  };
+
+  const resetPlayback = () => {
     stopAudio();
     setIsPlaying(false);
     setPlaybackTime(0);
@@ -1862,7 +1880,7 @@ function App() {
   const handleModeSignalLoad = (signal, sampleRate, filename) => {
     const modeId = activeModeId;
     // Reset transport to avoid stale offsets from previous files.
-    handleStop();
+    resetPlayback();
     // Reset AI Separation state for the current mode whenever a new signal is loaded.
     resetAiSeparationState(modeId);
     // Start with FFT for quick first render after opening a file.
@@ -1992,7 +2010,7 @@ function App() {
   const handleAudioFileSelect = async (file) => {
     const modeId = activeModeId;
     // Reset transport so the new file always starts from t=0.
-    handleStop();
+    resetPlayback();
     // Reset AI Separation state for the current mode whenever a new signal is loaded.
     resetAiSeparationState(modeId);
     // Start with FFT for quick first render after opening a file.
