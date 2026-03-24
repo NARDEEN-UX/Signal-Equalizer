@@ -14,12 +14,12 @@ export const MUSIC_MODE_CONFIG = {
   sliderLabels: ['drums', 'bass', 'vocals', 'guitar', 'piano', 'other'],
   instrumentTypes: ['drums', 'bass', 'vocals', 'guitar', 'piano', 'other'],
   bands: [
-    { id: 'music-0', name: 'drums', low: 20, high: 12000, gain: 1.0 },
-    { id: 'music-1', name: 'bass', low: 20, high: 300, gain: 1.0 },
-    { id: 'music-2', name: 'vocals', low: 80, high: 8000, gain: 1.0 },
-    { id: 'music-3', name: 'guitar', low: 80, high: 5000, gain: 1.0 },
-    { id: 'music-4', name: 'piano', low: 27, high: 5000, gain: 1.0 },
-    { id: 'music-5', name: 'other', low: 20, high: 20000, gain: 1.0 }
+    { id: 'music-0', name: 'drums', low: 30, high: 180, gain: 1.0 },
+    { id: 'music-1', name: 'bass', low: 180, high: 350, gain: 1.0 },
+    { id: 'music-2', name: 'vocals', low: 350, high: 3000, gain: 1.0 },
+    { id: 'music-3', name: 'guitar', low: 3000, high: 6000, gain: 1.0 },
+    { id: 'music-4', name: 'piano', low: 6000, high: 10000, gain: 1.0 },
+    { id: 'music-5', name: 'other', low: 10000, high: 18000, gain: 1.0 }
   ],
   wavelet: 'db4',
   waveletLevels: 6,

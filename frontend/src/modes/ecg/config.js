@@ -9,13 +9,13 @@
 export const ECG_MODE_CONFIG = {
   id: 'ecg',
   name: 'ECG Abnormalities',
-  sliderLabels: ['Normal', 'Atrial Fibrillation', 'Ventricular Tachycardia', 'Heart Block'],
+  sliderLabels: ['Normal', 'AFib', 'VTach', 'HeartBlock'],
   componentTypes: ['Normal', 'Atrial Fibrillation', 'Ventricular Tachycardia', 'Heart Block', 'Premature Beats', 'Bradycardia', 'Tachycardia'],
   freqBands: [
-    { min: 0.05, max: 100, label: 'Normal' },
-    { min: 5, max: 50, label: 'Atrial Fibrillation' },
-    { min: 3, max: 40, label: 'Ventricular Tachycardia' },
-    { min: 0.5, max: 5, label: 'Heart Block' }
+    { min: 2.2, max: 15.5, label: 'Normal' },
+    { min: 0.0, max: 179.4, label: 'AFib' },
+    { min: 2.2, max: 3.3, label: 'VTach' },
+    { min: 2.2, max: 31.0, label: 'HeartBlock' }
   ],
   wavelet: 'db4',
   waveletLevels: 6,

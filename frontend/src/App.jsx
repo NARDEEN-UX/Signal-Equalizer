@@ -62,9 +62,9 @@ const MODES = [
     description: 'Adjust different animal sounds with scientifically accurate frequency ranges.',
     accentClass: 'mode-animal',
     icon: '❖',
-    sliderLabels: ['Songbirds', 'Canines', 'Felines', 'Large Mammals', 'Insects'],
+    sliderLabels: ['Frog', 'Birds', 'Dog', 'Cat'],
     allowAddSubdivision: false,
-    requirements: ['Songbird sounds (2,000-12,000 Hz)', 'Dog/Wolf barks (250-4,000 Hz)', 'Cat meows/hisses (100-8,000 Hz)', 'Elephant/Whale calls (20-2,000 Hz)', 'Cricket/Bee sounds (1,000-20,000 Hz)']
+    requirements: ['Frog (1084.5-2509.3 Hz)', 'Birds (3018.2-5203.4 Hz)', 'Dog (479.6-2314.9 Hz)', 'Cat (708.0-3620.9 Hz)']
   },
   {
     id: 'human',
@@ -84,9 +84,9 @@ const MODES = [
     description: 'Control magnitude of arrhythmia components (normal + 3 types).',
     accentClass: 'mode-ecg',
     icon: '♡',
-    sliderLabels: ['Normal Sinus', 'Atrial Fibrillation', 'Ventricular Tachycardia', 'Heart Block'],
+    sliderLabels: ['Normal', 'AFib', 'VTach', 'HeartBlock'],
     allowAddSubdivision: false,
-    requirements: ['Normal sinus rhythm (0.5–3 Hz)', 'Atrial fibrillation (5–50 Hz)', 'Ventricular tachycardia (3–5 Hz)', 'Heart block (0.05–0.5 Hz)']
+    requirements: ['Normal (2.2-15.5 Hz)', 'AFib (0.0-179.4 Hz)', 'VTach (2.2-3.3 Hz)', 'HeartBlock (2.2-31.0 Hz)']
   },
   {
     id: 'ai-music',
@@ -137,19 +137,18 @@ const DEFAULT_MODE_BANDS = {
     { id: 'b4', name: 'Band 4', low: 3000, high: 8000, gain: 1 }
   ],
   music: [
-    { id: 'music-0', name: 'drums', low: 20, high: 12000, gain: 1.0 },
-    { id: 'music-1', name: 'bass', low: 20, high: 300, gain: 1.0 },
-    { id: 'music-2', name: 'vocals', low: 80, high: 8000, gain: 1.0 },
-    { id: 'music-3', name: 'guitar', low: 80, high: 5000, gain: 1.0 },
-    { id: 'music-4', name: 'piano', low: 27, high: 5000, gain: 1.0 },
-    { id: 'music-5', name: 'other', low: 20, high: 20000, gain: 1.0 }
+    { id: 'music-0', name: 'drums', low: 30, high: 180, gain: 1.0 },
+    { id: 'music-1', name: 'bass', low: 180, high: 350, gain: 1.0 },
+    { id: 'music-2', name: 'vocals', low: 350, high: 3000, gain: 1.0 },
+    { id: 'music-3', name: 'guitar', low: 3000, high: 6000, gain: 1.0 },
+    { id: 'music-4', name: 'piano', low: 6000, high: 10000, gain: 1.0 },
+    { id: 'music-5', name: 'other', low: 10000, high: 18000, gain: 1.0 }
   ],
   animal: [
-    { id: 'animal-0', name: 'Songbirds', low: 1000, high: 8000, gain: 1.0, examples: 'Sparrow, Canary, Warbler, Finch' },
-    { id: 'animal-1', name: 'Canines', low: 150, high: 2000, gain: 1.0, examples: 'Dog, Wolf, Hyena, Fox' },
-    { id: 'animal-2', name: 'Felines', low: 48, high: 10000, gain: 1.0, examples: 'Cat, Lion, Tiger, Leopard' },
-    { id: 'animal-3', name: 'Large Mammals', low: 5, high: 500, gain: 1.0, examples: 'Elephant, Whale, Horse, Cattle' },
-    { id: 'animal-4', name: 'Insects', low: 600, high: 20000, gain: 1.0, examples: 'Cricket, Cicada, Bee, Grasshopper' }
+    { id: 'animal-0', name: 'Frog', low: 1084.5, high: 2509.3, gain: 1.0 },
+    { id: 'animal-1', name: 'Birds', low: 3018.2, high: 5203.4, gain: 1.0 },
+    { id: 'animal-2', name: 'Dog', low: 479.6, high: 2314.9, gain: 1.0 },
+    { id: 'animal-3', name: 'Cat', low: 708.0, high: 3620.9, gain: 1.0 }
   ],
   human: [
     { id: 'human-0', name: 'Male', low: 85, high: 180, gain: 1 },
@@ -158,10 +157,10 @@ const DEFAULT_MODE_BANDS = {
     { id: 'human-3', name: 'Child', low: 220, high: 420, gain: 1 }
   ],
   ecg: [
-    { id: 'ecg-0', name: 'Normal Sinus', low: 0.5, high: 3, gain: 1 },
-    { id: 'ecg-1', name: 'Atrial Fibrillation', low: 5, high: 50, gain: 1 },
-    { id: 'ecg-2', name: 'Ventricular Tachycardia', low: 3, high: 5, gain: 1 },
-    { id: 'ecg-3', name: 'Heart Block', low: 0.05, high: 0.5, gain: 1 }
+    { id: 'ecg-0', name: 'Normal', low: 2.2, high: 15.5, gain: 1 },
+    { id: 'ecg-1', name: 'AFib', low: 0.0, high: 179.4, gain: 1 },
+    { id: 'ecg-2', name: 'VTach', low: 2.2, high: 3.3, gain: 1 },
+    { id: 'ecg-3', name: 'HeartBlock', low: 2.2, high: 31.0, gain: 1 }
   ]
 };
 

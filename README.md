@@ -1,243 +1,351 @@
-# Signal Equalizer 🎵
+<div align="center">
 
-A comprehensive web application for audio signal equalization with frequency and wavelet domain analysis. Supports 5 distinct operation modes for different signal types.
+# ⚡ Signal Equalizer
 
-## 🚀 Quick Start (5 minutes)
+**Real-time signal processing and analysis across 5 specialized modes**
 
-### Windows Users
+[![FastAPI](https://img.shields.io/badge/Backend-FastAPI-009688?style=for-the-badge&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
+[![React](https://img.shields.io/badge/Frontend-React_18-61DAFB?style=for-the-badge&logo=react&logoColor=black)](https://react.dev)
+[![Python](https://img.shields.io/badge/Python-3.8+-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://python.org)
+[![Vite](https://img.shields.io/badge/Build-Vite-646CFF?style=for-the-badge&logo=vite&logoColor=white)](https://vitejs.dev)
+
+</div>
+
+---
+
+![Landing Page](screenshots/landing_page.png)
+
+*Pick a mode. Load a signal. See everything — instantly.*
+
+---
+
+## What is this?
+
+Signal Equalizer is a full-stack signal processing workbench. You load an audio file (or generate a synthetic one), choose a processing mode, and the app gives you:
+
+- Side-by-side **input vs output waveform** viewers
+- **FFT spectrum** comparison in real time
+- **Wavelet decomposition** with selectable basis functions
+- **Spectrogram** heatmaps for time-frequency analysis
+- **AI-powered separation** for music, voices, and ECG diagnostics
+
+Every slider interaction immediately re-processes the signal through the backend and updates all charts live.
+
+---
+
+## Five Modes
+
+### ⟟ Generic Mode
+> Build your own equalizer with fully custom frequency bands.
+
+![Generic Mode](screenshots/generic_mode.png)
+
+Add as many bands as you need, set the Hz range for each, and control gain from 0× (silent) to 2× (doubled). Drag sliders on the equalizer curve to see which frequencies you're targeting. Useful for any audio signal where you want precise, custom frequency control.
+
+---
+
+### ♫ Musical Instruments
+> Balance the individual stems of a music mix.
+
+![Music Mode](screenshots/music_mode.png)
+
+Six bands map directly to the natural frequency range of each instrument family — **Drums**, **Bass**, **Vocals**, **Guitar**, **Piano**, and **Other**. Boost or mute any source component in the mix using both FFT and wavelet processing paths.
+
+---
+
+### ❖ Animal Sounds
+> Separate animal vocalizations by species-accurate frequency ranges.
+
+![Animal Mode](screenshots/animal_mode.png)
+
+| Group | Frequency Range |
+|-------|----------------|
+| Songbirds | 1,000 – 8,000 Hz |
+| Canines | 150 – 2,000 Hz |
+| Felines | 48 – 10,000 Hz |
+| Large Mammals | 5 – 500 Hz |
+| Insects | 600 – 20,000 Hz |
+
+---
+
+### ⌁ Human Voices
+> Distinguish overlapping speakers by fundamental frequency range.
+
+![Human Mode](screenshots/human_mode.png)
+
+| Voice Type | Range |
+|-----------|-------|
+| Male | 85 – 180 Hz |
+| Female | 165 – 300 Hz |
+| Old | 80 – 150 Hz |
+| Child | 220 – 420 Hz |
+
+---
+
+### ♡ ECG Abnormalities
+> Process cardiac signals and isolate arrhythmia components.
+
+![ECG Mode](screenshots/ecg_mode.png)
+
+Operates at 500 Hz (cardiac, not audio). Each band targets a specific heart rhythm component:
+
+| Component | Range | Meaning |
+|-----------|-------|---------|
+| Normal | 2.2 – 15.5 Hz | Regular heartbeat |
+| AFib | 0 – 179.4 Hz | Atrial fibrillation |
+| VTach | 2.2 – 3.3 Hz | Ventricular tachycardia |
+| HeartBlock | 2.2 – 31.0 Hz | Conduction delay |
+
+---
+
+## Signal Analysis Features
+
+### 📊 FFT Spectrum (Input vs Output)
+
+Every mode shows the frequency spectrum of both the input and processed output — live, side by side. You can immediately see how your equalization affects the signal in the frequency domain. Toggle **Audiogram scale** to switch between linear and logarithmic display.
+
+![FFT Comparison](screenshots/fft_comparison.png)
+
+---
+
+### 🎨 Spectrogram (Time-Frequency Heatmap)
+
+Click **Show spectrograms** to reveal STFT-based time-frequency heatmaps for both input and output. Multiple color scales are available — **Inferno**, **Viridis**, **Plasma**, and more. Spectrograms make it easy to spot bursts, sustained tones, and temporal changes in the signal.
+
+![Spectrogram View](screenshots/spectrogram_view.png)
+
+---
+
+### 🌊 Wavelet Processing
+
+Switch from FFT to **Wavelet mode** using the toggle in the Equalizer Controls panel. This changes the processing pipeline from frequency-domain to multi-scale wavelet decomposition.
+
+![Wavelet Sliders](screenshots/wavelet_sliders.png)
+
+In wavelet mode you get:
+
+- **Per-level gain sliders** (L1–Ln) — each level corresponds to a different frequency scale
+- **Wavelet basis selector** — 9 options, each with a different time-frequency trade-off:
+
+| Basis | Code | Best suited for |
+|-------|------|----------------|
+| Haar | `haar` | Sharp transients, quick decomposition |
+| Daubechies 4 | `db4` | General purpose (Generic mode default) |
+| Daubechies 6 | `db6` | Smoother than db4, more overlap |
+| Daubechies 8 | `db8` | Harmonic-rich audio (Music default) |
+| Symlet 5 | `sym5` | Near-symmetric, speech (Human default) |
+| Symlet 8 | `sym8` | Bioacoustic textures (Animal default) |
+| Coiflet 3 | `coif3` | Symmetric, good reconstruction |
+| Biorthogonal 3.5 | `bior3.5` | ECG-friendly (ECG default) |
+| Discrete Meyer | `dmey` | Smooth frequency localization |
+
+The maximum decomposition level is automatically calculated from the signal length and wavelet filter size.
+
+---
+
+### 🤖 AI Separation
+
+Every applicable mode has an **AI Separation** tab alongside the main Equalizer view.
+
+![AI Separation](screenshots/ai_separation.png)
+
+| Mode | AI Model | Output |
+|------|----------|--------|
+| **Music** | Demucs (htdemucs_6s) | 6 downloadable WAV stems |
+| **Human Voices** | SpeechBrain SepFormer | 2 speaker stems |
+| **ECG** | ResNet + GradCAM | Arrhythmia probabilities + explainability heatmap |
+
+Downloadable stems allow you to compare AI-separated sources directly against the DSP band-filtered results.
+
+---
+
+### 🔊 Mode Selector
+
+Switch between all five modes at any time without losing work — each mode has completely isolated state.
+
+![Mode Selector](screenshots/mode_selector.png)
+
+---
+
+## Other Features
+
+**Audio Transport Controls** — Each signal viewer has independent playback with play, pause, stop, rate (0.5× · 1× · 1.5× · 2×), and volume.
+
+**Signal Management** — Upload your own WAV files or use built-in synthetic sample generators (one per mode). Uploaded signals are stored per mode and can be listed, reloaded, or deleted.
+
+**Save & Load Settings** — Export your equalizer configuration as JSON (bands, gains, wavelet basis, wavelet level). Load it back later. Preset schemas for the frontend layout can be saved and restored separately.
+
+**Export** — Download the processed output signal as a WAV file.
+
+---
+
+## 🎬 Video Demo
+
+> End-to-end walkthrough — landing page → mode selection → signal loading → live visualization
+
+![Overview Demo](screenshots/videos/overview_demo.webp)
+
+---
+
+## 🔌 API Reference
+
+All endpoints at `http://localhost:8000` | Interactive docs at [`/docs`](http://localhost:8000/docs)
+
+<details>
+<summary><b>Core endpoints</b></summary>
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| `GET` | `/` | API root |
+| `GET` | `/health` | Health check |
+| `POST` | `/upload` | Upload audio + optional settings JSON |
+| `POST` | `/save-settings` | Persist equalizer settings |
+| `POST` | `/load-settings` | Load saved settings |
+| `POST` | `/save_schema` | Save frontend layout preset |
+| `POST` | `/load_schema` | Load frontend layout preset |
+| `GET` | `/sample/{mode}` | Get synthetic sample for any mode |
+
+</details>
+
+<details>
+<summary><b>Generic mode</b></summary>
+
+```
+POST   /api/modes/generic/process
+GET    /api/modes/generic/settings/default
+POST   /api/modes/generic/validate-bands
+POST   /api/modes/generic/upload-signal
+GET    /api/modes/generic/signals
+POST   /api/modes/generic/signal/{filename}/load
+DELETE /api/modes/generic/signal/{filename}
+```
+</details>
+
+<details>
+<summary><b>Music mode</b></summary>
+
+```
+POST   /api/modes/music/process
+GET    /api/modes/music/settings/default
+GET    /api/modes/music/instruments
+POST   /api/modes/music/separate-ai
+GET    /api/modes/music/ai-stems/{job_id}/{stem_filename}
+POST   /api/modes/music/upload-signal
+GET    /api/modes/music/signals
+POST   /api/modes/music/signal/{filename}/load
+DELETE /api/modes/music/signal/{filename}
+```
+</details>
+
+<details>
+<summary><b>Animals mode</b></summary>
+
+```
+POST   /api/modes/animals/process
+GET    /api/modes/animals/settings/default
+GET    /api/modes/animals/animals
+POST   /api/modes/animals/upload-signal
+GET    /api/modes/animals/signals
+POST   /api/modes/animals/signal/{filename}/load
+DELETE /api/modes/animals/signal/{filename}
+```
+</details>
+
+<details>
+<summary><b>Humans mode</b></summary>
+
+```
+POST   /api/modes/humans/process
+GET    /api/modes/humans/settings/default
+GET    /api/modes/humans/voice-types
+POST   /api/modes/humans/separate-ai
+GET    /api/modes/humans/ai-stems/{job_id}/{stem_filename}
+POST   /api/modes/humans/upload-signal
+GET    /api/modes/humans/signals
+POST   /api/modes/humans/signal/{filename}/load
+DELETE /api/modes/humans/signal/{filename}
+```
+</details>
+
+<details>
+<summary><b>ECG mode</b></summary>
+
+```
+POST   /api/modes/ecg/process
+GET    /api/modes/ecg/settings/default
+GET    /api/modes/ecg/components
+POST   /api/modes/ecg/upload-signal
+GET    /api/modes/ecg/signals
+POST   /api/modes/ecg/signal/{filename}/load
+DELETE /api/modes/ecg/signal/{filename}
+POST   /api/modes/ecg/ai-analyze
+POST   /api/modes/ecg/ai-analyze-file
+```
+</details>
+
+---
+
+## 🛠️ Tech Stack
+
+| Layer | Technologies |
+|-------|-------------|
+| **Backend** | FastAPI · NumPy · SciPy · PyWavelets · SoundFile · Pandas · Torch · Torchaudio |
+| **AI Models** | Demucs · SpeechBrain SepFormer · ResNet (ECG) |
+| **Frontend** | React 18 · Vite · Axios · Chart.js · react-chartjs-2 |
+
+---
+
+## 🚀 Quick Start
+
 ```bash
-# Terminal 1
-run_backend.bat
-
-# Terminal 2 (new terminal)
-run_frontend.bat
-```
-
-### macOS/Linux Users
-```bash
-# Terminal 1
-bash run_backend.sh
-
-# Terminal 2 (new terminal)
-bash run_frontend.sh
-```
-
-Then open http://localhost:5173 in your browser.
-
-## 📋 Features
-
-### 5 Operating Modes
-
-1. **Generic Mode** - Custom frequency band equalization
-   - Add/remove frequency subdivisions
-   - Set frequency range and gain per band
-   - Full flexibility for custom analysis
-
-2. **Musical Instruments** - Isolate instrument tracks
-   - Sliders: Bass, Piano, Vocals, Violin
-   - Additional instruments: Drums, Guitar, Flute, Trumpet
-
-3. **Animal Sounds** - Separate animal vocalizations
-   - Sliders: Cat, Dog, Bird, Elephant
-   - Additional animals: Lion, Sheep, Cow, Horse, Monkey, Frog
-
-4. **Human Voices** - Distinguish multiple speakers
-   - Sliders: Young, Old, Male, Female voices
-   - Language support: Arabic, English, Spanish, French, German, Chinese
-
-5. **ECG Abnormalities** - Cardiac signal analysis
-   - Sliders: Normal, Atrial Fibrillation, Ventricular Tachycardia, Heart Block
-   - Additional components: Premature Beats, Bradycardia, Tachycardia
-
-### Additional Features
-
-- 📊 Real-time FFT spectrum analysis
-- 🎨 Spectrogram visualization
-- 🌊 Wavelet decomposition (db4, haar, sym5, etc.)
-- 💾 Save/load settings as JSON files
-- 🎙️ Audio file upload with custom settings
-- 🔗 Linked waveform viewers (synchronized zoom/pan)
-- ⚙️ Audiogram scale support (linear/logarithmic)
-- 🎵 Audio playback with transport controls
-
-## 📁 Project Structure
-
-```
-Signal-Equalizer/
-├── backend/                    # FastAPI server
-│   ├── main.py                # Entry point
-│   ├── core/                  # Shared utilities
-│   ├── modes/                 # 5 mode implementations
-│   │   ├── generic/
-│   │   ├── music/
-│   │   ├── animals/
-│   │   ├── humans/
-│   │   └── ECG/
-│   └── requirements.txt
-├── frontend/                   # React + Vite
-│   ├── src/
-│   │   ├── components/        # UI components
-│   │   ├── modes/             # Mode configurations
-│   │   ├── api.js             # API client
-│   │   └── App.jsx
-│   └── package.json
-├── run_backend.bat/.sh        # Quick start scripts
-├── run_frontend.bat/.sh
-├── SETUP.md                   # Detailed setup guide
-├── QUICKSTART.md              # 5-minute quick start
-└── IMPLEMENTATION_STATUS.md   # Complete status
-```
-
-## 🛠 Technology Stack
-
-**Backend:**
-- FastAPI (Python web framework)
-- NumPy & SciPy (signal processing)
-- PyWavelets (wavelet analysis)
-- Pydantic (data validation)
-
-**Frontend:**
-- React 18
-- Vite (build tool)
-- Axios (API client)
-- Pure CSS (styling)
-
-## 📖 Documentation
-
-- **[QUICKSTART.md](./QUICKSTART.md)** - Get running in 5 minutes ⭐
-- **[SETUP.md](./SETUP.md)** - Complete setup and API documentation
-- **[IMPLEMENTATION_STATUS.md](./IMPLEMENTATION_STATUS.md)** - Detailed feature checklist
-
-## 🎯 API Endpoints
-
-All endpoints are available at `http://localhost:5000`:
-
-```
-Core:
-  GET  /                              # API info
-  POST /upload                        # Upload audio + settings
-  POST /save-settings                 # Save JSON settings
-  POST /load-settings                 # Load JSON settings
-  GET  /health                        # Health check
-
-Modes:
-  POST /api/modes/generic/process     # Generic equalization
-  POST /api/modes/music/process       # Music mode
-  POST /api/modes/animals/process     # Animals mode
-  POST /api/modes/humans/process      # Humans mode
-  POST /api/modes/ecg/process         # ECG mode
-  
-  GET  /api/modes/*/settings/default  # Default settings
-  GET  /api/modes/*/[items]           # Available items
-```
-
-See `http://localhost:5000/docs` for interactive API documentation.
-
-## ⚙️ Settings File Format
-
-Settings are saved as JSON for reuse:
-
-```json
-{
-  "mode": "music",
-  "bands": [
-    {"id": "b1", "name": "Bass", "low": 20, "high": 250, "gain": 1.2},
-    {"id": "b2", "name": "Piano", "low": 27, "high": 4186, "gain": 0.8}
-  ],
-  "sliders_freq": [1.2, 0.8, 1.0, 1.0],
-  "wavelet": "db4",
-  "wavelet_level": 6
-}
-```
-
-## 🔧 Development
-
-### Backend Development
-```bash
+# Start backend
 cd backend
 pip install -r requirements.txt
-python -m pytest  # Run tests (when added)
-python main.py    # Start server
-```
+uvicorn main:app --reload --host 0.0.0.0 --port 8000
 
-### Frontend Development
-```bash
+# Start frontend (new terminal)
 cd frontend
-npm install
-npm run dev       # Start dev server
-npm run build     # Production build
-npm run test      # Run tests (when added)
-```
-
-## 📊 Signal Processing
-
-- **FFT-based:** Frequency domain analysis and equalization
-- **Wavelet:** Multi-scale time-frequency analysis
-- **Spectrograms:** Time-frequency representations
-- **Real-time:** Updates as controls change
-
-## ✨ Code Quality
-
-- ✅ No code repetition (reusable service architecture)
-- ✅ Type hints throughout (Pydantic models)
-- ✅ Comprehensive error handling
-- ✅ Clean separation of concerns
-- ✅ RESTful API design
-- ✅ CORS enabled for cross-origin requests
-
-## 🚀 Next Steps
-
-1. ✅ Start the application (see Quick Start above)
-2. Explore each mode with sample data
-3. Create/load custom settings files
-4. Prepare test audio files for your use case
-5. (Optional) Extend with custom modes or AI models
-
-## 🐛 Troubleshooting
-
-**Can't start backend?**
-```bash
-# Verify Python 3.8+
-python --version
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Try again
-python main.py
-```
-
-**Can't start frontend?**
-```bash
-# Verify Node 16+
-node --version
-
-# Clean install
-npm cache clean --force
 npm install
 npm run dev
 ```
 
-**Backend and frontend not communicating?**
-- Verify both are running
-- Check backend is on http://localhost:5000
-- Check frontend is on http://localhost:5173
-- Open browser developer tools (F12) for API errors
+Open **http://localhost:5173** — the backend needs to be running for signal processing to work.
 
-**Settings file won't load?**
-- Ensure JSON format is valid
-- Check file contains: mode, bands, sliders_freq
-- Verify band objects have: id, name, low, high, gain
-
-## 📝 License
-
-This project is part of the Signal Processing course/assignment.
-
-## 👥 Author
-
-Developed for comprehensive audio signal analysis and equalization.
+> **Windows note:** If `npm run dev` is blocked by execution policy, use `npm.cmd run dev` instead.
 
 ---
 
-**Status:** ✅ Core implementation complete  
-**Last Updated:** March 14, 2026
+## 📁 Project Structure
+
+```text
+Signal-Equalizer/
+├─ backend/
+│  ├─ main.py               # FastAPI app entry + synthetic signal generators
+│  ├─ core/                  # Shared FFT/wavelet processing utilities
+│  ├─ modes/
+│  │  ├─ generic/            # Custom band equalization
+│  │  ├─ music/              # Demucs stem separation + DSP
+│  │  ├─ animals/            # Animal vocalization processing
+│  │  ├─ humans/             # SepFormer voice separation + DSP
+│  │  └─ ecg/                # Cardiac analysis + ResNet AI
+│  ├─ models/                # AI model wrappers
+│  ├─ settings/              # Default configs + user-saved presets
+│  └─ uploads/               # Per-mode uploaded signal storage
+├─ frontend/
+│  ├─ src/
+│  │  ├─ App.jsx             # Main application (modes, state, layout)
+│  │  ├─ api.js              # Backend API client (all endpoints)
+│  │  ├─ components/         # WaveformViewer, FFTChart, SpectrogramViewer, ...
+│  │  ├─ hooks/              # useBackendProcessing (debounce + cancellation)
+│  │  ├─ services/           # Service layer
+│  │  ├─ modes/              # Per-mode band configurations
+│  │  └─ mock/               # Offline development data
+│  └─ package.json
+└─ screenshots/              # README media assets
+```
+
+---
+
+## 📝 License
+
+This project is part of a signal processing coursework implementation.
