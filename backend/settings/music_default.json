@@ -4,43 +4,43 @@
     {
       "id": "music-0",
       "name": "drums",
-      "low": 20,
-      "high": 12000,
+      "low": 30,
+      "high": 180,
       "gain": 1.0
     },
     {
       "id": "music-1",
       "name": "bass",
-      "low": 20,
-      "high": 300,
+      "low": 180,
+      "high": 350,
       "gain": 1.0
     },
     {
       "id": "music-2",
       "name": "vocals",
-      "low": 80,
-      "high": 8000,
+      "low": 350,
+      "high": 3000,
       "gain": 1.0
     },
     {
       "id": "music-3",
       "name": "guitar",
-      "low": 80,
-      "high": 5000,
+      "low": 3000,
+      "high": 6000,
       "gain": 1.0
     },
     {
       "id": "music-4",
       "name": "piano",
-      "low": 27,
-      "high": 5000,
+      "low": 6000,
+      "high": 10000,
       "gain": 1.0
     },
     {
       "id": "music-5",
       "name": "other",
-      "low": 20,
-      "high": 20000,
+      "low": 10000,
+      "high": 18000,
       "gain": 1.0
     }
   ],

@@ -1,57 +1,40 @@
 {
   "mode": "animals",
-  "description": "Animal sounds with scientifically accurate frequency ranges - 5 band configuration",
+  "description": "Animal sounds with estimated species frequency ranges - 4 band configuration",
   "bands": [
     {
       "id": "animal-0",
-      "name": "Songbirds",
-      "low": 1000,
-      "high": 8000,
-      "gain": 1.0,
-      "examples": "Sparrow, Canary, Warbler, Finch",
-      "characteristics": "High-pitched, melodic, complex harmonics"
+      "name": "Frog",
+      "low": 1084.5,
+      "high": 2509.3,
+      "gain": 1.0
     },
     {
       "id": "animal-1",
-      "name": "Canines",
-      "low": 150,
-      "high": 2000,
-      "gain": 1.0,
-      "examples": "Dog, Wolf, Hyena, Fox",
-      "characteristics": "Variable pitch, distinctive barks and howls"
+      "name": "Birds",
+      "low": 3018.2,
+      "high": 5203.4,
+      "gain": 1.0
     },
     {
       "id": "animal-2",
-      "name": "Felines",
-      "low": 48,
-      "high": 10000,
-      "gain": 1.0,
-      "examples": "Cat, Lion, Tiger, Leopard",
-      "characteristics": "Complex, variable, purrs to hisses"
+      "name": "Dog",
+      "low": 479.6,
+      "high": 2314.9,
+      "gain": 1.0
     },
     {
       "id": "animal-3",
-      "name": "Large Mammals",
-      "low": 5,
-      "high": 500,
-      "gain": 1.0,
-      "examples": "Elephant, Whale, Horse, Cattle",
-      "characteristics": "Deep, powerful, includes infrasound rumbles"
-    },
-    {
-      "id": "animal-4",
-      "name": "Insects",
-      "low": 600,
-      "high": 20000,
-      "gain": 1.0,
-      "examples": "Cricket, Cicada, Bee, Grasshopper",
-      "characteristics": "High-pitched, rhythmic, mechanical sounds"
+      "name": "Cat",
+      "low": 708.0,
+      "high": 3620.9,
+      "gain": 1.0
     }
   ],
-  "sliders_freq": [1.0, 1.0, 1.0, 1.0, 1.0],
+  "sliders_freq": [1.0, 1.0, 1.0, 1.0],
   "sliders_wavelet": [1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
   "wavelet": "sym8",
   "wavelet_level": 6,
   "sample_rate": 44100,
-  "frequency_notes": "Based on scientific bioacoustics research from Cornell Lab of Ornithology and NOAA"
+  "frequency_notes": "Estimated species ranges provided by user"
 }
