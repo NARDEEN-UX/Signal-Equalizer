@@ -10,32 +10,36 @@ class ECGModeService:
     
     # ECG component bands aligned with UI labels.
     COMPONENT_RANGES = {
-        "Normal Sinus": [(0.5, 3.0)],
-        "Atrial Fibrillation": [(5.0, 50.0)],
-        "Ventricular Tachycardia": [(3.0, 5.0)],
-        "Heart Block": [(0.05, 0.5)],
+        "Normal": [(2.2, 15.5)],
+        "AFib": [(0.0, 179.4)],
+        "VTach": [(2.2, 3.3)],
+        "HeartBlock": [(2.2, 31.0)],
     }
 
     # Alias map to keep previous labels/settings working.
     COMPONENT_NAME_ALIASES = {
-        "normal sinus": "Normal Sinus",
-        "atrial fibrillation": "Atrial Fibrillation",
-        "apc (atrial premature)": "Atrial Fibrillation",
-        "ventricular fibrillation": "Atrial Fibrillation",
-        "vf (ventricular fibrillation)": "Atrial Fibrillation",
-        "vt (ventricular tachycardia)": "Ventricular Tachycardia",
-        "ventricular tachycardia": "Ventricular Tachycardia",
-        "pvc (premature ventricular)": "Ventricular Tachycardia",
-        "heart block": "Heart Block",
+        "normal": "Normal",
+        "normal sinus": "Normal",
+        "afib": "AFib",
+        "atrial fibrillation": "AFib",
+        "apc (atrial premature)": "AFib",
+        "ventricular fibrillation": "AFib",
+        "vf (ventricular fibrillation)": "AFib",
+        "vtach": "VTach",
+        "vt (ventricular tachycardia)": "VTach",
+        "ventricular tachycardia": "VTach",
+        "pvc (premature ventricular)": "VTach",
+        "heartblock": "HeartBlock",
+        "heart block": "HeartBlock",
     }
 
     # Level 10 details: 0.24-0.48 Hz. Level 10 approx: 0-0.24 Hz.
     # L9: 0.48-0.97, L8: 0.97-1.95, L7: 1.95-3.9, L6: 3.9-7.8, L5: 7.8-15.6, L4: 15.6-31.2
     COMPONENT_LEVEL_MAP = {
-        "Normal Sinus": [7, 8, 9, 10],
-        "Atrial Fibrillation": [4, 5, 6],
-        "Ventricular Tachycardia": [6, 7],
-        "Heart Block": [10],
+        "Normal": [5, 6, 7],
+        "AFib": [1, 2, 3, 4, 5, 6, 7],
+        "VTach": [7],
+        "HeartBlock": [4, 5, 6, 7],
     }
     
     def __init__(self):

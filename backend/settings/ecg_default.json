@@ -3,30 +3,30 @@
   "bands": [
     {
       "id": "ecg-0",
-      "name": "Normal Sinus",
-      "low": 0.5,
-      "high": 3,
+      "name": "Normal",
+      "low": 2.2,
+      "high": 15.5,
       "gain": 1.0
     },
     {
       "id": "ecg-1",
-      "name": "Atrial Fibrillation",
-      "low": 5,
-      "high": 50,
+      "name": "AFib",
+      "low": 0.0,
+      "high": 179.4,
       "gain": 1.0
     },
     {
       "id": "ecg-2",
-      "name": "Ventricular Tachycardia",
-      "low": 3,
-      "high": 5,
+      "name": "VTach",
+      "low": 2.2,
+      "high": 3.3,
       "gain": 1.0
     },
     {
       "id": "ecg-3",
-      "name": "Heart Block",
-      "low": 0.05,
-      "high": 0.5,
+      "name": "HeartBlock",
+      "low": 2.2,
+      "high": 31.0,
       "gain": 1.0
     }
   ],
