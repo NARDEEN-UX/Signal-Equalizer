@@ -31,6 +31,28 @@ def _safe_stem_slug(name: str) -> str:
     return slug.strip('_') or "stem"
 
 
+def _safe_upload_filename(name: str) -> str:
+    raw = os.path.basename(str(name or '').strip())
+    if not raw:
+        return f"music_{datetime.now().strftime('%Y%m%d_%H%M%S')}.wav"
+
+    # Keep readable original names while stripping dangerous characters.
+    safe = re.sub(r'[^A-Za-z0-9._ -]+', '_', raw).strip(' .')
+    if not safe:
+        return f"music_{datetime.now().strftime('%Y%m%d_%H%M%S')}.wav"
+    return safe
+
+
+def _dedupe_filename(upload_dir: str, filename: str) -> str:
+    base, ext = os.path.splitext(filename)
+    candidate = filename
+    counter = 1
+    while os.path.exists(os.path.join(upload_dir, candidate)):
+        candidate = f"{base} ({counter}){ext}"
+        counter += 1
+    return candidate
+
+
 def load_default_settings():
     """Load default settings from JSON file"""
     settings_file = os.path.join(os.path.dirname(__file__), '../../../settings/music_default.json')
@@ -201,14 +223,13 @@ async def upload_music_signal(signal_file: UploadFile = File(...)):
         
         if len(signal.shape) > 1:
             signal = signal[:, 0]
-        
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        file_extension = os.path.splitext(signal_file.filename)[1]
-        saved_filename = f"music_{timestamp}{file_extension}"
+
+        requested_name = _safe_upload_filename(signal_file.filename)
+        saved_filename = _dedupe_filename(UPLOADS_DIR, requested_name)
         saved_path = os.path.join(UPLOADS_DIR, saved_filename)
-        
+
         sf.write(saved_path, signal, int(sample_rate))
-        
+
         return {
             "status": "success",
             "filename": saved_filename,
@@ -231,7 +252,7 @@ async def list_music_signals():
         signals = []
         
         for filename in os.listdir(UPLOADS_DIR):
-            if filename.startswith('music_') and filename.endswith(('.wav', '.mp3', '.flac', '.ogg')):
+            if filename.endswith(('.wav', '.mp3', '.flac', '.ogg')):
                 filepath = os.path.join(UPLOADS_DIR, filename)
                 file_size = os.path.getsize(filepath)
                 signal, sample_rate = sf.read(filepath)
