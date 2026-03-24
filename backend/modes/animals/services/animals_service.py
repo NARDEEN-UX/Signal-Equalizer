@@ -10,47 +10,38 @@ from scipy.fft import fft, fftfreq
 class AnimalModeSeparator:
     """
     Separate animal sounds using frequency-based decomposition
-    Supports 5 animal categories with scientifically accurate frequency ranges
+    Supports 4 user-defined species categories
     """
     
-    # 5-Band Animal Configuration
-    # 5-Band Animal Configuration (Vocalization/sound production ranges from bioacoustics research)
-    # These ranges naturally overlap because real animal sounds overlap in frequency.
+    # 4-band animal configuration using requested estimated ranges.
     ANIMAL_RANGES = {
-        'large_mammals': {
-            'id': 'animal-3',
-            'name': 'Large Mammals',
-            'low': 5,
-            'high': 500,
-            'examples': 'Elephant, Whale, Horse, Cattle'
-        },
-        'canines': {
-            'id': 'animal-1',
-            'name': 'Canines',
-            'low': 150,
-            'high': 2000,
-            'examples': 'Dog, Wolf, Hyena, Fox'
-        },
-        'felines': {
-            'id': 'animal-2',
-            'name': 'Felines',
-            'low': 48,
-            'high': 10000,
-            'examples': 'Cat, Lion, Tiger, Leopard'
-        },
-        'songbirds': {
+        'frog': {
             'id': 'animal-0',
-            'name': 'Songbirds',
-            'low': 1000,
-            'high': 8000,
-            'examples': 'Sparrow, Canary, Warbler, Finch'
+            'name': 'Frog',
+            'low': 1084.5,
+            'high': 2509.3,
+            'examples': 'Frog'
         },
-        'insects': {
-            'id': 'animal-4',
-            'name': 'Insects',
-            'low': 600,
-            'high': 20000,
-            'examples': 'Cricket, Cicada, Bee, Grasshopper'
+        'birds': {
+            'id': 'animal-1',
+            'name': 'Birds',
+            'low': 3018.2,
+            'high': 5203.4,
+            'examples': 'Birds'
+        },
+        'dog': {
+            'id': 'animal-2',
+            'name': 'Dog',
+            'low': 479.6,
+            'high': 2314.9,
+            'examples': 'Dog'
+        },
+        'cat': {
+            'id': 'animal-3',
+            'name': 'Cat',
+            'low': 708.0,
+            'high': 3620.9,
+            'examples': 'Cat'
         }
     }
     
@@ -58,11 +49,10 @@ class AnimalModeSeparator:
     # L1: 11k-22k, L2: 5.5k-11k, L3: 2.7k-5.5k, L4: 1.3k-2.7k, L5: 689-1.3k
     # L6: 344-689, L7: 172-344, L8: 86-172, L9: 43-86, L10: 21.5-43, A10: 0-21.5
     ANIMAL_LEVEL_MAP = {
-        "large_mammals": [8, 9, 10, 0],   # 0 - 172 Hz
-        "canines": [6, 7],                # 172 - 689 Hz
-        "felines": [4, 5],                # 689 - 2.7k Hz
-        "songbirds": [2, 3],              # 2.7k - 11k Hz
-        "insects": [1]                    # 11k - 22k Hz
+        "frog": [4, 5],
+        "birds": [3],
+        "dog": [4, 5, 6],
+        "cat": [3, 4, 5]
     }
 
     def __init__(self, sample_rate=44100):
@@ -70,7 +60,7 @@ class AnimalModeSeparator:
         Initialize animal mode separator
         """
         self.sample_rate = sample_rate
-        self.num_bands = 5
+        self.num_bands = 4
         
     def _get_frequency_ranges_from_bands(self, band_names):
         """
@@ -155,7 +145,7 @@ class AnimalModeSeparator:
             freqs = fftfreq(len(signal_data), 1.0 / sr)
             abs_freqs = np.abs(freqs)
 
-            bands_list = ['songbirds', 'canines', 'felines', 'large_mammals', 'insects']
+            bands_list = ['frog', 'birds', 'dog', 'cat']
             for i, band_name in enumerate(bands_list):
                 band_info = self.ANIMAL_RANGES[band_name]
                 mask = (abs_freqs >= band_info['low']) & (abs_freqs < band_info['high'])
@@ -274,16 +264,14 @@ class AnimalModeSeparator:
         ranges = []
         for name in animal_names:
             normalized = str(name or "").strip().lower().replace(" ", "_")
-            if normalized == "large_mammals":
-                key = "large_mammals"
-            elif normalized == "songbirds":
-                key = "songbirds"
-            elif normalized == "canines":
-                key = "canines"
-            elif normalized == "felines":
-                key = "felines"
-            elif normalized == "insects":
-                key = "insects"
+            if normalized in ("frog", "frogs"):
+                key = "frog"
+            elif normalized in ("bird", "birds", "songbird", "songbirds"):
+                key = "birds"
+            elif normalized in ("dog", "dogs", "canine", "canines"):
+                key = "dog"
+            elif normalized in ("cat", "cats", "feline", "felines"):
+                key = "cat"
             else:
                 key = None
 

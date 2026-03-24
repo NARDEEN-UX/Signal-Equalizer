@@ -62,9 +62,9 @@ const MODES = [
     description: 'Adjust different animal sounds with scientifically accurate frequency ranges.',
     accentClass: 'mode-animal',
     icon: '❖',
-    sliderLabels: ['Songbirds', 'Canines', 'Felines', 'Large Mammals', 'Insects'],
+    sliderLabels: ['Frog', 'Birds', 'Dog', 'Cat'],
     allowAddSubdivision: false,
-    requirements: ['Songbird sounds (2,000-12,000 Hz)', 'Dog/Wolf barks (250-4,000 Hz)', 'Cat meows/hisses (100-8,000 Hz)', 'Elephant/Whale calls (20-2,000 Hz)', 'Cricket/Bee sounds (1,000-20,000 Hz)']
+    requirements: ['Frog (1084.5-2509.3 Hz)', 'Birds (3018.2-5203.4 Hz)', 'Dog (479.6-2314.9 Hz)', 'Cat (708.0-3620.9 Hz)']
   },
   {
     id: 'human',
@@ -137,19 +137,18 @@ const DEFAULT_MODE_BANDS = {
     { id: 'b4', name: 'Band 4', low: 3000, high: 8000, gain: 1 }
   ],
   music: [
-    { id: 'music-0', name: 'drums', low: 20, high: 12000, gain: 1.0 },
-    { id: 'music-1', name: 'bass', low: 20, high: 300, gain: 1.0 },
-    { id: 'music-2', name: 'vocals', low: 80, high: 8000, gain: 1.0 },
-    { id: 'music-3', name: 'guitar', low: 80, high: 5000, gain: 1.0 },
-    { id: 'music-4', name: 'piano', low: 27, high: 5000, gain: 1.0 },
-    { id: 'music-5', name: 'other', low: 20, high: 20000, gain: 1.0 }
+    { id: 'music-0', name: 'drums', low: 30, high: 180, gain: 1.0 },
+    { id: 'music-1', name: 'bass', low: 180, high: 350, gain: 1.0 },
+    { id: 'music-2', name: 'vocals', low: 350, high: 3000, gain: 1.0 },
+    { id: 'music-3', name: 'guitar', low: 3000, high: 6000, gain: 1.0 },
+    { id: 'music-4', name: 'piano', low: 6000, high: 10000, gain: 1.0 },
+    { id: 'music-5', name: 'other', low: 10000, high: 18000, gain: 1.0 }
   ],
   animal: [
-    { id: 'animal-0', name: 'Songbirds', low: 1000, high: 8000, gain: 1.0, examples: 'Sparrow, Canary, Warbler, Finch' },
-    { id: 'animal-1', name: 'Canines', low: 150, high: 2000, gain: 1.0, examples: 'Dog, Wolf, Hyena, Fox' },
-    { id: 'animal-2', name: 'Felines', low: 48, high: 10000, gain: 1.0, examples: 'Cat, Lion, Tiger, Leopard' },
-    { id: 'animal-3', name: 'Large Mammals', low: 5, high: 500, gain: 1.0, examples: 'Elephant, Whale, Horse, Cattle' },
-    { id: 'animal-4', name: 'Insects', low: 600, high: 20000, gain: 1.0, examples: 'Cricket, Cicada, Bee, Grasshopper' }
+    { id: 'animal-0', name: 'Frog', low: 1084.5, high: 2509.3, gain: 1.0 },
+    { id: 'animal-1', name: 'Birds', low: 3018.2, high: 5203.4, gain: 1.0 },
+    { id: 'animal-2', name: 'Dog', low: 479.6, high: 2314.9, gain: 1.0 },
+    { id: 'animal-3', name: 'Cat', low: 708.0, high: 3620.9, gain: 1.0 }
   ],
   human: [
     { id: 'human-0', name: 'Male', low: 85, high: 180, gain: 1 },

@@ -25,35 +25,25 @@ export const MUSIC_MODE_CONFIG = {
   sampleRate: 44100
 };
 
-// Animal Mode Configuration - 5 BANDS (UPDATED - Scientifically Accurate)
+// Animal Mode Configuration - 4 BANDS (user-provided estimated ranges)
 export const ANIMAL_MODE_CONFIG = {
   id: 'animal',
   name: 'Animal Sounds',
-  description: 'Adjust different animal sounds with scientifically accurate frequency ranges',
-  sliderLabels: ['Songbirds', 'Canines', 'Felines', 'Large Mammals', 'Insects'],
+  description: 'Adjust different animal sounds using estimated species frequency ranges',
+  sliderLabels: ['Frog', 'Birds', 'Dog', 'Cat'],
   animalTypes: [
-    // Songbirds
-    'Sparrow', 'Canary', 'Warbler', 'Finch', 'Crow', 'Owl', 'Eagle',
-    // Canines
-    'Dog', 'Wolf', 'Hyena', 'Fox', 'Jackal',
-    // Felines
-    'Cat', 'Lion', 'Tiger', 'Leopard', 'Cheetah',
-    // Large Mammals
-    'Elephant', 'Whale', 'Horse', 'Cattle', 'Sheep',
-    // Insects
-    'Cricket', 'Cicada', 'Bee', 'Grasshopper', 'Mosquito'
+    'Frog', 'Birds', 'Dog', 'Cat'
   ],
   bands: [
-    { id: 'animal-0', name: 'Songbirds', low: 1000, high: 8000, gain: 1.0, examples: 'Sparrow, Canary, Warbler, Finch', peak: 5000 },
-    { id: 'animal-1', name: 'Canines', low: 150, high: 2000, gain: 1.0, examples: 'Dog, Wolf, Hyena, Fox', peak: 500 },
-    { id: 'animal-2', name: 'Felines', low: 48, high: 10000, gain: 1.0, examples: 'Cat, Lion, Tiger, Leopard', peak: 1500 },
-    { id: 'animal-3', name: 'Large Mammals', low: 5, high: 500, gain: 1.0, examples: 'Elephant, Whale, Horse, Cattle', peak: 100 },
-    { id: 'animal-4', name: 'Insects', low: 600, high: 20000, gain: 1.0, examples: 'Cricket, Cicada, Bee, Grasshopper', peak: 12000 }
+    { id: 'animal-0', name: 'Frog', low: 1084.5, high: 2509.3, gain: 1.0 },
+    { id: 'animal-1', name: 'Birds', low: 3018.2, high: 5203.4, gain: 1.0 },
+    { id: 'animal-2', name: 'Dog', low: 479.6, high: 2314.9, gain: 1.0 },
+    { id: 'animal-3', name: 'Cat', low: 708.0, high: 3620.9, gain: 1.0 }
   ],
   wavelet: 'db4',
   waveletLevels: 6,
   sampleRate: 44100,
-  frequencyNote: 'Based on scientific bioacoustics research from Cornell Lab of Ornithology and NOAA'
+  frequencyNote: 'Estimated species ranges provided by user'
 };
 
 // Human Voice Mode Configuration

@@ -16,12 +16,12 @@ class MusicModeService:
 
     # DSP fallback ranges aligned with standard Demucs stems.
     INSTRUMENT_RANGES = {
-        "drums": [(20, 12000)],
-        "bass": [(20, 300)],
-        "vocals": [(80, 8000)],
-        "guitar": [(80, 5000)],
-        "piano": [(27, 5000)],
-        "other": [(20, 20000)]
+        "drums": [(30, 180)],
+        "bass": [(180, 350)],
+        "vocals": [(350, 3000)],
+        "guitar": [(3000, 6000)],
+        "piano": [(6000, 10000)],
+        "other": [(10000, 18000)]
     }
     DEMUCS_SOURCE_ORDER = ("drums", "bass", "vocals", "guitar", "piano", "other")
 
