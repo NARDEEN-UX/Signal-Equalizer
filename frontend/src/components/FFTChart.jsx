@@ -59,6 +59,20 @@ const FFTChart = ({ data, audiogram, variant, zoomWindow = null, onZoomWindowCha
     };
   }, [freq]);
 
+  const inputSeries = useMemo(() => {
+    const values = Array.isArray(data?.in) ? data.in : [];
+    return freq
+      .map((x, idx) => ({ x, y: Number(values[idx]) || 0 }))
+      .filter((p) => Number.isFinite(p.x) && Number.isFinite(p.y) && (audiogram ? p.x > 0 : true));
+  }, [freq, data, audiogram]);
+
+  const outputSeries = useMemo(() => {
+    const values = Array.isArray(data?.out) ? data.out : [];
+    return freq
+      .map((x, idx) => ({ x, y: Number(values[idx]) || 0 }))
+      .filter((p) => Number.isFinite(p.x) && Number.isFinite(p.y) && (audiogram ? p.x > 0 : true));
+  }, [freq, data, audiogram]);
+
   useEffect(() => {
     if (controlled) return;
     setXWindow(null);
@@ -122,20 +136,16 @@ const FFTChart = ({ data, audiogram, variant, zoomWindow = null, onZoomWindowCha
 
     const canvasRect = chart.canvas.getBoundingClientRect();
     const wrapRect = wrap.getBoundingClientRect();
-    const ratioX = chart.canvas.width / Math.max(1, canvasRect.width);
-    const ratioY = chart.canvas.height / Math.max(1, canvasRect.height);
 
     const rawCssX = e.clientX - canvasRect.left;
     const rawCssY = e.clientY - canvasRect.top;
-    const rawCanvasX = rawCssX * ratioX;
-    const rawCanvasY = rawCssY * ratioY;
     const rawWrapX = e.clientX - wrapRect.left;
     const rawWrapY = e.clientY - wrapRect.top;
 
     const area = chart.chartArea;
     // Keep zoom mapping bounded to plot area, but allow free drag rectangle movement in the wrapper.
-    const canvasX = clamp(rawCanvasX, area.left, area.right);
-    const canvasY = clamp(rawCanvasY, area.top, area.bottom);
+    const canvasX = clamp(rawCssX, area.left, area.right);
+    const canvasY = clamp(rawCssY, area.top, area.bottom);
     const drawX = clamp(rawWrapX, 0, wrapRect.width);
     const drawY = clamp(rawWrapY, 0, wrapRect.height);
 
@@ -242,14 +252,13 @@ const FFTChart = ({ data, audiogram, variant, zoomWindow = null, onZoomWindowCha
 
   const datasets = [];
   if (!variant || variant === 'input') {
-    datasets.push({ label: 'Input', data: data.in, borderColor: '#ef4444', borderWidth: 2, pointRadius: 0, tension: 0.2 });
+    datasets.push({ label: 'Input', data: inputSeries, borderColor: '#ef4444', borderWidth: 2, pointRadius: 0, tension: 0.2 });
   }
   if (!variant || variant === 'output') {
-    datasets.push({ label: 'Output', data: data.out, borderColor: '#22d3ee', borderWidth: 2, pointRadius: 0, tension: 0.2 });
+    datasets.push({ label: 'Output', data: outputSeries, borderColor: '#22d3ee', borderWidth: 2, pointRadius: 0, tension: 0.2 });
   }
 
   const chartData = {
-    labels: freq,
     datasets
   };
 
@@ -257,6 +266,7 @@ const FFTChart = ({ data, audiogram, variant, zoomWindow = null, onZoomWindowCha
   const options = {
     responsive: true,
     maintainAspectRatio: false,
+    parsing: false,
     scales: {
       x: {
         type: audiogram ? 'logarithmic' : 'linear',
