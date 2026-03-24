@@ -2326,7 +2326,6 @@ function App() {
                 )}
 
               </div>
-              <button type="button" className="btn btn-small" style={{ marginTop: '0.5rem' }} onClick={() => setBandPresetModalOpen(true)}>Load preset</button>
             </div>
           )}
           {equalizerTab === 'ai' && !isGenericMode && (
