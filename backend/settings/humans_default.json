@@ -3,37 +3,49 @@
   "bands": [
     {
       "id": "human-0",
-      "name": "Male",
-      "low": 85,
-      "high": 180,
+      "name": "Children Voices (Pre-Puberty)",
+      "low": 220,
+      "high": 600,
+      "ranges": [[220, 300], [350, 600]],
       "gain": 1.0
     },
     {
       "id": "human-1",
-      "name": "Female",
-      "low": 165,
-      "high": 300,
+      "name": "French Audio (FLEURS Dataset)",
+      "low": 128.12,
+      "high": 685.94,
+      "ranges": [[128.12, 685.94]],
       "gain": 1.0
     },
     {
       "id": "human-2",
-      "name": "Old",
-      "low": 80,
-      "high": 150,
+      "name": "Spanish Audio (FLEURS Dataset)",
+      "low": 128.12,
+      "high": 1792.19,
+      "ranges": [[128.12, 1792.19]],
       "gain": 1.0
     },
     {
       "id": "human-3",
-      "name": "Child",
-      "low": 220,
-      "high": 420,
+      "name": "All Female Actors (Even Numbers)",
+      "low": 205.96,
+      "high": 1444.01,
+      "ranges": [[205.96, 1444.01]],
+      "gain": 1.0
+    },
+    {
+      "id": "human-4",
+      "name": "All Male Actors (Odd Numbers)",
+      "low": 112.08,
+      "high": 1322.75,
+      "ranges": [[112.08, 1322.75]],
       "gain": 1.0
     }
   ],
-  "sliders_freq": [1.0, 1.0, 1.0, 1.0],
+  "sliders_freq": [1.0, 1.0, 1.0, 1.0, 1.0],
   "sliders_wavelet": [1.0, 1.0, 1.0, 1.0, 1.0],
   "wavelet": "sym5",
   "wavelet_level": 6,
   "sample_rate": 44100,
-  "description": "Default humans mode configuration (Male, Female, Old, Child)"
+  "description": "Default humans mode configuration using children, French, Spanish, female-actor, and male-actor voice groups"
 }

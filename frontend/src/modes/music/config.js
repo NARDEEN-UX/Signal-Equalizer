@@ -11,15 +11,15 @@ export const MUSIC_MODE_CONFIG = {
   id: 'music',
   name: 'Musical Instruments',
   description: 'Control Demucs stems inside a musical mix',
-  sliderLabels: ['drums', 'bass', 'vocals', 'guitar', 'piano', 'other'],
-  instrumentTypes: ['drums', 'bass', 'vocals', 'guitar', 'piano', 'other'],
+  sliderLabels: ['drums', 'bass', 'guitar', 'piano', 'vocals', 'other'],
+  instrumentTypes: ['drums', 'bass', 'guitar', 'piano', 'vocals', 'other'],
   bands: [
-    { id: 'music-0', name: 'drums', low: 30, high: 180, gain: 1.0 },
-    { id: 'music-1', name: 'bass', low: 180, high: 350, gain: 1.0 },
-    { id: 'music-2', name: 'vocals', low: 350, high: 3000, gain: 1.0 },
-    { id: 'music-3', name: 'guitar', low: 3000, high: 6000, gain: 1.0 },
-    { id: 'music-4', name: 'piano', low: 6000, high: 10000, gain: 1.0 },
-    { id: 'music-5', name: 'other', low: 10000, high: 18000, gain: 1.0 }
+    { id: 'music-0', name: 'drums', low: 20, high: 500, ranges: [[20, 200], [200, 500]], gain: 1.0 },
+    { id: 'music-1', name: 'bass', low: 30, high: 300, ranges: [[30, 150], [150, 300]], gain: 1.0 },
+    { id: 'music-2', name: 'guitar', low: 80, high: 1200, ranges: [[80, 600], [600, 1200]], gain: 1.0 },
+    { id: 'music-3', name: 'piano', low: 28, high: 4186, ranges: [[28, 500], [500, 4186]], gain: 1.0 },
+    { id: 'music-4', name: 'vocals', low: 85, high: 3400, ranges: [[85, 1000], [1000, 3400]], gain: 1.0 },
+    { id: 'music-5', name: 'other', low: 200, high: 8000, ranges: [[200, 2000], [2000, 8000]], gain: 1.0 }
   ],
   wavelet: 'db4',
   waveletLevels: 6,

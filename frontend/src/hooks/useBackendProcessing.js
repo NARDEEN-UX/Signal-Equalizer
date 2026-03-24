@@ -73,7 +73,12 @@ export const useBackendProcessing = ({
   // every render due to a new array/object reference.
   const bandsKey = JSON.stringify(
     (Array.isArray(genericBands) ? genericBands : []).map(b => ({
-      id: b?.id, name: b?.name, low: b?.low, high: b?.high, gain: b?.gain
+      id: b?.id,
+      name: b?.name,
+      low: b?.low,
+      high: b?.high,
+      ranges: Array.isArray(b?.ranges) ? b.ranges : null,
+      gain: b?.gain
     }))
   );
 
