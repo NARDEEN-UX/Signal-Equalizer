@@ -126,7 +126,7 @@ Human Voices mode targets the fundamental frequency range of four voice categori
 *Male and Female bands overlap in the mid-range — this is intentional, as pitch ranges overlap in real speech. Adjust gains to tilt the balance toward one group.*
 
 **Video Demo:**  
-![Human Mode Video Demo](screenshots/videos/human_mode_demo.webp)
+![Human Mode Video Demo](screenshots/videos/Human.mp4)
 
 ---
 
