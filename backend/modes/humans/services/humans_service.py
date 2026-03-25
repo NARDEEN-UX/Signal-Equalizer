@@ -158,6 +158,15 @@ class HumansModeService:
             f"Unknown human voice label '{name}'. Allowed labels: {sorted(self.VOICE_RANGES.keys())}"
         )
 
+    @staticmethod
+    def _display_voice_name(canonical_name: str) -> str:
+        raw = str(canonical_name or "").strip().lower()
+        if "female" in raw:
+            return "female"
+        if "male" in raw:
+            return "male"
+        return str(canonical_name or "")
+
     def _to_int_sample_rate(self, sample_rate: Optional[float]) -> int:
         raw = sample_rate if sample_rate is not None else self.default_sample_rate
         try:
@@ -1202,8 +1211,9 @@ class HumansModeService:
                     if rms_val > 1e-8
                     else self._default_voice_range(name)
                 )
+                display_name = self._display_voice_name(name)
                 components.append({
-                    "name": name,
+                    "name": display_name,
                     "source": name,
                     "signal": combined,
                     "low": float(low),
@@ -1221,8 +1231,9 @@ class HumansModeService:
                 isolated = self._normalize_audio(isolated)
                 rms_val = self._rms(isolated)
                 low, high = self._default_voice_range(name)
+                display_name = self._display_voice_name(name)
                 components.append({
-                    "name": name,
+                    "name": display_name,
                     "source": name,
                     "signal": isolated,
                     "low": float(low),

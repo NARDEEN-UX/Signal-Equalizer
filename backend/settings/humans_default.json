@@ -27,7 +27,7 @@
     },
     {
       "id": "human-3",
-      "name": "All Female Actors (Even Numbers)",
+      "name": "female",
       "low": 205.96,
       "high": 1444.01,
       "ranges": [[205.96, 1444.01]],
@@ -35,7 +35,7 @@
     },
     {
       "id": "human-4",
-      "name": "All Male Actors (Odd Numbers)",
+      "name": "male",
       "low": 112.08,
       "high": 1322.75,
       "ranges": [[112.08, 1322.75]],
@@ -47,5 +47,5 @@
   "wavelet": "sym5",
   "wavelet_level": 6,
   "sample_rate": 44100,
-  "description": "Default humans mode configuration using children, French, Spanish, female-actor, and male-actor voice groups"
+  "description": "Default humans mode configuration using children, French, Spanish, female, and male voice groups"
 }

@@ -73,9 +73,9 @@ const MODES = [
     description: 'Manage multiple human voices in a single recording.',
     accentClass: 'mode-human',
     icon: '⌁',
-    sliderLabels: ['Children Voices (Pre-Puberty)', 'French Audio (FLEURS Dataset)', 'Spanish Audio (FLEURS Dataset)', 'All Female Actors (Even Numbers)', 'All Male Actors (Odd Numbers)'],
+    sliderLabels: ['Children Voices (Pre-Puberty)', 'French Audio (FLEURS Dataset)', 'Spanish Audio (FLEURS Dataset)', 'female', 'male'],
     allowAddSubdivision: false,
-    requirements: ['Children Voices (220-300 and 350-600 Hz)', 'French Audio suggested band (128.12-685.94 Hz)', 'Spanish Audio suggested band (128.12-1792.19 Hz)', 'All Female Actors suggested band (205.96-1444.01 Hz)', 'All Male Actors suggested band (112.08-1322.75 Hz)']
+    requirements: ['Children Voices (220-300 and 350-600 Hz)', 'French Audio suggested band (128.12-685.94 Hz)', 'Spanish Audio suggested band (128.12-1792.19 Hz)', 'female suggested band (205.96-1444.01 Hz)', 'male suggested band (112.08-1322.75 Hz)']
   },
   {
     id: 'ecg',
@@ -109,6 +109,25 @@ const LANDING_MODES = [
 ];
 
 const DEFAULT_ECG_AI_STATE = { loading: false, error: null, result: null };
+const HUMAN_AI_LABELS = ['male', 'female'];
+
+const normalizeHumanAiLabel = (name, fallbackIndex = 0) => {
+  const raw = String(name || '').trim().toLowerCase();
+  if (!raw) return fallbackIndex === 1 ? 'female' : 'male';
+  if (raw.includes('female')) return 'female';
+  if (raw.includes('male')) return 'male';
+  if (raw.includes('voice 2') || raw.includes('speaker 2') || raw.includes('source 2')) return 'female';
+  if (raw.includes('voice 1') || raw.includes('speaker 1') || raw.includes('source 1')) return 'male';
+  return fallbackIndex === 1 ? 'female' : 'male';
+};
+
+const getHumanGenderLabel = (name) => {
+  const raw = String(name || '').trim().toLowerCase();
+  if (!raw) return '';
+  if (raw.includes('female') || raw.includes('even numbers')) return 'female';
+  if (/\bmale\b/.test(raw) || raw.includes('odd numbers')) return 'male';
+  return '';
+};
 
 const createDefaultModeUiState = () => ({
   equalizerTab: 'equalizer',
@@ -154,8 +173,8 @@ const DEFAULT_MODE_BANDS = {
     { id: 'human-0', name: 'Children Voices (Pre-Puberty)', low: 220, high: 600, ranges: [[220, 300], [350, 600]], gain: 1 },
     { id: 'human-1', name: 'French Audio (FLEURS Dataset)', low: 128.12, high: 685.94, ranges: [[128.12, 685.94]], gain: 1 },
     { id: 'human-2', name: 'Spanish Audio (FLEURS Dataset)', low: 128.12, high: 1792.19, ranges: [[128.12, 1792.19]], gain: 1 },
-    { id: 'human-3', name: 'All Female Actors (Even Numbers)', low: 205.96, high: 1444.01, ranges: [[205.96, 1444.01]], gain: 1 },
-    { id: 'human-4', name: 'All Male Actors (Odd Numbers)', low: 112.08, high: 1322.75, ranges: [[112.08, 1322.75]], gain: 1 }
+    { id: 'human-3', name: 'female', low: 205.96, high: 1444.01, ranges: [[205.96, 1444.01]], gain: 1 },
+    { id: 'human-4', name: 'male', low: 112.08, high: 1322.75, ranges: [[112.08, 1322.75]], gain: 1 }
   ],
   ecg: [
     { id: 'ecg-0', name: 'Normal', low: 2.2, high: 15.5, gain: 1 },
@@ -871,27 +890,41 @@ function App() {
           ? aiModeFreqBands
           : modeFreqBands;
         const gainByName = (Array.isArray(previousBands) ? previousBands : []).reduce((acc, band) => {
-          acc[String(band?.name || '').toLowerCase()] = Number(band?.gain) || 1;
+          const key = String(band?.name || '').toLowerCase();
+          acc[key] = Number(band?.gain) || 1;
+          if (key.includes('female')) acc.female = acc[key];
+          if (/\bmale\b/.test(key) || key.includes('odd numbers')) acc.male = acc[key];
           return acc;
         }, {});
 
-        const autoBands = rawComponents.map((comp, idx) => {
-          const name = String(comp?.name || `voice-${idx + 1}`);
-          const key = name.toLowerCase();
-          const low = Math.max(0, Number(comp?.low) || 20);
-          const high = Math.max(low + 1, Number(comp?.high) || 20000);
+        const humanAiByLabel = {};
+        rawComponents.forEach((comp, idx) => {
+          const normalizedLabel = normalizeHumanAiLabel(comp?.name, idx);
+          if (!humanAiByLabel[normalizedLabel]) {
+            humanAiByLabel[normalizedLabel] = comp;
+          }
+        });
+
+        const orderedAiComponents = HUMAN_AI_LABELS.map((label, idx) => {
+          const comp = humanAiByLabel[label] || rawComponents[idx] || null;
+          return { label, comp };
+        });
+
+        const autoBands = orderedAiComponents.map(({ label, comp }, idx) => {
+          const low = Math.max(0, Number(comp?.low) || (label === 'male' ? 112.08 : 205.96));
+          const high = Math.max(low + 1, Number(comp?.high) || (label === 'male' ? 1322.75 : 1444.01));
           return {
             id: `human-${idx}`,
-            name,
+            name: label,
             low,
             high,
-            gain: Number.isFinite(gainByName[key]) ? gainByName[key] : 1
+            gain: Number.isFinite(gainByName[label]) ? gainByName[label] : 1
           };
         });
         setAiModeFreqConfig((prev) => ({ ...prev, human: autoBands }));
 
         const extracted = autoBands.map((band, idx) => {
-          const modelComp = rawComponents[idx] || {};
+          const modelComp = orderedAiComponents[idx]?.comp || {};
           const modelSignal = Array.isArray(modelComp?.signal) ? modelComp.signal : [];
           const relativeStemUrl = String(modelComp?.stem_url || '');
           const modelStemUrl = relativeStemUrl
@@ -1122,7 +1155,15 @@ function App() {
   const applyAiSoloToEqualizer = (componentIndex) => {
     const selected = aiComponents[componentIndex];
     const selectedName = String(selected?.name || '').toLowerCase();
+    const selectedHumanGender = activeModeId === 'human'
+      ? (getHumanGenderLabel(selectedName) || normalizeHumanAiLabel(selectedName, componentIndex))
+      : '';
     setModeFreqBands(modeFreqBands.map((b, i) => {
+      if (activeModeId === 'human' && selectedHumanGender) {
+        const bandGender = getHumanGenderLabel(b?.name);
+        return { ...b, gain: bandGender === selectedHumanGender ? 1 : 0 };
+      }
+
       const byNameMatch = selectedName && String(b?.name || '').toLowerCase() === selectedName;
       const byIndexMatch = i === componentIndex;
       return { ...b, gain: (byNameMatch || (!selectedName && byIndexMatch)) ? 1 : 0 };

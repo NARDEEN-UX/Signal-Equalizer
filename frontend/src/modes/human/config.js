@@ -9,14 +9,14 @@
 export const HUMAN_MODE_CONFIG = {
   id: 'human',
   name: 'Human Voices',
-  sliderLabels: ['Children Voices (Pre-Puberty)', 'French Audio (FLEURS Dataset)', 'Spanish Audio (FLEURS Dataset)', 'All Female Actors (Even Numbers)', 'All Male Actors (Odd Numbers)'],
-  voiceTypes: ['Children Voices (Pre-Puberty)', 'French Audio (FLEURS Dataset)', 'Spanish Audio (FLEURS Dataset)', 'All Female Actors (Even Numbers)', 'All Male Actors (Odd Numbers)'],
+  sliderLabels: ['Children Voices (Pre-Puberty)', 'French Audio (FLEURS Dataset)', 'Spanish Audio (FLEURS Dataset)', 'female', 'male'],
+  voiceTypes: ['Children Voices (Pre-Puberty)', 'French Audio (FLEURS Dataset)', 'Spanish Audio (FLEURS Dataset)', 'female', 'male'],
   freqBands: [
     { min: 220, max: 600, label: 'Children Voices (Pre-Puberty)' },
     { min: 128.12, max: 685.94, label: 'French Audio (FLEURS Dataset)' },
     { min: 128.12, max: 1792.19, label: 'Spanish Audio (FLEURS Dataset)' },
-    { min: 205.96, max: 1444.01, label: 'All Female Actors (Even Numbers)' },
-    { min: 112.08, max: 1322.75, label: 'All Male Actors (Odd Numbers)' }
+    { min: 205.96, max: 1444.01, label: 'female' },
+    { min: 112.08, max: 1322.75, label: 'male' }
   ],
   wavelet: 'db4',
   waveletLevels: 6,
