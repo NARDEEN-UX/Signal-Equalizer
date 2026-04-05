@@ -2,7 +2,6 @@ import React, { useState, useEffect, useMemo, useRef, useDeferredValue } from 'r
 import WaveformViewer from './components/WaveformViewer';
 import EqualizerCurve from './components/EqualizerCurve';
 import FFTChart from './components/FFTChart';
-import WaveletChart from './components/WaveletChart';
 import SpectrogramViewer from './components/SpectrogramViewer';
 import TransportControls from './components/TransportControls';
 import AudiogramToggle from './components/AudiogramToggle';
@@ -11,6 +10,8 @@ import ModeSignalUploader from './components/ModeSignalUploader';
 import GenericBandBuilder from './components/GenericBandBuilder';
 import BandPresetModal from './components/BandPresetModal';
 import SliderGroup from './components/SliderGroup';
+import ModeWaveletSliders from './components/ModeWaveletSliders';
+import WaveletBandViewer from './components/WaveletBandViewer';
 import ECGAIViewer, { ECGAIComparisonGraphs } from './components/ECGAIViewer';
 import './App.css';
 import { useBackendProcessing } from './hooks/useBackendProcessing';
@@ -30,7 +31,8 @@ import {
   processAnimalsMode,
   processHumansMode,
   separateHumansModeAI,
-  processECGMode
+  processECGMode,
+  applyWaveletBandGains
 } from './api';
 
 const MODES = [
@@ -216,7 +218,7 @@ const WAVELET_BASIS_MAP = WAVELET_BASIS_OPTIONS.reduce((acc, item) => {
 
 const MODE_DEFAULT_WAVELET = {
   generic: 'db4',
-  music: 'db8',
+  music: 'db4',
   animal: 'sym8',
   animals: 'sym8',
   human: 'sym5',
@@ -226,7 +228,7 @@ const MODE_DEFAULT_WAVELET = {
 
 const WAVELET_RECOMMENDATION_BY_MODE = {
   generic: 'db4: robust general-purpose orthogonal basis for mixed content.',
-  music: 'db8: good detail retention for harmonic instrument mixtures.',
+  music: 'db4: balanced decomposition for musical mixtures with clear band control.',
   animal: 'sym8: smoother reconstruction for complex bioacoustic textures.',
   human: 'Sym5: smooth reconstruction and good speech-formant behavior.',
   ecg: 'bior3.5: common ECG-friendly biorthogonal basis.'
@@ -412,6 +414,7 @@ function App() {
 
   const activeModeUiState = modeUiState[activeModeId] || createDefaultModeUiState();
   const equalizerTab = activeModeUiState.equalizerTab;
+  const waveletTabActive = !isGenericMode && equalizerTab === 'wavelet';
   const aiComponents = Array.isArray(activeModeUiState.aiComponents) ? activeModeUiState.aiComponents : [];
   const aiLoading = Boolean(activeModeUiState.aiLoading);
   const aiError = String(activeModeUiState.aiError || '');
@@ -519,9 +522,14 @@ function App() {
   const deferredProcessingBands = useDeferredValue(activeProcessingBands);
   const deferredWaveletSliders = useDeferredValue(waveletSliders);
 
+  const safeGain = (value, fallback = 1) => {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : fallback;
+  };
+
   const mockSignalData = useMockProcessing({
     modeId: activeModeId,
-    freqSliders: activeProcessingBands.map((b) => Number(b.gain) || 1),
+    freqSliders: activeProcessingBands.map((b) => safeGain(b.gain, 1)),
     waveletSliders,
     genericBands: activeProcessingBands,
     waveletType,
@@ -539,16 +547,34 @@ function App() {
 
   const { data: backendSignalData, loading: backendProcessingLoading, error: backendProcessingError } = useBackendProcessing({
     modeId: activeModeId,
-    freqSliders: deferredProcessingBands.map((b) => Number(b.gain) || 1),
+    freqSliders: deferredProcessingBands.map((b) => safeGain(b.gain, 1)),
     genericBands: deferredProcessingBands,
     waveletType,
     waveletLevel,
     sampleRate: uploadedSampleRate,
     signalData: uploadedSignal || null,
     useFallback: true,
-    processingMethod,
+    processingMethod: waveletTabActive ? 'wavelet' : processingMethod,
     waveletSliders: deferredWaveletSliders
   });
+
+  useEffect(() => {
+    if (waveletTabActive && processingMethod !== 'wavelet') {
+      setProcessingMethod('wavelet');
+    }
+  }, [waveletTabActive, processingMethod]);
+
+  useEffect(() => {
+    if (!isGenericMode && equalizerTab === 'equalizer' && processingMethod !== 'fft') {
+      setProcessingMethod('fft');
+    }
+  }, [equalizerTab, isGenericMode, processingMethod]);
+
+  useEffect(() => {
+    if (!isGenericMode && equalizerTab === 'ai' && processingMethod !== 'fft') {
+      setProcessingMethod('fft');
+    }
+  }, [equalizerTab, isGenericMode, processingMethod]);
 
   useEffect(() => {
     if (uploadedSignal && backendSignalData) {
@@ -607,6 +633,31 @@ function App() {
 
     return mockSignalData;
   }, [uploadedSignal, backendSignalData, backendProcessingLoading, passthroughSignalData, mockSignalData, activeModeId, isSignalLoading]);
+
+  // Keep wavelet level/band graphs in sync with slider moves even if backend responses are delayed.
+  const waveletVisualData = useMemo(() => {
+    const wavelet = signalData?.wavelet;
+    if (!wavelet || !Array.isArray(wavelet.input_coeffs) || wavelet.input_coeffs.length === 0) {
+      return wavelet;
+    }
+
+    const inputCoeffs = wavelet.input_coeffs;
+    const safeSliders = normalizeWaveletSliders(waveletSliders, inputCoeffs.length);
+
+    const outputCoeffsPreview = inputCoeffs.map((coeff, idx) => {
+      const gain = Math.max(0, Math.min(2, safeGain(safeSliders[idx], 1)));
+      const arr = Array.isArray(coeff) ? coeff : [];
+      return arr.map((v) => (Number(v) || 0) * gain);
+    });
+
+    return {
+      ...wavelet,
+      output_coeffs: outputCoeffsPreview,
+      levels: Array.isArray(wavelet.levels) && wavelet.levels.length > 0
+        ? wavelet.levels
+        : Array.from({ length: inputCoeffs.length }, (_, i) => `L${i + 1}`)
+    };
+  }, [signalData?.wavelet, waveletSliders]);
 
   useEffect(() => {
     if (!isSignalLoading) return;
@@ -1282,7 +1333,7 @@ function App() {
               }));
             }
             {
-              const selectedWavelet = normalizeWaveletName(response.data?.wavelet, getModeWaveletDefault('music'));
+              const selectedWavelet = getModeWaveletDefault('music');
               setWaveletType(selectedWavelet);
               setWaveletSliders(normalizeWaveletSliders(response.data?.sliders_wavelet, maxWaveletLevel));
             }
@@ -1296,7 +1347,7 @@ function App() {
               }));
             }
             {
-              const selectedWavelet = normalizeWaveletName(response.data?.wavelet, getModeWaveletDefault('animal'));
+              const selectedWavelet = getModeWaveletDefault('animal');
               setWaveletType(selectedWavelet);
               setWaveletSliders(normalizeWaveletSliders(response.data?.sliders_wavelet, maxWaveletLevel));
             }
@@ -1310,7 +1361,7 @@ function App() {
               }));
             }
             {
-              const selectedWavelet = normalizeWaveletName(response.data?.wavelet, getModeWaveletDefault('human'));
+              const selectedWavelet = getModeWaveletDefault('human');
               setWaveletType(selectedWavelet);
               setWaveletSliders(normalizeWaveletSliders(response.data?.sliders_wavelet, maxWaveletLevel));
             }
@@ -1324,7 +1375,7 @@ function App() {
               }));
             }
             {
-              const selectedWavelet = normalizeWaveletName(response.data?.wavelet, getModeWaveletDefault('ecg'));
+              const selectedWavelet = getModeWaveletDefault('ecg');
               setWaveletType(selectedWavelet);
               setWaveletSliders(normalizeWaveletSliders(response.data?.sliders_wavelet, maxWaveletLevel));
             }
@@ -1417,7 +1468,7 @@ function App() {
     return buffer;
   };
 
-  const handlePlay = () => {
+  const handlePlay = (startFrom = null) => {
     if (!signalData?.output_signal || !signalData?.time) return;
 
     let ctx = audioCtxRef.current;
@@ -1463,16 +1514,17 @@ function App() {
     // Calculate offset to resume from paused position
     // Find the sample index corresponding to the current playbackTime
     let offsetTime = 0;
-    if (playbackTime > 0 && signalData.time) {
+    const resumeAt = Number.isFinite(Number(startFrom)) ? Number(startFrom) : playbackTime;
+    if (resumeAt > 0 && signalData.time) {
       // Find the closest time index in the signal
       let offsetIndex = 0;
       for (let i = 0; i < signalData.time.length; i++) {
-        if (signalData.time[i] >= playbackTime) {
+        if (signalData.time[i] >= resumeAt) {
           offsetIndex = i;
           break;
         }
       }
-      offsetTime = signalData.time[offsetIndex] || playbackTime;
+      offsetTime = signalData.time[offsetIndex] || resumeAt;
     }
 
     const safeOffset = Math.max(0, Math.min(offsetTime, Math.max(0, buffer.duration - 1e-4)));
@@ -1707,6 +1759,20 @@ function App() {
   };
   const handleResetView = () => {
     setLinkedViewWindow({ start: 0, end: 1 });
+
+    const wasPlaying = isPlaying;
+    if (wasPlaying) {
+      stopAudio();
+      setIsPlaying(false);
+    }
+
+    setPlaybackTime(0);
+    offsetTimeRef.current = 0;
+
+    if (wasPlaying) {
+      // Restart from absolute beginning after state/ref reset.
+      requestAnimationFrame(() => handlePlay(0));
+    }
   };
 
   const handleSavePreset = () => {
@@ -2201,13 +2267,22 @@ function App() {
           Equalizer Mode
         </button>
         {!isGenericMode && (
-          <button
-            type="button"
-            className={`workspace-tab ${equalizerTab === 'ai' ? 'active' : ''}`}
-            onClick={() => setEqualizerTab('ai')}
-          >
-            AI Separation
-          </button>
+          <>
+            <button
+              type="button"
+              className={`workspace-tab ${equalizerTab === 'wavelet' ? 'active' : ''}`}
+              onClick={() => setEqualizerTab('wavelet')}
+            >
+              Wavelet
+            </button>
+            <button
+              type="button"
+              className={`workspace-tab ${equalizerTab === 'ai' ? 'active' : ''}`}
+              onClick={() => setEqualizerTab('ai')}
+            >
+              AI Separation
+            </button>
+          </>
         )}
       </div>
 
@@ -2252,23 +2327,12 @@ function App() {
                       onClick={() => setProcessingMethod('fft')}
                       style={{ fontSize: '10px', padding: '2px 6px', borderRadius: '3px', background: processingMethod === 'fft' ? '#6366f1' : 'transparent', color: 'white', border: 'none', cursor: 'pointer' }}
                     >FFT</button>
-                    {!isGenericMode && (
-                      <button
-                        type="button"
-                        className={`btn-xs ${processingMethod === 'wavelet' ? 'active' : ''}`}
-                        onClick={() => setProcessingMethod('wavelet')}
-                        style={{ fontSize: '10px', padding: '2px 6px', borderRadius: '3px', background: processingMethod === 'wavelet' ? '#6366f1' : 'transparent', color: 'white', border: 'none', cursor: 'pointer' }}
-                      >Wavelet</button>
-                    )}
                   </div>
                   <button
                     type="button"
                     className="icon-btn"
                     onClick={() => {
                       setModeFreqBands(modeFreqBands.map((b) => ({ ...b, gain: 1 })));
-                      if (processingMethod === 'wavelet' && !isGenericMode) {
-                        setWaveletSliders(buildWaveletDefaults(maxWaveletLevel));
-                      }
                     }}
                     title="Reset"
                   >↺</button>
@@ -2312,23 +2376,6 @@ function App() {
                   isEditable={activeModeId === 'generic'}
                 />
 
-                {/* Requirements for Customized Modes */}
-                {activeModeId !== 'generic' && activeMode.requirements && activeMode.requirements.length > 0 && (
-                  <div className="requirements-box">
-                    <div className="requirements-title">
-                      <span>Requirements</span>
-                    </div>
-                    <div className="requirements-list">
-                      {activeMode.requirements.map((req, idx) => (
-                        <div key={idx} className="requirement-item">
-                          <span className="requirement-badge">{idx + 1}</span>
-                          <span className="requirement-text">{req}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
                 {/* Band Information - Works for all modes */}
                 {modeFreqBands && modeFreqBands.length > 0 && (
                   <>
@@ -2347,43 +2394,54 @@ function App() {
                   </>
                 )}
 
-                {!isGenericMode && processingMethod === 'wavelet' && (
-                  <>
-                    <div className="field" style={{ marginTop: '0.5rem' }}>
-                      <span>Wavelet Basis</span>
-                      <select
-                        className="select"
-                        value={waveletType}
-                        onChange={(e) => {
-                          const nextType = normalizeWaveletName(e.target.value, getModeWaveletDefault(activeModeId));
-                          setWaveletType(nextType);
-                          setWaveletSliders((prev) => normalizeWaveletSliders(prev, maxWaveletLevel));
-                        }}
-                      >
-                        {WAVELET_BASIS_OPTIONS.map((option) => (
-                          <option key={option.value} value={option.value}>{option.label}</option>
-                        ))}
-                      </select>
-                    </div>
+              </div>
+            </div>
+          )}
+          {equalizerTab === 'wavelet' && !isGenericMode && (
+            <div className="box wavelet-box">
+              <div className="box-head">
+                <h2 className="box-title">Wavelet Band Equalizer</h2>
+                <div className="box-actions">
+                  <button
+                    type="button"
+                    className="icon-btn"
+                    onClick={() => {
+                      setWaveletSliders(buildWaveletDefaults(maxWaveletLevel));
+                    }}
+                    title="Reset"
+                  >↺</button>
+                </div>
+              </div>
+              <div className="equalizer-scroll-container">
+                <div className="field" style={{ marginBottom: '0.5rem' }}>
+                  <span>Wavelet Basis</span>
+                  <select
+                    className="select"
+                    value={waveletType}
+                    onChange={(e) => {
+                      const nextType = normalizeWaveletName(e.target.value, getModeWaveletDefault(activeModeId));
+                      setWaveletType(nextType);
+                      setWaveletSliders((prev) => normalizeWaveletSliders(prev, maxWaveletLevel));
+                    }}
+                  >
+                    {WAVELET_BASIS_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
+                  </select>
+                </div>
 
-                    <p className="helper-text" style={{ marginTop: '0.35rem' }}>{recommendedWavelet}</p>
+                <p className="helper-text" style={{ marginBottom: '0.55rem' }}>{recommendedWavelet}</p>
 
-                    <h3 className="box-label" style={{ marginTop: '0.75rem' }}>Wavelet Level Gains</h3>
-                    <SliderGroup
-                      count={waveletLevelLabels.length}
-                      labels={waveletLevelLabels}
-                      values={waveletSliders}
-                      onChange={(vals) => setWaveletSliders(normalizeWaveletSliders(vals, maxWaveletLevel))}
-                    />
-
-                    <div className="helper-text" style={{ marginTop: '0.6rem' }}>
-                      {waveletLevelLabels.map((_, idx) => (
-                        <div key={`wavelet-level-help-${idx}`}>{describeWaveletLevel(idx + 1, uploadedSampleRate)}</div>
-                      ))}
-                    </div>
-                  </>
-                )}
-
+                <ModeWaveletSliders
+                  currentMode={activeModeId}
+                  selectedWavelet={waveletType}
+                  waveletSliders={waveletSliders}
+                  maxWaveletLevel={maxWaveletLevel}
+                  sampleRate={uploadedSampleRate || 44100}
+                  onChange={(updatedSliders) => {
+                    setWaveletSliders(normalizeWaveletSliders(updatedSliders, maxWaveletLevel));
+                  }}
+                />
               </div>
             </div>
           )}
@@ -2413,30 +2471,11 @@ function App() {
               <div className="box-head">
                 <h2 className="box-title">AI Separation Controls</h2>
                 <div className="box-actions">
-                  <div className="method-toggle" style={{ marginRight: '1rem', display: 'flex', gap: '0.2rem', background: 'rgba(255,255,255,0.05)', padding: '2px', borderRadius: '4px' }}>
-                    <button
-                      type="button"
-                      className={`btn-xs ${processingMethod === 'fft' ? 'active' : ''}`}
-                      onClick={() => setProcessingMethod('fft')}
-                      style={{ fontSize: '10px', padding: '2px 6px', borderRadius: '3px', background: processingMethod === 'fft' ? '#6366f1' : 'transparent', color: 'white', border: 'none', cursor: 'pointer' }}
-                    >FFT</button>
-                    {!isGenericMode && (
-                      <button
-                        type="button"
-                        className={`btn-xs ${processingMethod === 'wavelet' ? 'active' : ''}`}
-                        onClick={() => setProcessingMethod('wavelet')}
-                        style={{ fontSize: '10px', padding: '2px 6px', borderRadius: '3px', background: processingMethod === 'wavelet' ? '#6366f1' : 'transparent', color: 'white', border: 'none', cursor: 'pointer' }}
-                      >Wavelet</button>
-                    )}
-                  </div>
                   <button
                     type="button"
                     className="icon-btn"
                     onClick={() => {
                       setAiModeFreqBands(aiModeFreqBands.map((b) => ({ ...b, gain: 1 })));
-                      if (processingMethod === 'wavelet' && !isGenericMode) {
-                        setWaveletSliders(buildWaveletDefaults(maxWaveletLevel));
-                      }
                     }}
                     title="Reset"
                   >{'\u21BA'}</button>
@@ -2458,7 +2497,7 @@ function App() {
               <div className="equalizer-scroll-container">
                 <p className="helper-text">
                   {activeModeId === 'music'
-                    ? 'Run Demucs separation, extract stem frequency ranges into AI sliders, then compare model stems against DSP isolation using FFT/Wavelet.'
+                    ? 'Run Demucs separation, extract stem frequency ranges into AI sliders, then compare model stems against DSP isolation using FFT.'
                     : activeModeId === 'human'
                       ? 'Run SepFormer 2-speaker separation (Male/Female), then compare model stems against DSP isolation.'
                       : 'Run component separation for the current mode and inspect each isolated track.'}
@@ -2495,43 +2534,6 @@ function App() {
                           <span className="band-info-gain">{`${Number(b.low || 0).toFixed(1)}-${Number(b.high || 0).toFixed(1)} Hz`}</span>
                           <span className="band-info-gain">{Number(b.gain || 1).toFixed(2)}×</span>
                         </div>
-                      ))}
-                    </div>
-                  </>
-                )}
-
-                {!isGenericMode && processingMethod === 'wavelet' && (
-                  <>
-                    <div className="field" style={{ marginTop: '0.5rem' }}>
-                      <span>Wavelet Basis</span>
-                      <select
-                        className="select"
-                        value={waveletType}
-                        onChange={(e) => {
-                          const nextType = normalizeWaveletName(e.target.value, getModeWaveletDefault(activeModeId));
-                          setWaveletType(nextType);
-                          setWaveletSliders((prev) => normalizeWaveletSliders(prev, maxWaveletLevel));
-                        }}
-                      >
-                        {WAVELET_BASIS_OPTIONS.map((option) => (
-                          <option key={option.value} value={option.value}>{option.label}</option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <p className="helper-text" style={{ marginTop: '0.35rem' }}>{recommendedWavelet}</p>
-
-                    <h3 className="box-label" style={{ marginTop: '0.75rem' }}>Wavelet Level Gains</h3>
-                    <SliderGroup
-                      count={waveletLevelLabels.length}
-                      labels={waveletLevelLabels}
-                      values={waveletSliders}
-                      onChange={(vals) => setWaveletSliders(normalizeWaveletSliders(vals, maxWaveletLevel))}
-                    />
-
-                    <div className="helper-text" style={{ marginTop: '0.6rem' }}>
-                      {waveletLevelLabels.map((_, idx) => (
-                        <div key={`wavelet-level-help-ai-${idx}`}>{describeWaveletLevel(idx + 1, uploadedSampleRate)}</div>
                       ))}
                     </div>
                   </>
@@ -2669,36 +2671,38 @@ function App() {
             </div>
           </div>
 
-          <div className="row section-row">
-            <div className="section-head">
-              <h2 className="section-title">Frequency Spectrum (FFT)</h2>
-              <AudiogramToggle checked={audiogram} onChange={setAudiogram} />
-            </div>
-            <div className="row two-boxes">
-              <div className="box chart-box card-with-zoom">
-                <h3 className="box-label">Input FFT</h3>
-                <FFTChart
-                  data={signalData?.fft}
-                  audiogram={audiogram}
-                  variant="input"
-                  zoomWindow={fftZoomWindow}
-                  onZoomWindowChange={setFftZoomWindow}
-                />
-                <span className="card-zoom">{linkedZoom.toFixed(1)}×</span>
+          {equalizerTab !== 'wavelet' && (
+            <div className="row section-row">
+              <div className="section-head">
+                <h2 className="section-title">Frequency Spectrum (FFT)</h2>
+                <AudiogramToggle checked={audiogram} onChange={setAudiogram} />
               </div>
-              <div className="box chart-box card-with-zoom">
-                <h3 className="box-label">Output FFT</h3>
-                <FFTChart
-                  data={signalData?.fft}
-                  audiogram={audiogram}
-                  variant="output"
-                  zoomWindow={fftZoomWindow}
-                  onZoomWindowChange={setFftZoomWindow}
-                />
-                <span className="card-zoom">{linkedZoom.toFixed(1)}×</span>
+              <div className="row two-boxes">
+                <div className="box chart-box card-with-zoom">
+                  <h3 className="box-label">Input FFT</h3>
+                  <FFTChart
+                    data={signalData?.fft}
+                    audiogram={audiogram}
+                    variant="input"
+                    zoomWindow={fftZoomWindow}
+                    onZoomWindowChange={setFftZoomWindow}
+                  />
+                  <span className="card-zoom">{linkedZoom.toFixed(1)}×</span>
+                </div>
+                <div className="box chart-box card-with-zoom">
+                  <h3 className="box-label">Output FFT</h3>
+                  <FFTChart
+                    data={signalData?.fft}
+                    audiogram={audiogram}
+                    variant="output"
+                    zoomWindow={fftZoomWindow}
+                    onZoomWindowChange={setFftZoomWindow}
+                  />
+                  <span className="card-zoom">{linkedZoom.toFixed(1)}×</span>
+                </div>
               </div>
             </div>
-          </div>
+          )}
 
           <div className="row section-row">
             <div className="section-head">
@@ -2755,14 +2759,24 @@ function App() {
             )}
           </div>
 
-          {!isGenericMode && processingMethod === 'wavelet' && (
+          {equalizerTab === 'wavelet' && !isGenericMode && signalData && (
             <div className="row section-row">
               <div className="section-head">
-                <h2 className="section-title">Wavelet Section ({activeWaveletBasis.label})</h2>
+                <h2 className="section-title">Band Waveforms</h2>
               </div>
               <div className="row">
-                <div className="box chart-box">
-                  <WaveletChart data={signalData?.wavelet} />
+                <div className="box chart-box" style={{ width: '100%' }}>
+                  <WaveletBandViewer
+                    currentMode={activeModeId}
+                    inputSignal={signalData.input_signal}
+                    outputSignal={signalData.output_signal}
+                    waveletBandData={signalData?.wavelet?.band_waveforms}
+                    waveletData={waveletVisualData}
+                    selectedWavelet={waveletType}
+                    waveletSliders={waveletSliders}
+                    sampleRate={uploadedSampleRate || 44100}
+                    maxLevel={maxWaveletLevel}
+                  />
                 </div>
               </div>
             </div>

@@ -281,3 +281,26 @@ export const analyzeECGWithAI = (signal, sampleRate = 360) => {
   });
 };
 
+// ==================== Wavelet Band Gains ====================
+
+/**
+ * Apply band-based gains to wavelet decomposition
+ * Maps user-friendly frequency bands to underlying wavelet levels
+ * 
+ * @param {string} mode - Mode ID ('music', 'animals', 'humans', 'ecg', 'generic')
+ * @param {array} allGains - Complete array of gains for each level [L1, L2, L3, ...]
+ * @param {object} bandGains - Named band gains {bandId: gain, ...}
+ * @param {number} maxLevel - Maximum decomposition level
+ * @param {number} sampleRate - Audio sample rate in Hz
+ * @returns {Promise} API response
+ */
+export const applyWaveletBandGains = (mode, allGains, bandGains = {}, maxLevel = 6, sampleRate = 44100) => {
+  return API.post('/api/wavelet/apply-band-gains', {
+    mode,
+    allGains,
+    bandGains,
+    maxLevel,
+    sampleRate
+  });
+};
+

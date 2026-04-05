@@ -35,6 +35,7 @@ class ECGModeResponse(BaseModel):
     output_spectrogram: Optional[dict] = None
     input_coeffs: Optional[List[List[float]]] = None
     output_coeffs: Optional[List[List[float]]] = None
+    band_waveforms: Optional[List[dict]] = None
     processing_time: float
 
 

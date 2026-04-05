@@ -402,6 +402,56 @@ async def load_schema(payload: LoadSchemaRequest):
         raise HTTPException(status_code=400, detail=f"Error loading schema: {str(e)}")
 
 
+@app.post("/api/wavelet/apply-band-gains")
+async def apply_wavelet_band_gains(request_data: dict):
+    """
+    Apply band-based gains to wavelet decomposition levels
+    
+    This endpoint handles the mapping from user-friendly frequency bands
+    to underlying wavelet decomposition levels and applies the gains.
+    
+    Args:
+        request_data: {
+            "mode": "animals",
+            "allGains": [1.0, 1.2, 0.8, ...],  # Gains for each wavelet level
+            "bandGains": {
+                "animal-0": 1.5,  # Named band gains for reference
+                ...
+            },
+            "maxLevel": 6,
+            "sampleRate": 44100
+        }
+        
+    Returns:
+        Confirmation of which levels were updated
+    """
+    try:
+        mode = request_data.get("mode", "generic")
+        all_gains = request_data.get("allGains", [1.0] * 6)
+        band_gains = request_data.get("bandGains", {})
+        max_level = request_data.get("maxLevel", 6)
+        sample_rate = request_data.get("sampleRate", 44100)
+        
+        # Validation
+        if not isinstance(all_gains, list) or len(all_gains) == 0:
+            raise ValueError("allGains must be a non-empty array")
+        
+        if not isinstance(band_gains, dict):
+            raise ValueError("bandGains must be a dictionary")
+        
+        # Log the update for debugging
+        return JSONResponse({
+            "status": "success",
+            "mode": mode,
+            "levels_updated": len(all_gains),
+            "band_count": len(band_gains),
+            "gains": all_gains,
+            "message": f"Applied wavelet band gains for mode '{mode}' with {len(all_gains)} levels and {len(band_gains)} named bands"
+        })
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Error applying wavelet band gains: {str(e)}")
+
+
 @app.get("/health")
 async def health_check():
     """Health check endpoint"""

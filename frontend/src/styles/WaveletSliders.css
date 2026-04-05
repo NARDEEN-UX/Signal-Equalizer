@@ -1,0 +1,255 @@
+/**
+ * Wavelet Sliders Component Styles
+ * Styling for the dynamic wavelet band equalizer component
+ */
+
+.wavelet-sliders-container {
+  padding: 0.9rem;
+  background: rgba(29, 6, 3, 0.55);
+  border: 1px solid rgba(83, 16, 9, 0.6);
+  border-radius: 10px;
+  color: var(--redLight);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.015);
+}
+
+.wavelet-sliders-header {
+  margin-bottom: 0.75rem;
+  border-bottom: 1px solid rgba(83, 16, 9, 0.62);
+  padding-bottom: 0.55rem;
+}
+
+.wavelet-sliders-header h3 {
+  margin: 0 0 0.3rem 0;
+  font-size: 1.38rem;
+  line-height: 1.15;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  color: var(--redLight);
+}
+
+.wavelet-info {
+  margin: 0;
+  font-size: 0.92rem;
+  color: var(--redLightActive);
+  font-family: 'Courier New', monospace;
+}
+
+.wavelet-info strong {
+  color: var(--redLight);
+  font-weight: 700;
+}
+
+.wavelet-bands-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.wavelet-band-slider-group {
+  background: rgba(20, 7, 5, 0.72);
+  border: 1px solid rgba(83, 16, 9, 0.62);
+  border-radius: 10px;
+  padding: 0.85rem 0.8rem;
+  min-height: 112px;
+  width: 100%;
+  box-sizing: border-box;
+  transition: border-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.wavelet-band-slider-group:hover {
+  border-color: var(--redNormal);
+  box-shadow: 0 10px 22px rgba(0, 0, 0, 0.24), inset 0 0 0 1px rgba(83, 16, 9, 0.35);
+  transform: translateY(-1px);
+}
+
+.wavelet-band-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.65rem;
+  gap: 0.5rem;
+}
+
+.wavelet-band-name {
+  font-weight: 700;
+  font-size: 0.98rem;
+  color: var(--redLight);
+  margin: 0;
+  flex-shrink: 0;
+}
+
+.wavelet-band-frequency {
+  font-size: 0.82rem;
+  color: var(--redLightActive);
+  white-space: nowrap;
+  cursor: help;
+  transition: color 0.2s ease;
+}
+
+.wavelet-band-frequency:hover {
+  color: var(--redLight);
+}
+
+.wavelet-band-control {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 64px;
+  align-items: center;
+  gap: 0.45rem;
+  margin-bottom: 0.48rem;
+  width: 100%;
+}
+
+.wavelet-band-slider {
+  width: 100%;
+  height: 7px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(62, 12, 7, 0.55) 0%, rgba(29, 6, 3, 0.9) 100%);
+  outline: none;
+  -webkit-appearance: none;
+  appearance: none;
+  cursor: pointer;
+}
+
+.wavelet-band-slider:focus-visible {
+  box-shadow: 0 0 0 2px rgba(83, 16, 9, 0.4);
+}
+
+.wavelet-band-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #8d2a1b 0%, #531009 62%, #2b0905 100%);
+  border: 2px solid #3b0d08;
+  cursor: pointer;
+  box-shadow: 0 3px 10px rgba(29, 6, 3, 0.65);
+  transition: box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.wavelet-band-slider::-webkit-slider-thumb:hover {
+  box-shadow: 0 0 0 8px rgba(83, 16, 9, 0.28), 0 4px 14px rgba(29, 6, 3, 0.65);
+  transform: scale(1.05);
+}
+
+.wavelet-band-slider::-webkit-slider-thumb:active {
+  transform: scale(0.98);
+}
+
+.wavelet-band-slider::-moz-range-thumb {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #8d2a1b 0%, #531009 62%, #2b0905 100%);
+  border: 2px solid #3b0d08;
+  cursor: pointer;
+  box-shadow: 0 3px 10px rgba(29, 6, 3, 0.65);
+  transition: box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.wavelet-band-slider::-moz-range-thumb:hover {
+  box-shadow: 0 0 0 8px rgba(83, 16, 9, 0.28), 0 4px 14px rgba(29, 6, 3, 0.65);
+  transform: scale(1.05);
+}
+
+.wavelet-band-slider::-moz-range-track {
+  background: linear-gradient(90deg, rgba(62, 12, 7, 0.55) 0%, rgba(29, 6, 3, 0.9) 100%);
+  height: 7px;
+  border-radius: 999px;
+  border: none;
+}
+
+.wavelet-band-slider::-moz-range-progress {
+  background: linear-gradient(90deg, rgba(141, 42, 27, 0.92) 0%, rgba(83, 16, 9, 0.96) 100%);
+  border-radius: 999px;
+}
+
+.wavelet-gain-value {
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: var(--redLight);
+  width: 64px;
+  max-width: 64px;
+  text-align: center;
+  font-family: 'Courier New', monospace;
+  letter-spacing: 0.01em;
+  line-height: 1.1;
+  padding: 0.26rem 0.3rem;
+  border-radius: 6px;
+  background: rgba(62, 12, 7, 0.48);
+  border: 1px solid rgba(83, 16, 9, 0.7);
+  box-sizing: border-box;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.wavelet-band-levels-indicator {
+  background: rgba(62, 12, 7, 0.38);
+  border: 1px solid rgba(83, 16, 9, 0.62);
+  border-left: 3px solid var(--redLightActive);
+  padding: 0.48rem 0.62rem;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  color: var(--redLightActive);
+  margin-top: 0.3rem;
+}
+
+.wavelet-band-levels-indicator small {
+  display: block;
+  font-family: 'Courier New', monospace;
+  word-break: break-word;
+  line-height: 1.2;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .wavelet-sliders-container {
+    padding: 0.78rem;
+  }
+
+  .wavelet-bands-grid {
+    gap: 0.62rem;
+  }
+
+  .wavelet-band-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.2rem;
+  }
+
+  .wavelet-sliders-header h3 {
+    font-size: 1.2rem;
+  }
+
+  .wavelet-info {
+    font-size: 0.82rem;
+  }
+
+  .wavelet-gain-value {
+    width: 58px;
+    max-width: 58px;
+    font-size: 0.88rem;
+    padding: 0.22rem 0.26rem;
+  }
+
+  .wavelet-band-control {
+    grid-template-columns: minmax(0, 1fr) 58px;
+  }
+}
+
+/* Dark theme support */
+@media (prefers-color-scheme: dark) {
+  .wavelet-sliders-container {
+    background: rgba(29, 6, 3, 0.6);
+  }
+
+  .wavelet-band-slider-group {
+    background: rgba(20, 7, 5, 0.8);
+    border-color: rgba(83, 16, 9, 0.62);
+  }
+
+  .wavelet-band-slider-group:hover {
+    border-color: var(--redNormal);
+  }
+}
+

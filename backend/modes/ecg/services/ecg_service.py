@@ -1,7 +1,7 @@
 import numpy as np
 from scipy.fft import fft, fftfreq
 import time
-from typing import List, Tuple, Optional, Dict
+from typing import List, Tuple, Optional, Dict, Any
 import pywt
 
 
@@ -80,6 +80,7 @@ class ECGModeService:
         
         input_coeffs = None
         output_coeffs = None
+        band_waveforms = None
         
         if method == "fft":
             freq_ranges = self._get_frequency_ranges(component_names)
@@ -90,7 +91,7 @@ class ECGModeService:
             actual_level = max(1, min(int(wavelet_level or 6), max_level))
             freq_ranges = self._get_frequency_ranges(component_names)
             
-            input_coeffs, output_coeffs, equalized_signal = self._apply_wavelet_equalization(
+            input_coeffs, output_coeffs, equalized_signal, band_waveforms = self._apply_wavelet_equalization(
                 signal, freq_ranges, gains, wavelet_name, actual_level, sr, sliders_wavelet
             )
         
@@ -105,6 +106,7 @@ class ECGModeService:
             "spectrogram": output_spectrogram,
             "input_coeffs": input_coeffs,
             "output_coeffs": output_coeffs,
+            "band_waveforms": band_waveforms,
             "processing_time": time.time() - start_time
         }
 
@@ -171,7 +173,7 @@ class ECGModeService:
         level: int,
         sample_rate: float,
         sliders_wavelet: Optional[List[float]] = None
-    ) -> Tuple[List[List[float]], List[List[float]], np.ndarray]:
+    ) -> Tuple[List[List[float]], List[List[float]], np.ndarray, List[Dict[str, Any]]]:
         """Apply DWT-based equalization using dyadic detail-band overlap."""
         coeffs = pywt.wavedec(signal, wavelet, level=level)
         
@@ -201,8 +203,87 @@ class ECGModeService:
             output_detail_coeffs.append(out_coeffs[idx].tolist())
         reconstructed = pywt.waverec(out_coeffs, wavelet)
         reconstructed = np.asarray(reconstructed[:len(signal)], dtype=float)
+
+        band_waveforms = self._build_band_waveforms(
+            input_coeffs=coeffs,
+            output_coeffs=out_coeffs,
+            freq_ranges=freq_ranges,
+            wavelet=wavelet,
+            level=level,
+            sample_rate=sample_rate,
+            signal_len=len(signal)
+        )
         
-        return input_detail_coeffs, output_detail_coeffs, reconstructed
+        return input_detail_coeffs, output_detail_coeffs, reconstructed, band_waveforms
+
+    def _levels_for_ranges(
+        self,
+        sub_ranges: List[Tuple[float, float]],
+        level: int,
+        sample_rate: float
+    ) -> List[int]:
+        levels = []
+        for lv in range(1, level + 1):
+            lv_low, lv_high = self._detail_level_band(lv, sample_rate)
+            for low, high in sub_ranges:
+                if self._ranges_overlap(lv_low, lv_high, float(low), float(high)):
+                    levels.append(lv)
+                    break
+        return levels
+
+    def _reconstruct_levels_only(
+        self,
+        coeffs: List[np.ndarray],
+        wavelet: str,
+        level: int,
+        active_levels: List[int],
+        signal_len: int
+    ) -> np.ndarray:
+        isolated = [np.zeros_like(c) for c in coeffs]
+        for lv in active_levels:
+            idx = self._detail_index_for_level(level, lv)
+            isolated[idx] = np.array(coeffs[idx], copy=True)
+
+        reconstructed = pywt.waverec(isolated, wavelet)
+        return np.asarray(reconstructed[:signal_len], dtype=float)
+
+    def _build_band_waveforms(
+        self,
+        input_coeffs: List[np.ndarray],
+        output_coeffs: List[np.ndarray],
+        freq_ranges: List[List[Tuple[float, float]]],
+        wavelet: str,
+        level: int,
+        sample_rate: float,
+        signal_len: int
+    ) -> List[Dict[str, Any]]:
+        waveforms = []
+        for idx, sub_ranges in enumerate(freq_ranges):
+            active_levels = self._levels_for_ranges(sub_ranges, level, sample_rate)
+
+            if active_levels:
+                in_sig = self._reconstruct_levels_only(input_coeffs, wavelet, level, active_levels, signal_len)
+                out_sig = self._reconstruct_levels_only(output_coeffs, wavelet, level, active_levels, signal_len)
+            else:
+                in_sig = np.zeros(signal_len, dtype=float)
+                out_sig = np.zeros(signal_len, dtype=float)
+
+            valid_lows = [float(r[0]) for r in sub_ranges if len(r) >= 2]
+            valid_highs = [float(r[1]) for r in sub_ranges if len(r) >= 2]
+            low = min(valid_lows) if valid_lows else 0.0
+            high = max(valid_highs) if valid_highs else (sample_rate / 2.0)
+
+            waveforms.append({
+                "band_index": idx,
+                "name": f"Band {idx + 1}",
+                "low": low,
+                "high": high,
+                "levels": active_levels,
+                "input": in_sig.tolist(),
+                "output": out_sig.tolist()
+            })
+
+        return waveforms
     
     def _get_frequency_ranges(self, component_names: List[str]) -> List[List[Tuple[float, float]]]:
         ranges = []

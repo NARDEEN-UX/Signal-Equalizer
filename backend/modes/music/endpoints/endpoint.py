@@ -109,6 +109,7 @@ async def process_music(request: MusicModeRequest):
             "output_spectrogram": result["spectrogram"],
             "input_coeffs": result.get("input_coeffs"),
             "output_coeffs": result.get("output_coeffs"),
+            "band_waveforms": result.get("band_waveforms"),
             "processing_time": result["processing_time"]
         }
     except Exception as e:

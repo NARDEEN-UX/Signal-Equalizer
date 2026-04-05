@@ -48,7 +48,8 @@ const normalizeResponse = (apiData, inputSignal, sampleRate) => {
     wavelet: {
       levels: Array.from({ length: levelCount }, (_, i) => `L${i + 1}`),
       input_coeffs: inputCoeffs,
-      output_coeffs: outputCoeffs
+      output_coeffs: outputCoeffs,
+      band_waveforms: Array.isArray(apiData?.band_waveforms) ? apiData.band_waveforms : []
     }
   };
 };
