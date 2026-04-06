@@ -388,17 +388,18 @@ class MusicModeService:
             mask_matrix = np.vstack(mask_rows)
             gain_vector = np.asarray(gain_rows, dtype=float)[:, np.newaxis]
 
-            matched_count = np.sum(mask_matrix, axis=0)
-            matched_sum = np.sum(mask_matrix * gain_vector, axis=0)
-
-            active_matrix = mask_matrix & (gain_vector > 1e-8)
-            active_count = np.sum(active_matrix, axis=0)
+            # Apply per-band gain directly; in overlap regions we multiply then clamp.
+            # This preserves the expected behavior that a 2.0 slider can produce a 2x boost.
+            combined_gain = np.ones_like(abs_freqs, dtype=float)
             matched_any = np.any(mask_matrix, axis=0)
 
-            combined_gain = np.ones_like(abs_freqs, dtype=float)
-            has_active = active_count > 0
-            combined_gain[has_active] = matched_sum[has_active] / matched_count[has_active]
-            combined_gain[matched_any & ~has_active] = 0.0
+            for row_idx in range(mask_matrix.shape[0]):
+                mask = mask_matrix[row_idx]
+                gain_val = float(gain_rows[row_idx])
+                combined_gain[mask] *= gain_val
+
+            combined_gain = np.clip(combined_gain, 0.0, 2.0)
+            combined_gain[matched_any & (combined_gain <= 1e-8)] = 0.0
 
             fft_data = fft_data * combined_gain
 
