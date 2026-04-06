@@ -5,36 +5,36 @@
     {
       "id": "animal-0",
       "name": "Frog",
-      "low": 1084.5,
-      "high": 2509.3,
+      "low": 225,
+      "high": 504,
       "gain": 1.0
     },
     {
       "id": "animal-1",
       "name": "Birds",
-      "low": 3018.2,
-      "high": 5203.4,
+      "low": 4255,
+      "high": 11025,
       "gain": 1.0
     },
     {
       "id": "animal-2",
       "name": "Dog",
-      "low": 479.6,
-      "high": 2314.9,
+      "low": 504,
+      "high": 1943,
       "gain": 1.0
     },
     {
       "id": "animal-3",
       "name": "Cat",
-      "low": 708.0,
-      "high": 3620.9,
+      "low": 1943,
+      "high": 4255,
       "gain": 1.0
     }
   ],
   "sliders_freq": [1.0, 1.0, 1.0, 1.0],
-  "sliders_wavelet": [1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
+  "sliders_wavelet": [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
   "wavelet": "sym8",
-  "wavelet_level": 6,
+  "wavelet_level": 7,
   "sample_rate": 44100,
-  "frequency_notes": "Estimated species ranges provided by user"
+  "frequency_notes": "Non-overlapping bands extracted from animal sounds analysis"
 }

@@ -18,41 +18,47 @@ class AnimalModeSeparator:
         'frog': {
             'id': 'animal-0',
             'name': 'Frog',
-            'low': 1084.5,
-            'high': 2509.3,
-            'examples': 'Frog'
+            'low': 225,
+            'high': 504,
+            'gain': 1.0
         },
         'birds': {
             'id': 'animal-1',
             'name': 'Birds',
-            'low': 3018.2,
-            'high': 5203.4,
-            'examples': 'Birds'
+            'low': 4255,
+            'high': 11025,
+            'gain': 1.0
         },
         'dog': {
             'id': 'animal-2',
             'name': 'Dog',
-            'low': 479.6,
-            'high': 2314.9,
-            'examples': 'Dog'
+            'low': 504,
+            'high': 1943,
+            'gain': 1.0
         },
         'cat': {
             'id': 'animal-3',
             'name': 'Cat',
-            'low': 708.0,
-            'high': 3620.9,
-            'examples': 'Cat'
+            'low': 1943,
+            'high': 4255,
+            'gain': 1.0
         }
     }
     
-    # 10-level Animal Configuration at 44.1kHz
-    # L1: 11k-22k, L2: 5.5k-11k, L3: 2.7k-5.5k, L4: 1.3k-2.7k, L5: 689-1.3k
-    # L6: 344-689, L7: 172-344, L8: 86-172, L9: 43-86, L10: 21.5-43, A10: 0-21.5
+    # 7-level Animal Configuration at 44.1kHz (FULL FREQUENCY COVERAGE)
+    # L1: 11025-22050 Hz (Birds highest)
+    # L2: 5512-11025 Hz (Birds + Cat high)
+    # L3: 2756-5512 Hz (Cat)
+    # L4: 1378-2756 Hz (Cat + Dog)
+    # L5: 689-1378 Hz (Dog)
+    # L6: 344.5-689 Hz (Dog + Frog)
+    # L7: 172.25-344.5 Hz (Frog lower)
+    # cA: 0-172.25 Hz (Frog lowest + approximation)
     ANIMAL_LEVEL_MAP = {
-        "frog": [4, 5],
-        "birds": [3],
-        "dog": [4, 5, 6],
-        "cat": [3, 4, 5]
+        "frog": [6, 7, "cA"],     # Frog: 225-504 Hz → L6,L7,cA (344-689 + 172-344 + 0-172)
+        "birds": [1, 2, 3],        # Birds: 4255-11025 Hz → L1,L2,L3 (11025-22050 + 5512-11025 + 2756-5512)
+        "dog": [4, 5, 6],          # Dog: 504-1943 Hz → L4,L5,L6 (1378-2756 + 689-1378 + 344-689)
+        "cat": [2, 3, 4]           # Cat: 1943-4255 Hz → L2,L3,L4 (5512-11025 + 2756-5512 + 1378-2756)
     }
 
     def __init__(self, sample_rate=44100):
@@ -146,6 +152,7 @@ class AnimalModeSeparator:
             freqs = fftfreq(len(signal_data), 1.0 / sr)
             abs_freqs = np.abs(freqs)
 
+            # Order must match ANIMAL_RANGES: frog, birds, dog, cat
             bands_list = ['frog', 'birds', 'dog', 'cat']
             for i, band_name in enumerate(bands_list):
                 band_info = self.ANIMAL_RANGES[band_name]
@@ -157,6 +164,8 @@ class AnimalModeSeparator:
             wavelet_name = wavelet if wavelet in pywt.wavelist(kind='discrete') else "db4"
             max_level = pywt.dwt_max_level(len(signal_data), pywt.Wavelet(wavelet_name).dec_len)
             actual_level = max(1, min(int(wavelet_level or 6), max_level))
+            # Ensure at least 7 levels for full animal frequency coverage
+            actual_level = max(7, min(actual_level, max_level))
             freq_ranges = self._get_frequency_ranges(animal_names)
             input_coeffs, output_coeffs, equalized_signal, band_waveforms = self._apply_wavelet_equalization(
                 signal_data,
@@ -201,31 +210,51 @@ class AnimalModeSeparator:
         low = sample_rate / (2 ** (level_idx + 1))
         return low, high
 
-    def _compute_level_gains_from_ranges(
+    def _compute_level_gains_direct(
         self,
-        freq_ranges: List[List[Tuple[float, float]]],
         gains: List[float],
         level: int,
-        sample_rate: float,
-        sliders_wavelet: Optional[List[float]] = None
-    ) -> List[float]:
+        sliders_wavelet: Optional[List[float]] = None,
+        approx_gain: float = 1.0
+    ) -> Tuple[List[float], float]:
+        """
+        Compute level gains from ANIMAL_LEVEL_MAP with multi-level per animal.
+        Handles both numeric levels and 'cA' approximation coefficients.
+        Returns: (level_gains, approx_gain_out)
+        """
         level_gains = [1.0] * (level + 1)
-
-        for lv in range(1, level + 1):
-            lv_low, lv_high = self._detail_level_band(lv, sample_rate)
-            matched = []
-            for ranges, gain in zip(freq_ranges, gains):
-                for low, high in ranges:
-                    if self._ranges_overlap(lv_low, lv_high, float(low), float(high)):
-                        matched.append(self._clamp_gain(gain))
-                        break
-
-            base_gain = float(np.mean(matched)) if matched else 1.0
-            if sliders_wavelet is not None and lv - 1 < len(sliders_wavelet):
-                base_gain *= self._clamp_gain(sliders_wavelet[lv - 1])
-            level_gains[lv] = self._clamp_gain(base_gain)
-
-        return level_gains
+        cA_gain = 1.0
+        
+        # Fixed animal order matching ANIMAL_RANGES keys
+        animal_order = ['frog', 'birds', 'dog', 'cat']
+        
+        for idx, animal_key in enumerate(animal_order):
+            if idx >= len(gains):
+                break
+            
+            gain = self._clamp_gain(gains[idx])
+            if animal_key in self.ANIMAL_LEVEL_MAP:
+                # Each animal can have multiple levels (including 'cA')
+                for lv in self.ANIMAL_LEVEL_MAP[animal_key]:
+                    if lv == "cA":
+                        # Handle approximation coefficients (for Frog lowest frequencies)
+                        wavelet_mult = 1.0
+                        if sliders_wavelet is not None and len(sliders_wavelet) > 0:
+                            wavelet_mult = self._clamp_gain(sliders_wavelet[0])  # Use first slider for approx
+                        cA_gain = gain * wavelet_mult
+                    elif isinstance(lv, int) and lv <= level:
+                        # Handle numeric detail levels
+                        wavelet_mult = 1.0
+                        if sliders_wavelet is not None and lv - 1 < len(sliders_wavelet):
+                            wavelet_mult = self._clamp_gain(sliders_wavelet[lv - 1])
+                        combined_gain = gain * wavelet_mult
+                        # Mix gains if multiple animals affect same level
+                        if level_gains[lv] != 1.0:
+                            level_gains[lv] = np.mean([level_gains[lv], combined_gain])
+                        else:
+                            level_gains[lv] = combined_gain
+        
+        return level_gains, cA_gain
 
     def _apply_wavelet_equalization(
         self,
@@ -245,17 +274,19 @@ class AnimalModeSeparator:
             idx = self._detail_index_for_level(level, lv)
             input_detail_coeffs.append(coeffs[idx].tolist())
 
-        level_gains = self._compute_level_gains_from_ranges(
-            freq_ranges=freq_ranges,
+        # Compute level gains directly from ANIMAL_LEVEL_MAP using fixed animal order
+        level_gains, cA_gain = self._compute_level_gains_direct(
             gains=gains,
             level=level,
-            sample_rate=sample_rate,
             sliders_wavelet=sliders_wavelet
         )
 
         out_coeffs = [np.array(c, copy=True) for c in coeffs]
 
-        # Keep approximation unchanged; level sliders target details L1..LN.
+        # Apply approximation gain if Frog uses cA (lowest frequencies)
+        out_coeffs[0] = out_coeffs[0] * cA_gain
+
+        # Apply computed level gains (from animal bands)
         for lv in range(1, level + 1):
             idx = self._detail_index_for_level(level, lv)
             out_coeffs[idx] = out_coeffs[idx] * level_gains[lv]

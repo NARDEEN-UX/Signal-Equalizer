@@ -226,6 +226,16 @@ const MODE_DEFAULT_WAVELET = {
   ecg: 'bior3.5'
 };
 
+const MODE_DEFAULT_WAVELET_LEVEL = {
+  generic: 6,
+  music: 6,
+  animal: 7,      // Animals need 7 levels for full frequency coverage
+  animals: 7,
+  human: 5,
+  humans: 5,
+  ecg: 5
+};
+
 const WAVELET_RECOMMENDATION_BY_MODE = {
   generic: 'db4: robust general-purpose orthogonal basis for mixed content.',
   music: 'db4: balanced decomposition for musical mixtures with clear band control.',
@@ -255,6 +265,8 @@ const isGenericSyntheticName = (name) => {
 };
 
 const getModeWaveletDefault = (modeId) => MODE_DEFAULT_WAVELET[modeId] || 'db4';
+
+const getModeWaveletLevelDefault = (modeId) => MODE_DEFAULT_WAVELET_LEVEL[modeId] || DEFAULT_WAVELET_LEVEL;
 
 const computeMaxWaveletLevel = (signalLength, waveletName, fallback = DEFAULT_WAVELET_LEVEL) => {
   const n = Number(signalLength);
@@ -355,7 +367,8 @@ function App() {
   const [modeWaveletSliders, setModeWaveletSliders] = useState(() => {
     const initial = {};
     MODES.forEach(mode => {
-      initial[mode.id] = buildWaveletDefaults(DEFAULT_WAVELET_LEVEL);
+      const levelForMode = getModeWaveletLevelDefault(mode.id);
+      initial[mode.id] = buildWaveletDefaults(levelForMode);
     });
     return initial;
   });
@@ -541,7 +554,7 @@ function App() {
     (Array.isArray(uploadedSignal) && uploadedSignal.length > 0 ? uploadedSignal.length : 0)
     || (Array.isArray(mockSignalData?.input_signal) ? mockSignalData.input_signal.length : 0)
     || 0;
-  const maxWaveletLevel = computeMaxWaveletLevel(currentSignalLength, waveletType, DEFAULT_WAVELET_LEVEL);
+  const maxWaveletLevel = computeMaxWaveletLevel(currentSignalLength, waveletType, getModeWaveletLevelDefault(activeModeId));
   const waveletLevelLabels = makeWaveletLevelLabels(maxWaveletLevel);
   const waveletLevel = maxWaveletLevel;
 
@@ -1287,7 +1300,8 @@ function App() {
     }
     const modeDefault = getModeWaveletDefault(activeModeId);
     setWaveletType(modeDefault);
-    setWaveletSliders(buildWaveletDefaults(DEFAULT_WAVELET_LEVEL));
+    const modeDefaultLevel = getModeWaveletLevelDefault(activeModeId);
+    setWaveletSliders(buildWaveletDefaults(modeDefaultLevel));
   }, [activeModeId]);
 
   useEffect(() => {

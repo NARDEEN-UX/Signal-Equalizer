@@ -27,12 +27,13 @@ export const MODES = [
     description: 'Adjust different animal sounds with scientifically accurate frequency ranges.',
     accentClass: 'mode-animal',
     icon: '❖',
-    sliderLabels: ['Songbirds', 'Canines', 'Felines', 'Large Mammals', 'Insects'],
-    freqBands: [(1000, 8000), (150, 2000), (48, 10000), (5, 500), (600, 20000)],
-    wavelet: 'db4',
-    waveletLevels: 6,
+    sliderLabels: ['Frog', 'Birds', 'Dog', 'Cat'],
+    freqBands: [[225, 504], [4255, 11025], [504, 1943], [1943, 4255]],
+    wavelet: 'sym8',
+    waveletLevels: 7,
+    sampleRate: 44100,
     allowAddSubdivision: false,
-    requirements: ['Songbird sounds (1,000-8,000 Hz)', 'Dog/Wolf barks (150-2,000 Hz)', 'Cat meows/hisses (48-10,000 Hz)', 'Elephant/Whale calls (5-500 Hz)', 'Cricket/Bee sounds (600-20,000 Hz)']
+    requirements: ['Frog croaks (225-504 Hz)', 'Bird chirps (4255-11025 Hz)', 'Dog barks (504-1943 Hz)', 'Cat meows (1943-4255 Hz)']
   },
   {
     id: 'music',
