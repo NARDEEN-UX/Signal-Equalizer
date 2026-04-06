@@ -17,22 +17,27 @@ class HumansModeService:
     """Service for human voice mode signal processing"""
     
     # Human mode frequency labels used in DSP controls.
+    # Bands are arranged to minimise frequency overlap between voice groups:
+    #   Male        – fundamental pitch zone (80–300 Hz), first formant (300–800 Hz)
+    #   Female      – slightly higher fundamental (180–450 Hz), upper formants (900–2500 Hz)
+    #   Children    – raised fundamental (250–500 Hz) and distinctly high range (2000–4000 Hz)
+    #   French/Span – locale-specific formant emphasis kept non-overlapping with gender bands
     VOICE_RANGES = {
-        "Children Voices (Pre-Puberty)": [(220, 300), (350, 600)],
-        "French Audio (FLEURS Dataset)": [(128.12, 685.94)],
-        "Spanish Audio (FLEURS Dataset)": [(128.12, 1792.19)],
-        "All Female Actors (Even Numbers)": [(205.96, 1444.01)],
-        "All Male Actors (Odd Numbers)": [(112.08, 1322.75)],
+        "Children Voices (Pre-Puberty)": [(250, 500), (2000, 4000)],
+        "French Audio (FLEURS Dataset)": [(160, 500), (500, 1000)],
+        "Spanish Audio (FLEURS Dataset)": [(160, 600), (600, 2000)],
+        "All Female Actors (Even Numbers)": [(180, 450), (900, 2500)],
+        "All Male Actors (Odd Numbers)": [(80, 300), (300, 800)],
     }
 
     # Broader fallback isolation ranges to keep separated stems audible
     # when AI model loading/inference is unavailable.
     FALLBACK_VOICE_ISOLATION_RANGES = {
-        "Children Voices (Pre-Puberty)": [(220, 300), (350, 600), (600, 1400)],
-        "French Audio (FLEURS Dataset)": [(120, 700), (700, 1400)],
-        "Spanish Audio (FLEURS Dataset)": [(120, 1800)],
-        "All Female Actors (Even Numbers)": [(200, 1450)],
-        "All Male Actors (Odd Numbers)": [(110, 1325)],
+        "Children Voices (Pre-Puberty)": [(220, 500), (500, 1400), (2000, 4000)],
+        "French Audio (FLEURS Dataset)": [(150, 520), (520, 1050)],
+        "Spanish Audio (FLEURS Dataset)": [(150, 600), (600, 2000)],
+        "All Female Actors (Even Numbers)": [(175, 460), (900, 2500)],
+        "All Male Actors (Odd Numbers)": [(75, 310), (310, 820)],
     }
 
     # Target pitch centers used to map anonymous separated outputs
@@ -261,12 +266,14 @@ class HumansModeService:
 
     @staticmethod
     def _combine_overlap_gains(matched_gains: List[float]) -> float:
+        """Combine gains from bands that share a wavelet detail level.
+        Use max of non-zero gains so a muted band doesn't average-down a boosted one."""
         if not matched_gains:
             return 1.0
+        if all(g <= 1e-8 for g in matched_gains):
+            return 0.0
         active = [g for g in matched_gains if g > 1e-8]
-        if active:
-            return float(np.mean(matched_gains))
-        return 0.0
+        return float(max(active)) if active else 0.0
 
     def _compute_level_gains_from_ranges(
         self,
@@ -483,21 +490,22 @@ class HumansModeService:
                 gain_rows.append(self._clamp_gain(gain))
 
         if mask_rows:
-            mask_matrix = np.vstack(mask_rows)
-            gain_vector = np.asarray(gain_rows, dtype=float)[:, np.newaxis]
-
-            # Apply per-band gain directly; in overlap regions we multiply then clamp.
-            # This preserves the expected behavior that a 2.0 slider can produce a 2x boost.
-            combined_gain = np.ones_like(abs_freqs, dtype=float)
+            mask_matrix = np.vstack(mask_rows)  # shape: (n_bands, n_freqs)
             matched_any = np.any(mask_matrix, axis=0)
 
-            for row_idx in range(mask_matrix.shape[0]):
-                mask = mask_matrix[row_idx]
-                gain_val = float(gain_rows[row_idx])
-                combined_gain[mask] *= gain_val
+            # In overlap zones use WEIGHTED-MAX: the highest gain among all
+            # bands covering a bin wins.  This prevents a zeroed band from
+            # silencing frequencies also claimed by another voice group.
+            n_bands = len(gain_rows)
+            combined_gain = np.ones(len(abs_freqs), dtype=float)
 
-            combined_gain = np.clip(combined_gain, 0.0, 2.0)
-            combined_gain[matched_any & (combined_gain <= 1e-8)] = 0.0
+            band_gain_map = np.zeros((n_bands, len(abs_freqs)), dtype=float)
+            for row_idx in range(n_bands):
+                band_mask = mask_matrix[row_idx]
+                band_gain_map[row_idx, band_mask] = float(gain_rows[row_idx])
+
+            combined_gain[matched_any] = np.max(band_gain_map[:, matched_any], axis=0)
+            combined_gain = np.clip(combined_gain, 0.0, 4.0)
 
             fft_data = fft_data * combined_gain
 

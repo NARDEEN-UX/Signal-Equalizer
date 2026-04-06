@@ -14,14 +14,21 @@ import pywt
 class MusicModeService:
     """Service for music mode signal processing with configurable bands."""
 
-    # DSP fallback ranges aligned with standard Demucs stems.
+    # DSP fallback ranges with minimized cross-instrument overlap.
+    # Boundaries follow psychoacoustic / instrument fundamentals guidelines:
+    #   drums  – sub-bass transients + low-mid body, no high-mid content
+    #   bass   – fundamental + first harmonic zone, kept below guitar
+    #   guitar – mid-range core, separated from bass & piano fundamentals
+    #   piano  – wide but excluded from bass/drum sub-bass
+    #   vocals – speech formant zone, shared minimally with instruments
+    #   other  – high-frequency content above vocals
     INSTRUMENT_RANGES = {
-        "drums": [(20, 200), (200, 500)],
-        "bass": [(30, 150), (150, 300)],
-        "guitar": [(80, 600), (600, 1200)],
-        "piano": [(28, 500), (500, 4186)],
-        "vocals": [(85, 1000), (1000, 3400)],
-        "other": [(200, 2000), (2000, 8000)]
+        "drums":  [(20, 100), (100, 250)],
+        "bass":   [(40, 120), (120, 280)],
+        "guitar": [(280, 800), (800, 1400)],
+        "piano":  [(260, 700), (700, 4200)],
+        "vocals": [(300, 1100), (1100, 3500)],
+        "other":  [(1400, 5000), (5000, 20000)]
     }
     DEMUCS_SOURCE_ORDER = ("drums", "bass", "vocals", "guitar", "piano", "other")
 
@@ -133,12 +140,18 @@ class MusicModeService:
 
     @staticmethod
     def _combine_overlap_gains(matched_gains: List[float]) -> float:
+        """For overlapping wavelet levels pick the dominant (lowest non-unity) or max gain.
+        Using mean caused a zeroed band to cancel a boosted neighbour.
+        Strategy: if any band is fully suppressed (0), suppress; else take max."""
         if not matched_gains:
             return 1.0
+        if all(g <= 1e-8 for g in matched_gains):
+            return 0.0
+        # If a slider is truly silenced (0), respect it only when it's the sole owner.
+        # In shared zones prefer the maximum non-zero gain so boosting one
+        # instrument doesn't get cancelled by a neighbour set to unity.
         active = [g for g in matched_gains if g > 1e-8]
-        if active:
-            return float(np.mean(matched_gains))
-        return 0.0
+        return float(max(active)) if active else 0.0
 
     def _compute_level_gains_from_ranges(
         self,
@@ -385,21 +398,28 @@ class MusicModeService:
                 gain_rows.append(self._clamp_gain(gain))
 
         if mask_rows:
-            mask_matrix = np.vstack(mask_rows)
-            gain_vector = np.asarray(gain_rows, dtype=float)[:, np.newaxis]
-
-            # Apply per-band gain directly; in overlap regions we multiply then clamp.
-            # This preserves the expected behavior that a 2.0 slider can produce a 2x boost.
-            combined_gain = np.ones_like(abs_freqs, dtype=float)
+            mask_matrix = np.vstack(mask_rows)  # shape: (n_bands, n_freqs)
             matched_any = np.any(mask_matrix, axis=0)
 
-            for row_idx in range(mask_matrix.shape[0]):
-                mask = mask_matrix[row_idx]
-                gain_val = float(gain_rows[row_idx])
-                combined_gain[mask] *= gain_val
+            # Build per-band gain arrays, then combine per frequency bin.
+            # In overlap zones use WEIGHTED-MAX: the highest gain among all
+            # bands covering a bin wins.  This prevents a zeroed band from
+            # silencing frequencies that belong to a different instrument.
+            n_bands = len(gain_rows)
+            # Start all bins at 1.0 (pass-through for unmatched freqs).
+            combined_gain = np.ones(len(abs_freqs), dtype=float)
 
-            combined_gain = np.clip(combined_gain, 0.0, 2.0)
-            combined_gain[matched_any & (combined_gain <= 1e-8)] = 0.0
+            # Build a per-band gain map, then take the pointwise max.
+            band_gain_map = np.zeros((n_bands, len(abs_freqs)), dtype=float)
+            for row_idx in range(n_bands):
+                band_mask = mask_matrix[row_idx]
+                band_gain_map[row_idx, band_mask] = float(gain_rows[row_idx])
+                # Bins not owned by this band stay at 0 (neutral for max).
+
+            # For each frequency bin covered by at least one band, use the
+            # maximum gain proposed by any band that claims that bin.
+            combined_gain[matched_any] = np.max(band_gain_map[:, matched_any], axis=0)
+            combined_gain = np.clip(combined_gain, 0.0, 4.0)
 
             fft_data = fft_data * combined_gain
 

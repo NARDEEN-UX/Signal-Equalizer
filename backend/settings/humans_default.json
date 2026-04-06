@@ -4,41 +4,41 @@
     {
       "id": "human-0",
       "name": "Children Voices (Pre-Puberty)",
-      "low": 220,
-      "high": 600,
-      "ranges": [[220, 300], [350, 600]],
+      "low": 250,
+      "high": 4000,
+      "ranges": [[250, 500], [2000, 4000]],
       "gain": 1.0
     },
     {
       "id": "human-1",
       "name": "French Audio (FLEURS Dataset)",
-      "low": 128.12,
-      "high": 685.94,
-      "ranges": [[128.12, 685.94]],
+      "low": 160,
+      "high": 1000,
+      "ranges": [[160, 500], [500, 1000]],
       "gain": 1.0
     },
     {
       "id": "human-2",
       "name": "Spanish Audio (FLEURS Dataset)",
-      "low": 128.12,
-      "high": 1792.19,
-      "ranges": [[128.12, 1792.19]],
+      "low": 160,
+      "high": 2000,
+      "ranges": [[160, 600], [600, 2000]],
       "gain": 1.0
     },
     {
       "id": "human-3",
       "name": "female",
-      "low": 205.96,
-      "high": 1444.01,
-      "ranges": [[205.96, 1444.01]],
+      "low": 180,
+      "high": 2500,
+      "ranges": [[180, 450], [900, 2500]],
       "gain": 1.0
     },
     {
       "id": "human-4",
       "name": "male",
-      "low": 112.08,
-      "high": 1322.75,
-      "ranges": [[112.08, 1322.75]],
+      "low": 80,
+      "high": 800,
+      "ranges": [[80, 300], [300, 800]],
       "gain": 1.0
     }
   ],
