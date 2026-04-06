@@ -226,16 +226,6 @@ const MODE_DEFAULT_WAVELET = {
   ecg: 'bior3.5'
 };
 
-const MODE_DEFAULT_WAVELET_LEVEL = {
-  generic: 6,
-  music: 6,
-  animal: 7,      // Animals need 7 levels for full frequency coverage
-  animals: 7,
-  human: 5,
-  humans: 5,
-  ecg: 5
-};
-
 const WAVELET_RECOMMENDATION_BY_MODE = {
   generic: 'db4: robust general-purpose orthogonal basis for mixed content.',
   music: 'db4: balanced decomposition for musical mixtures with clear band control.',
@@ -265,8 +255,6 @@ const isGenericSyntheticName = (name) => {
 };
 
 const getModeWaveletDefault = (modeId) => MODE_DEFAULT_WAVELET[modeId] || 'db4';
-
-const getModeWaveletLevelDefault = (modeId) => MODE_DEFAULT_WAVELET_LEVEL[modeId] || DEFAULT_WAVELET_LEVEL;
 
 const computeMaxWaveletLevel = (signalLength, waveletName, fallback = DEFAULT_WAVELET_LEVEL) => {
   const n = Number(signalLength);
@@ -367,8 +355,7 @@ function App() {
   const [modeWaveletSliders, setModeWaveletSliders] = useState(() => {
     const initial = {};
     MODES.forEach(mode => {
-      const levelForMode = getModeWaveletLevelDefault(mode.id);
-      initial[mode.id] = buildWaveletDefaults(levelForMode);
+      initial[mode.id] = buildWaveletDefaults(DEFAULT_WAVELET_LEVEL);
     });
     return initial;
   });
@@ -554,7 +541,7 @@ function App() {
     (Array.isArray(uploadedSignal) && uploadedSignal.length > 0 ? uploadedSignal.length : 0)
     || (Array.isArray(mockSignalData?.input_signal) ? mockSignalData.input_signal.length : 0)
     || 0;
-  const maxWaveletLevel = computeMaxWaveletLevel(currentSignalLength, waveletType, getModeWaveletLevelDefault(activeModeId));
+  const maxWaveletLevel = computeMaxWaveletLevel(currentSignalLength, waveletType, DEFAULT_WAVELET_LEVEL);
   const waveletLevelLabels = makeWaveletLevelLabels(maxWaveletLevel);
   const waveletLevel = maxWaveletLevel;
 
@@ -657,15 +644,28 @@ function App() {
     const inputCoeffs = wavelet.input_coeffs;
     const safeSliders = normalizeWaveletSliders(waveletSliders, inputCoeffs.length);
 
-    const outputCoeffsPreview = inputCoeffs.map((coeff, idx) => {
-      const gain = Math.max(0, Math.min(2, safeGain(safeSliders[idx], 1)));
-      const arr = Array.isArray(coeff) ? coeff : [];
-      return arr.map((v) => (Number(v) || 0) * gain);
-    });
+    // When backend uses wavelet processing, it correctly combines frequency + wavelet slider gains.
+    // Don't override backend output_coeffs with partial preview. Only use preview for FFT method
+    // or when backend coefficients are missing/empty.
+    const outputCoeffs = Array.isArray(wavelet.output_coeffs) && wavelet.output_coeffs.length > 0
+      ? wavelet.output_coeffs
+      : null;
+
+    let displayOutputCoeffs = outputCoeffs;
+
+    // If no backend output_coeffs, calculate preview with just wavelet gains
+    if (!outputCoeffs) {
+      // During backend latency, show preview with wavelet gains for visualization
+      displayOutputCoeffs = inputCoeffs.map((coeff, idx) => {
+        const gain = Math.max(0, Math.min(2, safeGain(safeSliders[idx], 1)));
+        const arr = Array.isArray(coeff) ? coeff : [];
+        return arr.map((v) => (Number(v) || 0) * gain);
+      });
+    }
 
     return {
       ...wavelet,
-      output_coeffs: outputCoeffsPreview,
+      output_coeffs: displayOutputCoeffs,
       levels: Array.isArray(wavelet.levels) && wavelet.levels.length > 0
         ? wavelet.levels
         : Array.from({ length: inputCoeffs.length }, (_, i) => `L${i + 1}`)
@@ -1300,8 +1300,7 @@ function App() {
     }
     const modeDefault = getModeWaveletDefault(activeModeId);
     setWaveletType(modeDefault);
-    const modeDefaultLevel = getModeWaveletLevelDefault(activeModeId);
-    setWaveletSliders(buildWaveletDefaults(modeDefaultLevel));
+    setWaveletSliders(buildWaveletDefaults(DEFAULT_WAVELET_LEVEL));
   }, [activeModeId]);
 
   useEffect(() => {
