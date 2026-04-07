@@ -398,28 +398,24 @@ class MusicModeService:
                 gain_rows.append(self._clamp_gain(gain))
 
         if mask_rows:
-            mask_matrix = np.vstack(mask_rows)  # shape: (n_bands, n_freqs)
+            mask_matrix = np.vstack(mask_rows)
             matched_any = np.any(mask_matrix, axis=0)
 
-            # Build per-band gain arrays, then combine per frequency bin.
-            # In overlap zones use WEIGHTED-MAX: the highest gain among all
-            # bands covering a bin wins.  This prevents a zeroed band from
-            # silencing frequencies that belong to a different instrument.
-            n_bands = len(gain_rows)
-            # Start all bins at 1.0 (pass-through for unmatched freqs).
-            combined_gain = np.ones(len(abs_freqs), dtype=float)
+            # Multiplicative overlap rule: every matching band gain contributes.
+            # If any overlapping band gain is zero, that frequency bin is forced to zero.
+            combined_gain = np.ones_like(abs_freqs, dtype=float)
+            zero_mask = np.zeros_like(abs_freqs, dtype=bool)
 
-            # Build a per-band gain map, then take the pointwise max.
-            band_gain_map = np.zeros((n_bands, len(abs_freqs)), dtype=float)
-            for row_idx in range(n_bands):
-                band_mask = mask_matrix[row_idx]
-                band_gain_map[row_idx, band_mask] = float(gain_rows[row_idx])
-                # Bins not owned by this band stay at 0 (neutral for max).
+            for row_idx in range(mask_matrix.shape[0]):
+                mask = mask_matrix[row_idx]
+                gain_val = float(gain_rows[row_idx])
+                if gain_val <= 1e-8:
+                    zero_mask |= mask
+                combined_gain[mask] *= gain_val
 
-            # For each frequency bin covered by at least one band, use the
-            # maximum gain proposed by any band that claims that bin.
-            combined_gain[matched_any] = np.max(band_gain_map[:, matched_any], axis=0)
-            combined_gain = np.clip(combined_gain, 0.0, 4.0)
+            combined_gain = np.maximum(combined_gain, 0.0)
+            combined_gain[zero_mask] = 0.0
+            combined_gain[matched_any & (combined_gain <= 1e-8)] = 0.0
 
             fft_data = fft_data * combined_gain
 
