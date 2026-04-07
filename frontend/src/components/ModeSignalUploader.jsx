@@ -36,11 +36,12 @@ function waveformSample(type, phaseRad) {
   return Math.sin(wrapped);
 }
 
-function snapFrequencyToBin(freqHz, sampleRate, nperseg = 1024) {
+function snapFrequencyToBin(freqHz, sampleRate, nfft = 1024) {
   const nyquist = Math.max(2, sampleRate / 2);
   const f = Math.max(1, Math.min(nyquist - 1, Number(freqHz) || 1));
-  const bin = Math.max(1, Math.round((f * nperseg) / sampleRate));
-  return (bin * sampleRate) / nperseg;
+  const fftLength = Math.max(2, Math.floor(Number(nfft) || 1024));
+  const bin = Math.max(1, Math.round((f * fftLength) / sampleRate));
+  return (bin * sampleRate) / fftLength;
 }
 
 const ModeSignalUploader = ({ mode, onSignalLoad, onClose }) => {
@@ -312,10 +313,12 @@ const ModeSignalUploader = ({ mode, onSignalLoad, onClose }) => {
       const phaseRad = ((Number(synthPhaseDeg) || 0) * Math.PI) / 180;
       const noiseLevel = Math.max(0, Math.min(1, Number(synthNoiseLevel) || 0));
       const nyquist = Math.max(2, sampleRate / 2);
+      const sampleCount = Math.max(1, Math.floor(durationSec * sampleRate));
 
       let freqs = parseNumberList(synthFreqs, [440]).map((f) => Math.max(1, Math.min(nyquist - 1, f)));
       if (synthSnapToBins) {
-        freqs = freqs.map((f) => snapFrequencyToBin(f, sampleRate, 1024));
+        // Snap to the actual FFT grid of the generated signal (not a fixed STFT window).
+        freqs = freqs.map((f) => snapFrequencyToBin(f, sampleRate, sampleCount));
       }
       const ampsRaw = parseNumberList(synthAmps, [1]);
       const amps = freqs.map((_, i) => {
@@ -323,7 +326,6 @@ const ModeSignalUploader = ({ mode, onSignalLoad, onClose }) => {
         return Math.max(0, Math.min(2, a));
       });
 
-      const sampleCount = Math.max(1, Math.floor(durationSec * sampleRate));
       const out = new Array(sampleCount);
 
       const ampSum = amps.reduce((sum, v) => sum + v, 0);

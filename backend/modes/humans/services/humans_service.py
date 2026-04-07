@@ -516,17 +516,42 @@ class HumansModeService:
 
     def _compute_spectrogram_data(self, signal, sample_rate):
         from scipy.signal import spectrogram
+        signal = np.asarray(signal, dtype=np.float32).reshape(-1)
+        if signal.size == 0:
+            return {"frequencies": [], "times": [], "magnitude": []}
+
+        # Remove only global DC once; avoid per-window detrending flicker artifacts.
+        signal = signal - float(np.mean(signal))
         seg_len = min(512, len(signal) // 4) if len(signal) >= 32 else max(8, len(signal))
         overlap = int(seg_len * 0.75)
-        f, t, Sxx = spectrogram(signal, sample_rate, window='hann', nperseg=seg_len, noverlap=overlap)
+        f, t, Sxx = spectrogram(
+            signal,
+            sample_rate,
+            window='hann',
+            nperseg=seg_len,
+            noverlap=overlap,
+            detrend=False,
+            scaling='spectrum',
+            mode='psd'
+        )
         Sxx_db = 10 * np.log10(np.maximum(Sxx, 1e-12))
         Sxx_db = np.clip(Sxx_db, -120.0, 0.0)
         freq_step = max(1, len(f) // 100)
         time_step = max(1, len(t) // 100)
+        f_ds = f[::freq_step]
+        t_ds = t[::time_step]
+        Sxx_ds = np.empty((len(f_ds), len(t_ds)), dtype=np.float32)
+        for i in range(len(f_ds)):
+            fs = i * freq_step
+            fe = min(len(f), fs + freq_step)
+            for j in range(len(t_ds)):
+                ts = j * time_step
+                te = min(len(t), ts + time_step)
+                Sxx_ds[i, j] = float(np.mean(Sxx_db[fs:fe, ts:te]))
         return {
-            "frequencies": f[::freq_step].tolist(),
-            "times": t[::time_step].tolist(),
-            "magnitude": Sxx_db[::freq_step, ::time_step].tolist()
+            "frequencies": f_ds.tolist(),
+            "times": t_ds.tolist(),
+            "magnitude": Sxx_ds.tolist()
         }
 
     @staticmethod

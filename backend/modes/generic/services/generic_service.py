@@ -96,24 +96,47 @@ class GenericModeService:
         positive_idx = freqs > 0
         pos_freqs = freqs[positive_idx]
         pos_mags = magnitudes[positive_idx]
-        
-        # Downsample for response
-        step = max(1, len(pos_freqs) // 1000)
-        
+
+        # Downsample for response while preserving narrow peaks.
+        max_points = 1000
+        if len(pos_freqs) <= max_points:
+            ds_freqs = pos_freqs
+            ds_mags = pos_mags
+        else:
+            edges = np.linspace(0, len(pos_freqs), num=max_points + 1, dtype=int)
+            keep_idx = []
+            for i in range(max_points):
+                start = edges[i]
+                end = edges[i + 1]
+                if end <= start:
+                    continue
+                local_peak = start + int(np.argmax(pos_mags[start:end]))
+                keep_idx.append(local_peak)
+
+            ds_freqs = pos_freqs[keep_idx]
+            ds_mags = pos_mags[keep_idx]
+
         return {
-            "frequencies": pos_freqs[::step].tolist(),
-            "magnitudes": pos_mags[::step].tolist()
+            "frequencies": ds_freqs.tolist(),
+            "magnitudes": ds_mags.tolist()
         }
     
     def _compute_spectrogram_data(self, signal: np.ndarray, sample_rate: float) -> dict:
         """Compute spectrogram for output signal"""
         from scipy.signal import spectrogram
+        signal = np.asarray(signal, dtype=np.float32).reshape(-1)
+        if signal.size == 0:
+            return {"frequencies": [], "times": [], "magnitude": []}
+
+        # Remove only global DC once; avoid per-window detrending flicker artifacts.
+        signal = signal - float(np.mean(signal))
         f, t, Sxx = spectrogram(
             signal,
             sample_rate,
             window='hann',
             nperseg=1024,
             noverlap=768,
+            detrend=False,
             scaling='spectrum',
             mode='psd'
         )
@@ -121,11 +144,37 @@ class GenericModeService:
         # Absolute log-power scale keeps inter-request intensity comparisons meaningful.
         Sxx_db = 10 * np.log10(np.maximum(Sxx, 1e-12))
         Sxx_db = np.clip(Sxx_db, -120.0, 0.0)
-        freq_step = max(1, len(f) // 100)
+        # Preserve low-frequency resolution so narrow bass bands (e.g., 80-180 Hz)
+        # remain visible after downsampling.
+        low_cut_hz = 1000.0
+        max_freq_bins = 180
+
+        low_idx = np.where(f <= low_cut_hz)[0]
+        high_idx = np.where(f > low_cut_hz)[0]
+
+        if len(f) <= max_freq_bins:
+            freq_idx = np.arange(len(f), dtype=int)
+        else:
+            remaining_budget = max(0, max_freq_bins - len(low_idx))
+            if remaining_budget > 0 and len(high_idx) > 0:
+                high_step = max(1, int(np.ceil(len(high_idx) / remaining_budget)))
+                high_keep = high_idx[::high_step]
+                freq_idx = np.concatenate([low_idx, high_keep])
+            else:
+                # Fallback: evenly sample all bins if low section already exceeds budget.
+                uniform_step = max(1, int(np.ceil(len(f) / max_freq_bins)))
+                freq_idx = np.arange(0, len(f), uniform_step, dtype=int)
+
+            if freq_idx[-1] != len(f) - 1:
+                freq_idx = np.append(freq_idx, len(f) - 1)
+
         time_step = max(1, len(t) // 100)
-        f_ds = f[::freq_step]
         t_ds = t[::time_step]
-        Sxx_ds = Sxx_db[::freq_step, ::time_step]
+        f_ds = f[freq_idx]
+
+        # Keep frequency bins directly (no cross-bin averaging) to avoid smearing EQ cuts.
+        Sxx_time = Sxx_db[:, ::time_step]
+        Sxx_ds = Sxx_time[freq_idx, :].astype(np.float32, copy=False)
         
         return {
             "frequencies": f_ds.tolist(),

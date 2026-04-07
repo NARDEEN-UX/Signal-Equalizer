@@ -2764,6 +2764,8 @@ function App() {
                     magnitudes={signalData.spectrogram.out}
                     normalizationMax={sharedSpectrogramMax}
                     colorScale={outputSpecColorScale}
+                    eqBands={activeProcessingBands}
+                    hardMuteOverlay
                     viewWindow={specZoomWindow}
                     onViewWindowChange={setSpecZoomWindow}
                   />

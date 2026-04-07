@@ -422,15 +422,40 @@ class AnimalModeSeparator:
     def _compute_spectrogram_data(self, signal_data, sample_rate):
         """Compute spectrogram for visualization."""
         from scipy.signal import spectrogram
-        f, t, Sxx = spectrogram(signal_data, sample_rate, window='hann', nperseg=1024, noverlap=768)
+        signal_data = np.asarray(signal_data, dtype=np.float32).reshape(-1)
+        if signal_data.size == 0:
+            return {"frequencies": [], "times": [], "magnitude": []}
+
+        # Remove only global DC once; avoid per-window detrending flicker artifacts.
+        signal_data = signal_data - float(np.mean(signal_data))
+        f, t, Sxx = spectrogram(
+            signal_data,
+            sample_rate,
+            window='hann',
+            nperseg=1024,
+            noverlap=768,
+            detrend=False,
+            scaling='spectrum',
+            mode='psd'
+        )
         Sxx_db = 10 * np.log10(np.maximum(Sxx, 1e-12))
         Sxx_db = np.clip(Sxx_db, -120.0, 0.0)
         freq_step = max(1, len(f) // 100)
         time_step = max(1, len(t) // 100)
+        f_ds = f[::freq_step]
+        t_ds = t[::time_step]
+        Sxx_ds = np.empty((len(f_ds), len(t_ds)), dtype=np.float32)
+        for i in range(len(f_ds)):
+            fs = i * freq_step
+            fe = min(len(f), fs + freq_step)
+            for j in range(len(t_ds)):
+                ts = j * time_step
+                te = min(len(t), ts + time_step)
+                Sxx_ds[i, j] = float(np.mean(Sxx_db[fs:fe, ts:te]))
         return {
-            "frequencies": f[::freq_step].tolist(),
-            "times": t[::time_step].tolist(),
-            "magnitude": Sxx_db[::freq_step, ::time_step].tolist()
+            "frequencies": f_ds.tolist(),
+            "times": t_ds.tolist(),
+            "magnitude": Sxx_ds.tolist()
         }
 
 animals_service = AnimalModeSeparator(sample_rate=44100)

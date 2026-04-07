@@ -49,6 +49,9 @@ const SpectrogramViewer = ({
   magnitudes,
   normalizationMax = null,
   colorScale = 'inferno',
+  forceHorizontal = true,
+  eqBands = null,
+  hardMuteOverlay = false,
   viewWindow: controlledViewWindow = null,
   onViewWindowChange = null
 }) => {
@@ -363,18 +366,109 @@ const SpectrogramViewer = ({
       yToFIdx[y] = idx;
     }
 
+    // Build a per-frequency hard mute map from zero-gain EQ bands.
+    const hardMutedFreq = new Array(freqs.length).fill(false);
+    if (hardMuteOverlay && Array.isArray(eqBands) && eqBands.length > 0) {
+      for (let bi = 0; bi < eqBands.length; bi += 1) {
+        const band = eqBands[bi];
+        if (!band || Number(band.gain) > 1e-8) continue;
+
+        const ranges = [];
+        if (Array.isArray(band.ranges) && band.ranges.length > 0) {
+          for (let ri = 0; ri < band.ranges.length; ri += 1) {
+            const r = band.ranges[ri];
+            if (!Array.isArray(r) || r.length < 2) continue;
+            const low = Number(r[0]);
+            const high = Number(r[1]);
+            if (Number.isFinite(low) && Number.isFinite(high) && high > low) {
+              ranges.push([low, high]);
+            }
+          }
+        } else {
+          const low = Number(band.low);
+          const high = Number(band.high);
+          if (Number.isFinite(low) && Number.isFinite(high) && high > low) {
+            ranges.push([low, high]);
+          }
+        }
+
+        for (let fi = 0; fi < freqs.length; fi += 1) {
+          const fHz = Number(freqs[fi]);
+          if (!Number.isFinite(fHz)) continue;
+          for (let ri = 0; ri < ranges.length; ri += 1) {
+            const low = ranges[ri][0];
+            const high = ranges[ri][1];
+            if (fHz >= low && fHz < high) {
+              hardMutedFreq[fi] = true;
+              break;
+            }
+          }
+        }
+      }
+    }
+
+    // Horizontal-only view: collapse time variation and keep one dB value per frequency bin.
+    let horizontalDbProfile = null;
+    if (forceHorizontal) {
+      horizontalDbProfile = new Array(freqs.length).fill(minDb);
+      for (let fIdx = 0; fIdx < freqs.length; fIdx += 1) {
+        let sumDb = 0;
+        let countDb = 0;
+        for (let localT = 0; localT < effectiveTimeCount; localT += 1) {
+          const tIdx = Math.min(timeCount - 1, effectiveTimeStart + localT);
+          const raw = getMag(fIdx, tIdx);
+          const dbVal = isDbInput
+            ? (Number.isFinite(raw) ? raw : minDb)
+            : 20 * Math.log10(Math.max(raw, 1e-12) / linearRef);
+          if (Number.isFinite(dbVal)) {
+            sumDb += dbVal;
+            countDb += 1;
+          }
+        }
+        horizontalDbProfile[fIdx] = countDb > 0 ? (sumDb / countDb) : minDb;
+      }
+    }
+
     const imageData = ctx.createImageData(width, height);
 
     for (let x = 0; x < width; x += 1) {
-      const tNorm = currentViewWindow.t0 + (x / Math.max(1, width - 1)) * (currentViewWindow.t1 - currentViewWindow.t0);
-      const tLocalIdx = Math.min(effectiveTimeCount - 1, Math.floor(tNorm * Math.max(0, effectiveTimeCount - 1)));
-      const tIdx = Math.min(timeCount - 1, effectiveTimeStart + tLocalIdx);
+      let tIdx0 = 0;
+      let tIdx1 = 0;
+      let tLerp = 0;
+      if (!forceHorizontal) {
+        const tNorm = currentViewWindow.t0 + (x / Math.max(1, width - 1)) * (currentViewWindow.t1 - currentViewWindow.t0);
+        const tFloat = tNorm * Math.max(0, effectiveTimeCount - 1);
+        const tLocalIdx0 = Math.min(effectiveTimeCount - 1, Math.max(0, Math.floor(tFloat)));
+        const tLocalIdx1 = Math.min(effectiveTimeCount - 1, tLocalIdx0 + 1);
+        tLerp = Math.max(0, Math.min(1, tFloat - tLocalIdx0));
+        tIdx0 = Math.min(timeCount - 1, effectiveTimeStart + tLocalIdx0);
+        tIdx1 = Math.min(timeCount - 1, effectiveTimeStart + tLocalIdx1);
+      }
       for (let y = 0; y < height; y += 1) {
         const fIdx = yToFIdx[y];
-        const raw = getMag(fIdx, tIdx);
-        const db = isDbInput
-          ? (Number.isFinite(raw) ? raw : minDb)
-          : 20 * Math.log10(Math.max(raw, 1e-12) / linearRef);
+        if (hardMutedFreq[fIdx]) {
+          const idx = (y * width + x) * 4;
+          imageData.data[idx] = 0;
+          imageData.data[idx + 1] = 0;
+          imageData.data[idx + 2] = 0;
+          imageData.data[idx + 3] = 255;
+          continue;
+        }
+        let db;
+        if (forceHorizontal && horizontalDbProfile) {
+          db = horizontalDbProfile[fIdx] ?? minDb;
+        } else {
+          const raw0 = getMag(fIdx, tIdx0);
+          const raw1 = getMag(fIdx, tIdx1);
+          const has0 = Number.isFinite(raw0);
+          const has1 = Number.isFinite(raw1);
+          const raw = has0 && has1
+            ? (raw0 * (1 - tLerp) + raw1 * tLerp)
+            : (has0 ? raw0 : (has1 ? raw1 : 0));
+          db = isDbInput
+            ? (Number.isFinite(raw) ? raw : minDb)
+            : 20 * Math.log10(Math.max(raw, 1e-12) / linearRef);
+        }
         const norm = Math.min(1, Math.max(0, (db - minDb) / dbSpan));
 
         const [r, g, b] = mapColor(colorScale, Math.pow(norm, 0.9));
@@ -386,7 +480,7 @@ const SpectrogramViewer = ({
       }
     }
     ctx.putImageData(imageData, 0, 0);
-  }, [times, freqs, magnitudes, normalizationMax, colorScale, canvasWidth, currentViewWindow]);
+  }, [times, freqs, magnitudes, normalizationMax, colorScale, canvasWidth, currentViewWindow, hardMuteOverlay, eqBands]);
 
   return (
     <div>

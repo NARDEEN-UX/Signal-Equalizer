@@ -386,19 +386,22 @@ class MusicModeService:
 
         if mask_rows:
             mask_matrix = np.vstack(mask_rows)
-            gain_vector = np.asarray(gain_rows, dtype=float)[:, np.newaxis]
 
             # Apply per-band gain directly; in overlap regions we multiply then clamp.
             # This preserves the expected behavior that a 2.0 slider can produce a 2x boost.
             combined_gain = np.ones_like(abs_freqs, dtype=float)
             matched_any = np.any(mask_matrix, axis=0)
+            zero_mask = np.zeros_like(abs_freqs, dtype=bool)
 
             for row_idx in range(mask_matrix.shape[0]):
                 mask = mask_matrix[row_idx]
                 gain_val = float(gain_rows[row_idx])
+                if gain_val <= 1e-8:
+                    zero_mask |= mask
                 combined_gain[mask] *= gain_val
 
             combined_gain = np.clip(combined_gain, 0.0, 2.0)
+            combined_gain[zero_mask] = 0.0
             combined_gain[matched_any & (combined_gain <= 1e-8)] = 0.0
 
             fft_data = fft_data * combined_gain
@@ -424,12 +427,19 @@ class MusicModeService:
 
     def _compute_spectrogram_data(self, signal: np.ndarray, sample_rate: float) -> dict:
         from scipy.signal import spectrogram
+        signal = np.asarray(signal, dtype=np.float32).reshape(-1)
+        if signal.size == 0:
+            return {"frequencies": [], "times": [], "magnitude": []}
+
+        # Remove only global DC once; avoid per-window detrending flicker artifacts.
+        signal = signal - float(np.mean(signal))
         f, t, Sxx = spectrogram(
             signal,
             sample_rate,
             window='hann',
             nperseg=1024,
             noverlap=768,
+            detrend=False,
             scaling='spectrum',
             mode='psd'
         )
@@ -441,7 +451,14 @@ class MusicModeService:
         time_step = max(1, len(t) // 100)
         f_ds = f[::freq_step]
         t_ds = t[::time_step]
-        Sxx_ds = Sxx_db[::freq_step, ::time_step]
+        Sxx_ds = np.empty((len(f_ds), len(t_ds)), dtype=np.float32)
+        for i in range(len(f_ds)):
+            fs = i * freq_step
+            fe = min(len(f), fs + freq_step)
+            for j in range(len(t_ds)):
+                ts = j * time_step
+                te = min(len(t), ts + time_step)
+                Sxx_ds[i, j] = float(np.mean(Sxx_db[fs:fe, ts:te]))
 
         return {
             "frequencies": f_ds.tolist(),
