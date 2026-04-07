@@ -250,6 +250,36 @@ const FFTChart = ({ data, audiogram, variant, zoomWindow = null, onZoomWindowCha
     }
   };
 
+  const handlePanX = (direction) => {
+    const currentX = effectiveXWindow;
+    if (!currentX) return;
+
+    const span = currentX.max - currentX.min;
+    if (!Number.isFinite(span) || span <= 0) return;
+
+    const shift = span * 0.3 * direction;
+    let nextMin = currentX.min + shift;
+    let nextMax = currentX.max + shift;
+
+    if (nextMin < domain.min) {
+      const delta = domain.min - nextMin;
+      nextMin += delta;
+      nextMax += delta;
+    }
+    if (nextMax > domain.max) {
+      const delta = nextMax - domain.max;
+      nextMin -= delta;
+      nextMax -= delta;
+    }
+
+    const nextX = { min: nextMin, max: nextMax };
+    if (controlled) {
+      onZoomWindowChange?.({ x: nextX, y: effectiveYWindow || null });
+    } else {
+      setXWindow(nextX);
+    }
+  };
+
   const datasets = [];
   if (!variant || variant === 'input') {
     datasets.push({ label: 'Input', data: inputSeries, borderColor: '#ef4444', borderWidth: 2, pointRadius: 0, tension: 0.2 });
@@ -291,15 +321,21 @@ const FFTChart = ({ data, audiogram, variant, zoomWindow = null, onZoomWindowCha
 
   return (
     <div style={{ position: 'relative' }}>
-      {(effectiveXWindow || effectiveYWindow) && (
+      <div
+        style={{
+          position: 'absolute',
+          top: 6,
+          right: 8,
+          zIndex: 10,
+          display: 'flex',
+          gap: '0.35rem'
+        }}
+      >
         <button
           type="button"
-          onClick={handleResetZoom}
+          onClick={() => handlePanX(-1)}
+          disabled={!effectiveXWindow}
           style={{
-            position: 'absolute',
-            top: 6,
-            right: 8,
-            zIndex: 10,
             fontSize: '0.7rem',
             fontWeight: 600,
             padding: '2px 8px',
@@ -307,12 +343,49 @@ const FFTChart = ({ data, audiogram, variant, zoomWindow = null, onZoomWindowCha
             border: '1px solid rgba(255,255,255,0.2)',
             background: 'rgba(0,0,0,0.5)',
             color: '#f2f2f2',
-            cursor: 'pointer'
+            cursor: effectiveXWindow ? 'pointer' : 'not-allowed',
+            opacity: effectiveXWindow ? 1 : 0.5
+          }}
+        >
+          Pan Left
+        </button>
+        <button
+          type="button"
+          onClick={() => handlePanX(1)}
+          disabled={!effectiveXWindow}
+          style={{
+            fontSize: '0.7rem',
+            fontWeight: 600,
+            padding: '2px 8px',
+            borderRadius: '4px',
+            border: '1px solid rgba(255,255,255,0.2)',
+            background: 'rgba(0,0,0,0.5)',
+            color: '#f2f2f2',
+            cursor: effectiveXWindow ? 'pointer' : 'not-allowed',
+            opacity: effectiveXWindow ? 1 : 0.5
+          }}
+        >
+          Pan Right
+        </button>
+        <button
+          type="button"
+          onClick={handleResetZoom}
+          disabled={!(effectiveXWindow || effectiveYWindow)}
+          style={{
+            fontSize: '0.7rem',
+            fontWeight: 600,
+            padding: '2px 8px',
+            borderRadius: '4px',
+            border: '1px solid rgba(255,255,255,0.2)',
+            background: 'rgba(0,0,0,0.5)',
+            color: '#f2f2f2',
+            cursor: (effectiveXWindow || effectiveYWindow) ? 'pointer' : 'not-allowed',
+            opacity: (effectiveXWindow || effectiveYWindow) ? 1 : 0.5
           }}
         >
           Reset Zoom
         </button>
-      )}
+      </div>
       <div
         className="chart-wrap"
         style={{ height: 300, position: 'relative' }}
