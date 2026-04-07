@@ -96,13 +96,29 @@ class GenericModeService:
         positive_idx = freqs > 0
         pos_freqs = freqs[positive_idx]
         pos_mags = magnitudes[positive_idx]
-        
-        # Downsample for response
-        step = max(1, len(pos_freqs) // 1000)
-        
+
+        # Downsample for response while preserving narrow spectral peaks.
+        max_points = 1000
+        if len(pos_freqs) <= max_points:
+            ds_freqs = pos_freqs
+            ds_mags = pos_mags
+        else:
+            edges = np.linspace(0, len(pos_freqs), num=max_points + 1, dtype=int)
+            keep_idx = []
+            for i in range(max_points):
+                start = edges[i]
+                end = edges[i + 1]
+                if end <= start:
+                    continue
+                local_peak = start + int(np.argmax(pos_mags[start:end]))
+                keep_idx.append(local_peak)
+
+            ds_freqs = pos_freqs[keep_idx]
+            ds_mags = pos_mags[keep_idx]
+
         return {
-            "frequencies": pos_freqs[::step].tolist(),
-            "magnitudes": pos_mags[::step].tolist()
+            "frequencies": ds_freqs.tolist(),
+            "magnitudes": ds_mags.tolist()
         }
     
     def _compute_spectrogram_data(self, signal: np.ndarray, sample_rate: float) -> dict:

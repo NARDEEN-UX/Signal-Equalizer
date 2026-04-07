@@ -36,11 +36,79 @@ function waveformSample(type, phaseRad) {
   return Math.sin(wrapped);
 }
 
-function snapFrequencyToBin(freqHz, sampleRate, nperseg = 1024) {
+function snapFrequencyToBin(freqHz, sampleRate, nfft = 1024) {
   const nyquist = Math.max(2, sampleRate / 2);
   const f = Math.max(1, Math.min(nyquist - 1, Number(freqHz) || 1));
-  const bin = Math.max(1, Math.round((f * nperseg) / sampleRate));
-  return (bin * sampleRate) / nperseg;
+  const fftLength = Math.max(2, Math.floor(Number(nfft) || 1024));
+  const bin = Math.max(1, Math.round((f * fftLength) / sampleRate));
+  return (bin * sampleRate) / fftLength;
+}
+
+function generateGenericSyntheticSignal({
+  durationSec,
+  sampleRate,
+  waveform,
+  phaseDeg,
+  freqsCsv,
+  ampsCsv,
+  noiseLevel,
+  snapToBins
+}) {
+  const safeDuration = Math.max(0.2, Math.min(60, Number(durationSec) || 3));
+  const safeSampleRate = Math.max(500, Math.min(96000, Math.round(Number(sampleRate) || 44100)));
+  const phaseRad = ((Number(phaseDeg) || 0) * Math.PI) / 180;
+  const safeNoise = Math.max(0, Math.min(1, Number(noiseLevel) || 0));
+  const sampleCount = Math.max(1, Math.floor(safeDuration * safeSampleRate));
+  const nyquist = Math.max(2, safeSampleRate / 2);
+
+  let freqs = parseNumberList(freqsCsv, [440]).map((f) => Math.max(1, Math.min(nyquist - 1, f)));
+  if (snapToBins) {
+    // Snap to the FFT grid of the generated signal itself.
+    freqs = freqs.map((f) => snapFrequencyToBin(f, safeSampleRate, sampleCount));
+  }
+
+  const ampsRaw = parseNumberList(ampsCsv, [1]);
+  const amps = freqs.map((_, i) => {
+    const a = Number.isFinite(ampsRaw[i]) ? ampsRaw[i] : ampsRaw[ampsRaw.length - 1] || 1;
+    return Math.max(0, Math.min(2, a));
+  });
+
+  const out = new Array(sampleCount);
+  const ampSum = amps.reduce((sum, v) => sum + v, 0);
+  const normalizer = ampSum > 1 ? (1 / ampSum) : 1;
+  const fadeSamples = Math.max(1, Math.floor(safeSampleRate * 0.01)); // 10 ms fade
+
+  for (let i = 0; i < sampleCount; i += 1) {
+    const t = i / safeSampleRate;
+    let v = 0;
+
+    for (let k = 0; k < freqs.length; k += 1) {
+      const phase = 2 * Math.PI * freqs[k] * t + phaseRad;
+      v += amps[k] * waveformSample(waveform, phase);
+    }
+
+    v *= normalizer;
+
+    if (i < fadeSamples) {
+      v *= i / fadeSamples;
+    } else if (i >= sampleCount - fadeSamples) {
+      v *= (sampleCount - 1 - i) / fadeSamples;
+    }
+
+    if (safeNoise > 0) {
+      // Add white noise in time domain.
+      v += (Math.random() * 2 - 1) * safeNoise;
+    }
+
+    out[i] = Math.max(-1, Math.min(1, v));
+  }
+
+  return {
+    signal: out,
+    sampleRate: safeSampleRate,
+    frequencies: freqs,
+    amplitudes: amps
+  };
 }
 
 const ModeSignalUploader = ({ mode, onSignalLoad, onClose }) => {
@@ -307,54 +375,22 @@ const ModeSignalUploader = ({ mode, onSignalLoad, onClose }) => {
 
   const handleGenerateSynthetic = () => {
     try {
-      const durationSec = Math.max(0.2, Math.min(60, Number(synthDurationSec) || 3));
-      const sampleRate = Math.max(500, Math.min(96000, Math.round(Number(synthSampleRate) || 44100)));
-      const phaseRad = ((Number(synthPhaseDeg) || 0) * Math.PI) / 180;
-      const noiseLevel = Math.max(0, Math.min(1, Number(synthNoiseLevel) || 0));
-      const nyquist = Math.max(2, sampleRate / 2);
-
-      let freqs = parseNumberList(synthFreqs, [440]).map((f) => Math.max(1, Math.min(nyquist - 1, f)));
-      if (synthSnapToBins) {
-        freqs = freqs.map((f) => snapFrequencyToBin(f, sampleRate, 1024));
-      }
-      const ampsRaw = parseNumberList(synthAmps, [1]);
-      const amps = freqs.map((_, i) => {
-        const a = Number.isFinite(ampsRaw[i]) ? ampsRaw[i] : ampsRaw[ampsRaw.length - 1] || 1;
-        return Math.max(0, Math.min(2, a));
+      const generated = generateGenericSyntheticSignal({
+        durationSec: synthDurationSec,
+        sampleRate: synthSampleRate,
+        waveform: synthWaveform,
+        phaseDeg: synthPhaseDeg,
+        freqsCsv: synthFreqs,
+        ampsCsv: synthAmps,
+        noiseLevel: synthNoiseLevel,
+        snapToBins: synthSnapToBins
       });
 
-      const sampleCount = Math.max(1, Math.floor(durationSec * sampleRate));
-      const out = new Array(sampleCount);
-
-      const ampSum = amps.reduce((sum, v) => sum + v, 0);
-      const normalizer = ampSum > 1 ? (1 / ampSum) : 1;
-      const fadeSamples = Math.max(1, Math.floor(sampleRate * 0.01)); // 10 ms fade to avoid edge discontinuities
-
-      for (let i = 0; i < sampleCount; i += 1) {
-        const t = i / sampleRate;
-        let v = 0;
-        for (let k = 0; k < freqs.length; k += 1) {
-          const phase = 2 * Math.PI * freqs[k] * t + phaseRad;
-          v += amps[k] * waveformSample(synthWaveform, phase);
-        }
-        v *= normalizer;
-
-        // Apply short fade in/out to reduce spectral smearing from hard boundaries.
-        if (i < fadeSamples) {
-          v *= i / fadeSamples;
-        } else if (i >= sampleCount - fadeSamples) {
-          v *= (sampleCount - 1 - i) / fadeSamples;
-        }
-
-        if (noiseLevel > 0) {
-          v += (Math.random() * 2 - 1) * noiseLevel;
-        }
-        out[i] = Math.max(-1, Math.min(1, v));
-      }
-
       const fileName = `generic_synth_${synthWaveform}_${Date.now()}.wav`;
-      onSignalLoad(out, sampleRate, fileName);
-      setSuccess(`Synthetic signal generated (${synthWaveform}, ${freqs.length} tone${freqs.length > 1 ? 's' : ''}).`);
+      onSignalLoad(generated.signal, generated.sampleRate, fileName);
+      setSuccess(
+        `Synthetic signal generated (${synthWaveform}, ${generated.frequencies.length} tone${generated.frequencies.length > 1 ? 's' : ''}).`
+      );
       setError('');
       setTimeout(onClose, 250);
     } catch (err) {
